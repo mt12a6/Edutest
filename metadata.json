@@ -1,0 +1,6 @@
+{
+  "name": "EduTest - Nền tảng thi trực tuyến thông minh",
+  "description": "Hệ thống thi trắc nghiệm trực tuyến thông minh dành cho trường học, hỗ trợ tải đề Word tự động, giám sát thi an toàn, chấm điểm tức thì và phân tích kết quả chuyên sâu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,203 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account information and role in EduTest",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 255 },
+        "displayName": { "type": "string", "maxLength": 255 },
+        "photoURL": { "type": "string", "maxLength": 1024 },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "status": { "type": "string", "enum": ["active", "disabled"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "email", "displayName", "role", "status"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "School classroom entity with assigned teachers and grade level",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "grade": { "type": "string", "maxLength": 20 },
+        "schoolYear": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 500 },
+        "studentCount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "grade", "schoolYear"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Academic subject taught in the institution",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "code": { "type": "string", "maxLength": 20 },
+        "description": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Online exam created by teachers or admins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 255 },
+        "subjectId": { "type": "string", "maxLength": 128 },
+        "subjectName": { "type": "string", "maxLength": 100 },
+        "grade": { "type": "string", "maxLength": 20 },
+        "durationMinutes": { "type": "number" },
+        "passScore": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "questionCount": { "type": "number" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "showAnswersAfterExam": { "type": "boolean" },
+        "allowReview": { "type": "boolean" },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdByName": { "type": "string", "maxLength": 255 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "subjectId", "durationMinutes", "isPublished", "createdBy"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "Multiple choice question with options A, B, C, D and explanations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "examId": { "type": "string", "maxLength": 128 },
+        "questionNumber": { "type": "number" },
+        "prompt": { "type": "string", "maxLength": 5000 },
+        "correctOption": { "type": "string", "enum": ["A", "B", "C", "D"] },
+        "explanation": { "type": "string", "maxLength": 3000 },
+        "points": { "type": "number" },
+        "imageUrl": { "type": "string", "maxLength": 1024 }
+      },
+      "required": ["id", "examId", "questionNumber", "prompt", "correctOption"]
+    },
+    "ExamAssignment": {
+      "title": "ExamAssignment",
+      "description": "Student assignment to an examination",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "examId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentEmail": { "type": "string", "maxLength": 255 },
+        "studentName": { "type": "string", "maxLength": 255 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["assigned", "in_progress", "submitted", "missed"] },
+        "score": { "type": "number" }
+      },
+      "required": ["id", "examId", "studentId", "status"]
+    },
+    "Attempt": {
+      "title": "Attempt",
+      "description": "Examination attempt instance initiated by a student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "examId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentEmail": { "type": "string", "maxLength": 255 },
+        "studentName": { "type": "string", "maxLength": 255 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "startedAt": { "type": "string" },
+        "deadline": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "status": { "type": "string", "enum": ["in_progress", "submitted", "timed_out"] },
+        "totalQuestions": { "type": "number" },
+        "answeredCount": { "type": "number" },
+        "score": { "type": "number" },
+        "maxScore": { "type": "number" }
+      },
+      "required": ["id", "examId", "studentId", "startedAt", "deadline", "status"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Graded final outcome and metrics for an exam attempt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "attemptId": { "type": "string", "maxLength": 128 },
+        "examId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 255 },
+        "studentEmail": { "type": "string", "maxLength": 255 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "score": { "type": "number" },
+        "maxScore": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "wrongCount": { "type": "number" },
+        "unattemptedCount": { "type": "number" },
+        "percentage": { "type": "number" },
+        "submittedAt": { "type": "string" }
+      },
+      "required": ["id", "attemptId", "examId", "studentId", "score"]
+    },
+    "SystemLog": {
+      "title": "SystemLog",
+      "description": "Audit trail log entry for administrative and security actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 100 },
+        "actorId": { "type": "string", "maxLength": 128 },
+        "actorEmail": { "type": "string", "maxLength": 255 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "targetType": { "type": "string", "maxLength": 50 },
+        "details": { "type": "string", "maxLength": 2000 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "action", "actorId", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles with role and status"
+    },
+    "/classes/{classId}": {
+      "schema": "Class",
+      "description": "School classes"
+    },
+    "/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "Academic subjects"
+    },
+    "/exams/{examId}": {
+      "schema": "Exam",
+      "description": "Exams created by teachers"
+    },
+    "/exams/{examId}/questions/{questionId}": {
+      "schema": "Question",
+      "description": "Individual questions for an exam"
+    },
+    "/examAssignments/{assignmentId}": {
+      "schema": "ExamAssignment",
+      "description": "Students assigned to an exam"
+    },
+    "/attempts/{attemptId}": {
+      "schema": "Attempt",
+      "description": "Exam session attempts"
+    },
+    "/results/{resultId}": {
+      "schema": "Result",
+      "description": "Final scored results"
+    },
+    "/systemLogs/{logId}": {
+      "schema": "SystemLog",
+      "description": "System audit trail entries"
+    }
+  }
+}

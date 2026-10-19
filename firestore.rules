@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.email == 'mt12a6@gmail.com');
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'mt12a6@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isTeacher() {
+      return isVerified() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
+      );
+    }
+
+    // User collection - allow self registration and admin bulk management
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Classes collection
+    match /classes/{classId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Subjects collection
+    match /subjects/{subjectId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Exams collection
+    match /exams/{examId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+
+      // Subcollection for questions
+      match /questions/{questionId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Exam assignments
+    match /examAssignments/{assignmentId} {
+      allow read, write: if true;
+    }
+
+    // Attempts collection
+    match /attempts/{attemptId} {
+      allow read, write: if true;
+
+      match /answers/{answerId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Results collection
+    match /results/{resultId} {
+      allow read, write: if true;
+    }
+
+    // System logs
+    match /systemLogs/{logId} {
+      allow read, write: if true;
+    }
+  }
+}
