@@ -1,12 +1,9 @@
-{
-  "projectId": "edutest-mrtruong",
-  "appId": "1:444884521373:web:22d6d77213b7ab64839f74",
-  "apiKey": "AIzaSyBsPwF_QVB8bRA97q8VnbKZLf98M5JO2Z8",
-  "authDomain": "edutest-mrtruong.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-386028a1-6798-4f45-8bc3-5d3485253eed",
-  "storageBucket": "gen-lang-client-0935948948.firebasestorage.app",
-  "messagingSenderId": "444884521373",
-  "measurementId": "",
-  "oAuthClientId": "1:444884521373:web:22d6d77213b7ab64839f74",
-  "recaptchaSiteKey": ""
-}
+const firebaseConfig = {
+  apiKey: "AIzaSyBsPwF_QVB8bRA97q8VnbKZLf98M5JO2Z8",
+  authDomain: "edutest-mrtruong.firebaseapp.com",
+  databaseURL: "https://edutest-mrtruong-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "edutest-mrtruong",
+  storageBucket: "edutest-mrtruong.firebasestorage.app",
+  messagingSenderId: "444884521373",
+  appId: "1:444884521373:web:22d6d77213b7ab64839f74"
+};
