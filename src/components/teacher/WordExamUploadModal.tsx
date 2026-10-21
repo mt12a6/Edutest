@@ -95,11 +95,12 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   const [durationMinutes, setDurationMinutes] = useState<number>(initialExam?.durationMinutes || 45);
   const [passScore, setPassScore] = useState<number>(initialExam?.passScore ?? 5);
   const [maxScore, setMaxScore] = useState<number>(initialExam?.maxScore ?? 10);
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(initialExam?.classIds || ['6A2']);
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(initialExam?.classIds || []);
   const [isPublished, setIsPublished] = useState<boolean>(initialExam?.isPublished ?? false);
   const [isSecure, setIsSecure] = useState<boolean>(initialExam?.isSecure ?? false);
   const [isTrial, setIsTrial] = useState<boolean>(initialExam?.isTrial ?? true);
   const [trialCode, setTrialCode] = useState<string>(initialExam?.trialCode || '');
+  const [enableTabWarning, setEnableTabWarning] = useState<boolean>(initialExam?.enableTabWarning ?? initialExam?.warnOnTabSwitch ?? false);
   const [allowRetake, setAllowRetake] = useState<boolean>(initialExam?.allowRetake ?? true);
   const [maxAttempts, setMaxAttempts] = useState<number>(initialExam?.maxAttempts ?? 0);
   const [showScoreAfterExam, setShowScoreAfterExam] = useState<boolean>(initialExam?.showScoreAfterExam ?? true);
@@ -107,6 +108,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   const [allowReview, setAllowReview] = useState<boolean>(initialExam?.allowReview ?? true);
   const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(initialExam?.shuffleQuestions ?? true);
   const [shuffleOptions, setShuffleOptions] = useState<boolean>(initialExam?.shuffleOptions ?? true);
+
 
   // AI Review State
   const [isAiChecking, setIsAiChecking] = useState<boolean>(false);
@@ -302,6 +304,70 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
     setStep('preview_edit');
   };
 
+  // Direct 1-click Math Exam Creator
+  const handleCreateMathExamDirectly = () => {
+    setTitle('Đề kiểm tra Môn Toán học - 45 phút');
+    setSubjectId('MATH');
+    setGrade('10');
+    setDurationMinutes(45);
+    setPassScore(5);
+    setMaxScore(10);
+    setSelectedClassIds([]);
+    setIsTrial(true);
+    setEnableTabWarning(false);
+    setParsedQuestions([
+      {
+        questionNumber: 1,
+        type: 'multiple_choice',
+        prompt: 'Rút gọn phân thức đại số $P = \\frac{x^2 - 4}{x - 2}$ với điều kiện $x \\ne 2$:',
+        options: {
+          A: '$x + 2$',
+          B: '$x - 2$',
+          C: '$x + 4$',
+          D: '$2x$'
+        },
+        correctOption: 'A',
+        explanation: 'Ta có $x^2 - 4 = (x - 2)(x + 2)$. Chia cho $x - 2$ ta được $P = x + 2$.',
+        points: 1,
+        warnings: []
+      },
+      {
+        questionNumber: 2,
+        type: 'true_false',
+        prompt: 'Cho tam giác vuông $ABC$ vuông tại $A$ có $AB = 6\\text{ cm}$ và $AC = 8\\text{ cm}$. Xét tính Đúng / Sai của các khẳng định sau:',
+        subQuestions: [
+          { key: 'a', text: 'Độ dài cạnh huyền $BC = 10\\text{ cm}$.', correct: true },
+          { key: 'b', text: 'Diện tích tam giác $S = 48\\text{ cm}^2$.', correct: false },
+          { key: 'c', text: 'Giá trị $\\sin B = 0.8$.', correct: true },
+          { key: 'd', text: 'Bán kính đường tròn ngoại tiếp $R = 5\\text{ cm}$.', correct: true }
+        ],
+        explanation: 'BC = √(6² + 8²) = 10 cm; Diện tích S = 1/2 * 6 * 8 = 24 cm² (ý b sai); sin B = 8/10 = 0.8; R = 10/2 = 5 cm.',
+        points: 1,
+        warnings: []
+      },
+      {
+        questionNumber: 3,
+        type: 'fill_blank',
+        prompt: 'Điền kết quả: Tìm nghiệm dương lớn nhất của phương trình bậc hai $x^2 - 5x + 6 = 0$. Đáp số:',
+        acceptableAnswers: ['3', 'x=3', 'x = 3'],
+        explanation: 'Phương trình $(x - 2)(x - 3) = 0$ có hai nghiệm $x = 2$ và $x = 3$. Nghiệm lớn nhất là 3.',
+        points: 1,
+        warnings: []
+      },
+      {
+        questionNumber: 4,
+        type: 'essay',
+        prompt: 'Tự luận: Giải bất phương trình bậc hai $x^2 - 4x + 3 \\le 0$ và biểu diễn tập nghiệm trên trục số.',
+        sampleAnswer: 'Tập nghiệm là đoạn [1; 3].',
+        explanation: 'Tam thức $f(x) = x^2 - 4x + 3$ có hai nghiệm $x_1 = 1, x_2 = 3$. Vì $a = 1 > 0$ nên $f(x) \\le 0 \\Leftrightarrow 1 \\le x \\le 3$.',
+        points: 2,
+        warnings: []
+      }
+    ]);
+    setStep('preview_edit');
+  };
+
+
   // Question editing helpers
   const handleUpdateQuestion = (index: number, updated: ParsedDocxQuestion) => {
     const list = [...parsedQuestions];
@@ -423,8 +489,11 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         isPublished: finalPublished,
         isSecure,
         isTrial,
+        enableTabWarning,
+        warnOnTabSwitch: enableTabWarning,
         trialCode: trialCode.trim() || `EDUTEST-${grade}`,
         allowRetake,
+
         maxAttempts: Number(maxAttempts) || 0,
         showScoreAfterExam,
         shuffleQuestions,
@@ -623,25 +692,48 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                 </div>
               )}
 
-              {/* Sample Preload for instant test */}
-              <div className="bg-slate-100/80 rounded-2xl p-4 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="text-left">
-                  <div className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    Chưa có sẵn tệp Word mẫu trên máy?
+              {/* Direct Math Exam Creator & Sample Preload */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-gradient-to-br from-indigo-50 to-blue-50/70 rounded-2xl p-4 border border-indigo-200 flex flex-col justify-between gap-3 shadow-xs">
+                  <div>
+                    <div className="font-bold text-xs text-indigo-950 flex items-center gap-1.5">
+                      <span className="p-1 rounded-lg bg-indigo-600 text-white text-[10px]">TOÁN</span>
+                      <span>Soạn đề thi Toán học trực tiếp</span>
+                    </div>
+                    <p className="text-[11px] text-indigo-800/80 mt-1 leading-relaxed">
+                      {"Tạo ngay đề thi Toán mới với 4 phần chuẩn: Trắc nghiệm, Đúng/Sai, Điền số, Tự luận kèm công thức $\\frac{a}{b}$, $\\sqrt{x}$ và hình học mà không cần tệp Word."}
+                    </p>
+
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    Bấm để nạp ngay bộ đề thi Toán mẫu mới nhất gồm đủ 4 dạng: Trắc nghiệm, Đúng/Sai, Điền kết quả, Tự luận và công thức toán KaTeX.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={handleCreateMathExamDirectly}
+                    className="w-full py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer text-center"
+                  >
+                    📐 Soạn đề thi Toán mới ngay
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleLoadSample}
-                  className="shrink-0 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                >
-                  Nạp đề thi mẫu đa dạng
-                </button>
+
+                <div className="bg-slate-100/90 rounded-2xl p-4 border border-slate-200 flex flex-col justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      Nạp đề thi mẫu tổng hợp
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                      Nạp bộ đề thi Toán 10 hoàn chỉnh có sẵn hình vẽ minh họa tam giác vuông và đồ thị hàm số bậc hai để kiểm tra tính năng.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLoadSample}
+                    className="w-full py-2.5 px-3 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer text-center"
+                  >
+                    ✨ Nạp bộ đề mẫu có sẵn
+                  </button>
+                </div>
               </div>
+
 
               {/* Formatting Guidelines */}
               <div className="text-xs text-slate-600 space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
@@ -1250,10 +1342,34 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
 
                 {/* Assigned Classes */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Phân công lớp tham gia thi:
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Phân công lớp tham gia thi:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedClassIds([])}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                        selectedClassIds.length === 0 
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' 
+                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {selectedClassIds.length === 0 ? '✓ Đang mở cho TẤT CẢ các lớp' : 'Mở cho tất cả các lớp'}
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedClassIds([])}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                        selectedClassIds.length === 0 
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' 
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      🌐 Tất cả các lớp (Đề tự do)
+                    </button>
                     {classes.map(c => {
                       const isSelected = selectedClassIds.includes(c.name);
                       return (
@@ -1296,6 +1412,24 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                       </div>
                     </label>
 
+                    {/* NEW: Tab violation warning toggle */}
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-amber-200 bg-amber-50/60 cursor-pointer hover:bg-amber-100/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={enableTabWarning}
+                        onChange={(e) => setEnableTabWarning(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-amber-600 rounded focus:ring-amber-500"
+                      />
+                      <div>
+                        <span className="font-bold text-amber-950 block">⚠️ Cảnh báo chuyển tab màn hình</span>
+                        <span className="text-[11px] text-amber-800">
+                          {enableTabWarning 
+                            ? 'BẬT: Phát hiện và cảnh báo khi thí sinh rời màn hình làm bài' 
+                            : 'TẮT: Thí sinh làm bài tự do, không bị cảnh báo khi chuyển tab'}
+                        </span>
+                      </div>
+                    </label>
+
                     <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
                       <input
                         type="checkbox"
@@ -1331,7 +1465,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                       />
                       <div>
                         <span className="font-bold text-slate-900 block">🔁 Cho phép thi lại nhiều lần</span>
-                        <span className="text-[11px] text-slate-500">Học sinh có thể cải thiện điểm số</span>
+                        <span className="text-[11px] text-slate-500">Học sinh có thể làm lại bài để ôn tập</span>
                       </div>
                     </label>
 
@@ -1361,6 +1495,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                       </div>
                     </label>
                   </div>
+
 
                   {/* Detail configs for Trial code & max attempts */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">

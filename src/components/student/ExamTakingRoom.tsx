@@ -71,11 +71,13 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Auto-submit guard
   const hasAutoSubmitted = useRef<boolean>(false);
+  const isTabWarningEnabled = !!(exam.enableTabWarning ?? exam.warnOnTabSwitch);
 
-  // Anti-cheat tab switch listeners
+  // Anti-cheat tab switch listeners (only active if enabled by teacher)
   useEffect(() => {
+    if (!isTabWarningEnabled) return;
+
     const handleTabViolation = (reason: string) => {
       const now = Date.now();
       if (now - lastViolationStamp.current < 2500) return; // throttle
@@ -110,7 +112,8 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [secondsRemaining]);
+  }, [secondsRemaining, isTabWarningEnabled]);
+
 
   // Online / Offline listener
   useEffect(() => {
@@ -238,24 +241,35 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      if (profile) {
-        const result = await submitExamAttempt(
-          initialAttempt.id,
-          exam,
-          profile,
-          answers,
-          questions,
-          tabViolations
-        );
-        setShowSubmitModal(false);
-        onFinishExam(result);
-      }
+      const effectiveProfile = profile || {
+        id: initialAttempt.studentId || 'guest_' + Date.now().toString(36),
+        displayName: initialAttempt.studentName || 'Học sinh tự do',
+        username: initialAttempt.studentName || 'hocsinh_tudo',
+        email: initialAttempt.studentEmail || 'guest@edutest.local',
+        role: 'student' as const,
+        status: 'active' as const,
+        className: initialAttempt.classId || 'Tự do',
+        classIds: [initialAttempt.classId || 'Tự do'],
+        createdAt: new Date().toISOString()
+      };
+
+      const result = await submitExamAttempt(
+        initialAttempt.id,
+        exam,
+        effectiveProfile,
+        answers,
+        questions,
+        tabViolations
+      );
+      setShowSubmitModal(false);
+      onFinishExam(result);
     } catch (err) {
       console.error('Lỗi khi nộp bài:', err);
       setSubmitError('Không thể nộp bài vào máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại.');
       setIsSubmitting(false);
     }
   };
+
 
   // Format time display
   const minutes = Math.floor(secondsRemaining / 60);
@@ -393,9 +407,19 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
                     🔀 Đề đã trộn
                   </span>
                 )}
+                {isTabWarningEnabled ? (
+                  <span className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[10px] font-bold">
+                    ⚠️ Có cảnh báo chuyển tab
+                  </span>
+                ) : (
+                  <span className="hidden md:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold">
+                    🛡️ Tự do (Không cảnh báo tab)
+                  </span>
+                )}
               </div>
             </div>
           </div>
+
 
           {/* Right side: Countdown clock & Submit button */}
           <div className="flex items-center gap-3 sm:gap-4">

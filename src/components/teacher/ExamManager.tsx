@@ -478,20 +478,38 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   </button>
                 </div>
 
-                {/* Assigned classes */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-semibold text-slate-400">Lớp phân công:</span>
-                  {exam.classIds && exam.classIds.length > 0 ? (
-                    exam.classIds.map(cid => (
-                      <span key={cid} className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 font-bold rounded">
-                        {cid}
+                {/* Assigned classes & Proctoring mode */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-semibold text-slate-400">Lớp phân công:</span>
+                    {exam.classIds && exam.classIds.length > 0 ? (
+                      exam.classIds.map(cid => (
+                        <span key={cid} className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-700 font-bold rounded">
+                          {cid}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-emerald-50 text-emerald-700 font-bold rounded border border-emerald-200">
+                        🌐 Mở cho tất cả các lớp (Đề tự do)
                       </span>
-                    ))
-                  ) : (
-                    <span className="text-[10px] text-slate-400 italic">Tất cả lớp khối {exam.grade}</span>
-                  )}
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-semibold text-slate-400">Cảnh báo tab:</span>
+                    {exam.enableTabWarning || exam.warnOnTabSwitch ? (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-700 font-bold rounded border border-amber-200">
+                        ⚠️ Đang bật cảnh báo rời màn hình
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 text-slate-600 font-semibold rounded">
+                        🛡️ Đang tắt (Thí sinh làm bài tự do)
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+
 
               {/* Footer Actions */}
               <div className="p-3.5 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
@@ -550,7 +568,17 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       <span>Sửa đề</span>
                     </button>
                   )}
+
+                  <button
+                    onClick={() => setExamToDelete(exam)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 transition-colors cursor-pointer flex items-center gap-1"
+                    title="Xóa vĩnh viễn đề thi này"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Xoá đề</span>
+                  </button>
                 </div>
+
 
                 <button
                   onClick={() => onViewResults(exam)}

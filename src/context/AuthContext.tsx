@@ -124,14 +124,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  // Listen to profile updates (e.g., if admin changes role or deactivates account)
+  const STORAGE_SESSION_TOKEN_KEY = 'edutest_session_token';
+
+  // Listen to profile updates & Enforce single active session
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data() as UserProfile;
+        
+        // Single Active Session check:
+        // If Firestore has a session token different from this browser's session token,
+        // it means another browser/device just logged in with this account.
+        const remoteSession = data.currentSessionId;
+        const localSession = localStorage.getItem(STORAGE_SESSION_TOKEN_KEY);
+        if (remoteSession && localSession && remoteSession !== localSession) {
+          alert('⚠️ CẢNH BÁO BẢO MẬT: Tài khoản của bạn vừa được đăng nhập trên một thiết bị hoặc trình duyệt khác. Để đảm bảo an toàn và tính công bằng trong thi cử, hệ thống đã ngắt kết nối phiên đăng nhập này.');
+          logout();
+          return;
+        }
+
         setProfile(data);
-        // If activeRole is not overridden by admin simulation, keep it in sync
         if (data.role !== 'admin') {
           setActiveRole(data.role);
         }
@@ -141,6 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     return () => unsub();
   }, [user]);
+
 
   const loginWithGoogle = async () => {
     setIsLoading(true);
@@ -168,7 +182,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
-      setProfile(matchedProfile);
+      // Generate a unique session token for this device login
+      const sessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem(STORAGE_SESSION_TOKEN_KEY, sessionToken);
+
+      const updatedProfile = { ...matchedProfile, currentSessionId: sessionToken };
+      setProfile(updatedProfile);
       setActiveRole(matchedProfile.role);
       setUser({
         uid: matchedProfile.id,
@@ -176,7 +195,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         displayName: matchedProfile.displayName,
         photoURL: matchedProfile.photoURL
       } as any);
-      localStorage.setItem(STORAGE_CREDENTIAL_SESSION, JSON.stringify(matchedProfile));
+      localStorage.setItem(STORAGE_CREDENTIAL_SESSION, JSON.stringify(updatedProfile));
+
+      // Push session token to Firestore so other devices will be kicked immediately
+      try {
+        const { updateDoc, doc } = await import('firebase/firestore');
+        await updateDoc(doc(db, 'users', matchedProfile.id), { currentSessionId: sessionToken });
+      } catch (e) {
+        console.warn('Update session ID note:', e);
+      }
+
       return true;
     } catch (err: unknown) {
       console.error('Credential sign-in failed:', err);
@@ -190,6 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       localStorage.removeItem(STORAGE_CREDENTIAL_SESSION);
+      localStorage.removeItem(STORAGE_SESSION_TOKEN_KEY);
       await firebaseSignOut(auth);
       setProfile(null);
       setUser(null);
@@ -198,6 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Logout error:', err);
     }
   };
+
 
   const isAdmin = profile?.role === 'admin';
   const isTeacher = profile?.role === 'teacher' || isAdmin;

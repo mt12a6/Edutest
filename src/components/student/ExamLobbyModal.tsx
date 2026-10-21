@@ -32,14 +32,33 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
   const { profile } = useAuth();
   const [isStarting, setIsStarting] = useState(false);
   const [agreedToRules, setAgreedToRules] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestClass, setGuestClass] = useState('');
+  const [nameError, setNameError] = useState('');
 
   if (!isOpen) return null;
 
   const handleStart = async () => {
-    if (!profile) return;
+    if (!profile && !guestName.trim()) {
+      setNameError('Vui lòng nhập họ và tên của bạn để bắt đầu làm bài.');
+      return;
+    }
+    setNameError('');
     setIsStarting(true);
     try {
-      const attempt = await startOrCreateAttempt(exam, profile);
+      const effectiveProfile = profile || {
+        id: 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+        username: (guestName.trim() || 'hocsinh_tudo').replace(/\s+/g, '_').toLowerCase(),
+        displayName: guestName.trim() || 'Học sinh tự do',
+        email: `${(guestName.trim() || 'guest').replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}@edutest.local`,
+        role: 'student' as const,
+        status: 'active' as const,
+        className: guestClass.trim() || 'Tự do',
+        classIds: [guestClass.trim() || 'Tự do'],
+        createdAt: new Date().toISOString()
+      };
+
+      const attempt = await startOrCreateAttempt(exam, effectiveProfile);
       onStartExam(attempt);
       onClose();
     } catch (err) {
@@ -49,6 +68,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
       setIsStarting(false);
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
@@ -125,6 +145,52 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
             </div>
           )}
 
+          {/* Guest Candidate Info if not logged in */}
+          {!profile && (
+            <div className="p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl space-y-3">
+              <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                <span className="p-1 rounded-lg bg-emerald-600 text-white text-[10px]">FREE</span>
+                <span>Chế độ thi tự do (Không cần tài khoản)</span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Đề thi này mở tự do cho mọi học sinh. Vui lòng nhập họ tên của bạn để hệ thống chấm và ghi nhận kết quả bài thi:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-800 mb-1">
+                    Họ và tên thí sinh: <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: Nguyễn Văn An"
+                    value={guestName}
+                    onChange={(e) => {
+                      setGuestName(e.target.value);
+                      if (nameError) setNameError('');
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {nameError && (
+                    <p className="text-[10px] text-rose-600 font-bold mt-1">{nameError}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-800 mb-1">
+                    Lớp / Trường (tuỳ chọn):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: 10A1 hoặc Tự do"
+                    value={guestClass}
+                    onChange={(e) => setGuestClass(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Rules and Honor code */}
           <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-2 text-amber-900">
             <div className="font-bold flex items-center gap-1.5 text-amber-800">
@@ -160,7 +226,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
             Để sau
           </button>
           <button
-            disabled={!agreedToRules || isStarting}
+            disabled={!agreedToRules || isStarting || (!profile && !guestName.trim())}
             onClick={handleStart}
             className="px-6 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -172,3 +238,4 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
     </div>
   );
 };
+

@@ -8,6 +8,8 @@ import { WordExamUploadModal } from './components/teacher/WordExamUploadModal';
 import { ExamManager } from './components/teacher/ExamManager';
 import { ExamResultsViewer } from './components/teacher/ExamResultsViewer';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard';
+import { LiveExamMonitor } from './components/teacher/LiveExamMonitor';
+
 import { StudentExamList } from './components/student/StudentExamList';
 import { StudentHistory } from './components/student/StudentHistory';
 import { ExamLobbyModal } from './components/student/ExamLobbyModal';
@@ -30,8 +32,10 @@ import {
   getSubjects, 
   checkAndSeedInitialData, 
   getExamById,
-  getExamQuestions 
+  getExamQuestions,
+  deleteExam
 } from './services/db';
+
 import { AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
 
 function MainApp() {
@@ -180,9 +184,14 @@ function MainApp() {
               attempt={viewingResultSession.attempt}
               onBackToDashboard={() => {
                 setViewingResultSession(null);
-                setCurrentTab('student-exams');
+                setCurrentTab('home');
+              }}
+              onRetakeExam={(exam, questions) => {
+                setViewingResultSession(null);
+                setLobbyExam({ exam, questions });
               }}
             />
+
           ) : viewingResultsExam ? (
             <ExamResultsViewer
               exam={viewingResultsExam}
@@ -198,9 +207,21 @@ function MainApp() {
               classes={classes}
               subjects={subjects}
               onNavigateTab={setCurrentTab}
-              onOpenWordUpload={() => setShowWordUpload(true)}
+              onOpenWordUpload={() => {
+                setEditingExamSession(null);
+                setShowWordUpload(true);
+              }}
+              onSelectExamToTake={(exam, questions) => {
+                setLobbyExam({ exam, questions });
+              }}
+              onEditExam={handleStartEditExam}
+              onDeleteExam={async (exam) => {
+                await deleteExam(exam.id);
+                reloadData();
+              }}
             />
           ) : currentTab === 'teacher-exams' ? (
+
             <ExamManager
               exams={exams}
               classes={classes}
@@ -216,6 +237,12 @@ function MainApp() {
               }}
               onRefreshExams={reloadData}
             />
+          ) : currentTab === 'teacher-live' ? (
+            <LiveExamMonitor
+              exams={exams}
+              classes={classes}
+              subjects={subjects}
+            />
           ) : currentTab === 'teacher-results' ? (
             <AnalyticsDashboard
               exams={exams}
@@ -223,6 +250,7 @@ function MainApp() {
               subjects={subjects}
               initialExam={viewingResultsExam}
             />
+
           ) : currentTab === 'student-exams' ? (
             <StudentExamList
               exams={exams}
@@ -266,7 +294,13 @@ function MainApp() {
               onSelectExamToTake={(exam, questions) => {
                 setLobbyExam({ exam, questions });
               }}
+              onEditExam={handleStartEditExam}
+              onDeleteExam={async (exam) => {
+                await deleteExam(exam.id);
+                reloadData();
+              }}
             />
+
           )}
         </main>
       </div>

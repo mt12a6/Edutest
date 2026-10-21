@@ -347,11 +347,22 @@ export async function getAllUsers(): Promise<UserProfile[]> {
     const snap = await getDocs(q);
     const firestoreUsers = snap.docs.map(d => ({ ...d.data(), id: d.id } as UserProfile));
     
-    // Merge firestore and local users by ID/username/email
+    // Merge firestore and local users by ID
     const mergedMap = new Map<string, UserProfile>();
     localList.forEach(u => mergedMap.set(u.id, u));
     firestoreUsers.forEach(u => mergedMap.set(u.id, u));
-    
+
+    // Push any local users not yet in firestore to firestore so incognito / student devices can log in
+    for (const u of localList) {
+      if (!firestoreUsers.some(fu => fu.id === u.id || (fu.username && u.username && fu.username.toLowerCase() === u.username.toLowerCase()))) {
+        try {
+          await setDoc(doc(db, 'users', u.id), sanitizeForFirestore(u), { merge: true });
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
     const combined = Array.from(mergedMap.values());
     saveLocalUsers(combined);
     return combined;
@@ -360,6 +371,8 @@ export async function getAllUsers(): Promise<UserProfile[]> {
     return localList;
   }
 }
+
+
 
 export async function createUserProfile(userData: Partial<UserProfile> & { username: string; displayName: string; role: UserRole }): Promise<UserProfile> {
   const safeId = userData.id || ('u_' + userData.username.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() + '_' + Date.now().toString(36));
@@ -481,8 +494,9 @@ export async function batchCreateUsers(importedRecords: import('../types').Impor
 
 export async function loginWithUsernamePassword(identifier: string, password: string): Promise<UserProfile | null> {
   const clean = identifier.trim().toLowerCase();
+  const inputPass = password.trim();
   
-  // Check local users first (which includes seeded default accounts)
+  // 1. Check local users first (which includes seeded default accounts)
   let localList = getLocalUsers();
   if (localList.length === 0) {
     localList = getDefaultUsers();
@@ -490,31 +504,40 @@ export async function loginWithUsernamePassword(identifier: string, password: st
   }
 
   for (const u of localList) {
-    const matchId = (u.username && u.username.toLowerCase() === clean) ||
-                    (u.email && u.email.toLowerCase() === clean);
-    if (matchId && (u.password === password || (!u.password && password === '123456'))) {
-      return u;
+    const matchId = (u.username && u.username.trim().toLowerCase() === clean) ||
+                    (u.email && u.email.trim().toLowerCase() === clean);
+    if (matchId) {
+      const uPass = (u.password ? u.password.trim() : '123456');
+      if (uPass === inputPass || (!u.password && inputPass === '123456')) {
+        return u;
+      }
     }
   }
 
-  // Also check default hardcoded accounts as safe fallback
+  // 2. Also check default hardcoded accounts as safe fallback
   for (const def of getDefaultUsers()) {
-    const matchDef = (def.username && def.username.toLowerCase() === clean) || 
-                     (def.email && def.email.toLowerCase() === clean);
-    if (matchDef && def.password === password) {
+    const matchDef = (def.username && def.username.trim().toLowerCase() === clean) || 
+                     (def.email && def.email.trim().toLowerCase() === clean);
+    if (matchDef && (def.password === inputPass || (!def.password && inputPass === '123456'))) {
       return def;
     }
   }
 
+  // 3. Query Firestore for real-time created accounts (incognito / remote student devices)
   try {
     const snap = await getDocs(collection(db, 'users'));
     for (const d of snap.docs) {
       const data = d.data() as UserProfile;
-      const matchIdentifier = (data.username && data.username.toLowerCase() === clean) ||
-                              (data.email && data.email.toLowerCase() === clean);
+      const matchIdentifier = (data.username && data.username.trim().toLowerCase() === clean) ||
+                              (data.email && data.email.trim().toLowerCase() === clean);
       if (matchIdentifier) {
-        if (data.password && data.password === password) {
-          return { ...data, id: d.id };
+        const uPass = data.password ? data.password.trim() : '123456';
+        if (uPass === inputPass || (!data.password && inputPass === '123456')) {
+          const matchedUser = { ...data, id: d.id, password: uPass };
+          // Cache to local list so future lookups are instantaneous
+          const currentLocal = getLocalUsers();
+          saveLocalUsers([...currentLocal.filter(x => x.id !== d.id), matchedUser]);
+          return matchedUser;
         }
       }
     }
@@ -524,6 +547,7 @@ export async function loginWithUsernamePassword(identifier: string, password: st
     return null;
   }
 }
+
 
 // ==================== CLASSES ====================
 
@@ -685,16 +709,32 @@ export async function getExams(): Promise<Exam[]> {
     // Merge local and firestore exams
     const mergedMap = new Map<string, Exam>();
     localExams.forEach(e => mergedMap.set(e.id, e));
-    firestoreExams.forEach(e => mergedMap.set(e.id, e));
-    
-    const list = Array.from(mergedMap.values()).filter(e => !deletedIds.includes(e.id));
+    const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
+    const list = Array.from(mergedMap.values())
+      .filter(e => !deletedIds.includes(e.id))
+      .map(e => {
+        if (!e.classIds || e.classIds.length === 0) return { ...e, classIds: [] };
+        const filteredClasses = e.classIds.filter(c => !dummyClasses.includes(c));
+        return {
+          ...e,
+          classIds: filteredClasses
+        };
+      });
+
     saveLocalExams(list);
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (err) {
     console.warn('Lấy danh sách đề thi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
-    return localExams.filter(e => !deletedIds.includes(e.id));
+    const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
+    return localExams
+      .filter(e => !deletedIds.includes(e.id))
+      .map(e => ({
+        ...e,
+        classIds: (e.classIds || []).filter(c => !dummyClasses.includes(c))
+      }));
   }
 }
+
 
 export async function getExamById(examId: string): Promise<Exam | null> {
   const local = getLocalExams().find(e => e.id === examId);

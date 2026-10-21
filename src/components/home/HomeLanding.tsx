@@ -19,8 +19,10 @@ import {
   AlertCircle,
   Shuffle,
   Plus,
-  Edit3
+  Edit3,
+  Trash2
 } from 'lucide-react';
+
 import { useAuth } from '../../context/AuthContext';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { getExamQuestions } from '../../services/db';
@@ -32,6 +34,8 @@ interface HomeLandingProps {
   onNavigateTab: (tab: string) => void;
   onOpenWordUpload: () => void;
   onSelectExamToTake?: (exam: Exam, questions: Question[]) => void;
+  onEditExam?: (exam: Exam) => void;
+  onDeleteExam?: (exam: Exam) => void;
 }
 
 export const HomeLanding: React.FC<HomeLandingProps> = ({
@@ -40,8 +44,11 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   subjects,
   onNavigateTab,
   onOpenWordUpload,
-  onSelectExamToTake
+  onSelectExamToTake,
+  onEditExam,
+  onDeleteExam
 }) => {
+
   const { user, profile, activeRole, isTeacher, isAdmin, loginWithGoogle } = useAuth();
 
   // Free trial code search state
@@ -444,11 +451,43 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-emerald-700 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    Thi thử miễn phí
-                  </span>
+                <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      Miễn phí
+                    </span>
+
+                    {(isTeacher || isAdmin) && (
+                      <div className="flex items-center gap-1 ml-2">
+                        {onEditExam && (
+                          <button
+                            type="button"
+                            onClick={() => onEditExam(exam)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            title="Chỉnh sửa đề thi này"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onDeleteExam && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Bạn có chắc chắn muốn xóa đề thi "${exam.title}"?`)) {
+                                onDeleteExam(exam);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Xóa đề thi này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => handleTakeTrialExam(exam)}
                     disabled={isLoadingThis}
@@ -459,6 +498,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                   </button>
                 </div>
               </div>
+
             );
           })}
 

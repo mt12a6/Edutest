@@ -12,7 +12,8 @@ import {
   X,
   Sparkles,
   HelpCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RotateCcw
 } from 'lucide-react';
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
@@ -23,6 +24,7 @@ interface ExamResultViewProps {
   questions: Question[];
   attempt?: ExamAttempt;
   onBackToDashboard: () => void;
+  onRetakeExam?: (exam: Exam, questions: Question[]) => void;
 }
 
 export const ExamResultView: React.FC<ExamResultViewProps> = ({
@@ -30,8 +32,10 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
   result,
   questions,
   attempt,
-  onBackToDashboard
+  onBackToDashboard,
+  onRetakeExam
 }) => {
+
   const [filter, setFilter] = useState<'all' | 'correct' | 'wrong'>('all');
 
   const isPassed = result.score >= (exam.passScore || 5);
@@ -426,11 +430,20 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
         </div>
       )}
 
-      {/* Return button */}
-      <div className="text-center pt-4">
+      {/* Action buttons: Retake exam & Return to dashboard */}
+      <div className="flex flex-wrap items-center justify-center gap-3 pt-6 border-t border-slate-200">
+        {onRetakeExam && (exam.allowRetake !== false || exam.isTrial || !exam.isSecure) && (
+          <button
+            onClick={() => onRetakeExam(exam, questions)}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all cursor-pointer transform hover:-translate-y-0.5"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Làm lại bài thi / Ôn tập lại đề này</span>
+          </button>
+        )}
         <button
           onClick={onBackToDashboard}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-all cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Quay lại trang chủ</span>
@@ -439,3 +452,4 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
     </div>
   );
 };
+

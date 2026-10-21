@@ -12,6 +12,7 @@ export interface UserProfile {
   status: UserStatus;
   classIds?: string[];
   className?: string;
+  currentSessionId?: string; // Token of currently active session to enforce 1 active login
   createdAt: string;
   updatedAt?: string;
 }
@@ -53,6 +54,8 @@ export interface Exam {
   isTrial?: boolean; // Đề thi thử tự do cho người dùng chưa đăng nhập
   trialCode?: string; // Mã đề thi thử (e.g. "TOAN6-01", "THITHU-01")
   isSecure?: boolean; // Đề thi bảo mật (chỉ hiện khi đăng nhập tài khoản hợp lệ)
+  enableTabWarning?: boolean; // Cảnh báo khi học sinh rời màn hình / chuyển tab (có thể bật/tắt)
+  warnOnTabSwitch?: boolean; // Alias / tương thích
   allowRetake?: boolean; // Cho phép làm lại bài thi nhiều lần
   maxAttempts?: number; // Số lần làm bài tối đa (0 = không giới hạn, 1, 2, 3...)
   showScoreAfterExam?: boolean; // Cho học sinh xem điểm ngay sau khi nộp bài
@@ -60,6 +63,7 @@ export interface Exam {
   shuffleOptions?: boolean; // Trộn thứ tự các phương án lựa chọn A, B, C, D
   showAnswersAfterExam: boolean; // reveal explanations and correct answers after student submits
   allowReview: boolean;
+
   createdBy: string;
   createdByName: string;
   createdAt: string;
