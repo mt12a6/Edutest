@@ -19,7 +19,8 @@ import {
   Image as ImageIcon,
   Calculator,
   Check,
-  CheckSquare
+  CheckSquare,
+  AlertCircle
 } from 'lucide-react';
 import { parseExamFile } from '../../utils/docxParser';
 import { normalizeMathFormulas } from '../../utils/mathFormatter';
@@ -27,7 +28,7 @@ import { ParsedDocxQuestion, SchoolClass, Subject, QuestionType, TrueFalseItem, 
 import { createExamWithQuestions, updateExamWithQuestions, logSystemAction } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { MathRenderer } from '../common/MathRenderer';
-import { MathFormulaToolbar } from '../common/MathFormulaToolbar';
+import { RichTextEditorToolbar } from '../common/RichTextEditorToolbar';
 
 interface WordExamUploadModalProps {
   isOpen: boolean;
@@ -94,16 +95,63 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   const [durationMinutes, setDurationMinutes] = useState<number>(initialExam?.durationMinutes || 45);
   const [passScore, setPassScore] = useState<number>(initialExam?.passScore ?? 5);
   const [maxScore, setMaxScore] = useState<number>(initialExam?.maxScore ?? 10);
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(initialExam?.classIds || ['6A1']);
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(initialExam?.classIds || ['6A2']);
   const [isPublished, setIsPublished] = useState<boolean>(initialExam?.isPublished ?? false);
+  const [isSecure, setIsSecure] = useState<boolean>(initialExam?.isSecure ?? false);
+  const [isTrial, setIsTrial] = useState<boolean>(initialExam?.isTrial ?? true);
+  const [trialCode, setTrialCode] = useState<string>(initialExam?.trialCode || '');
+  const [allowRetake, setAllowRetake] = useState<boolean>(initialExam?.allowRetake ?? true);
+  const [maxAttempts, setMaxAttempts] = useState<number>(initialExam?.maxAttempts ?? 0);
+  const [showScoreAfterExam, setShowScoreAfterExam] = useState<boolean>(initialExam?.showScoreAfterExam ?? true);
   const [showAnswersAfterExam, setShowAnswersAfterExam] = useState<boolean>(initialExam?.showAnswersAfterExam ?? true);
   const [allowReview, setAllowReview] = useState<boolean>(initialExam?.allowReview ?? true);
   const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(initialExam?.shuffleQuestions ?? true);
   const [shuffleOptions, setShuffleOptions] = useState<boolean>(initialExam?.shuffleOptions ?? true);
 
+  // AI Review State
+  const [isAiChecking, setIsAiChecking] = useState<boolean>(false);
+  const [aiReviewResult, setAiReviewResult] = useState<{
+    overallStatus: 'good' | 'has_warnings' | 'needs_revision';
+    overallSummary: string;
+    totalIssuesCount: number;
+    reminders: Array<{
+      questionNumber: number;
+      severity: 'error' | 'warning' | 'info';
+      issue: string;
+      suggestion: string;
+    }>;
+  } | null>(null);
+  const [showAiReviewModal, setShowAiReviewModal] = useState<boolean>(false);
+
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  // Call backend AI to review exam and answer keys
+  const handleAiCheckExam = async () => {
+    setIsAiChecking(true);
+    try {
+      const res = await fetch('/api/check-exam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          grade,
+          subject: subjectId,
+          questions: parsedQuestions
+        })
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setAiReviewResult(json.data);
+        setShowAiReviewModal(true);
+      }
+    } catch (err) {
+      console.error('Lỗi khi gọi AI check-exam:', err);
+    } finally {
+      setIsAiChecking(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -373,6 +421,12 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         startTime: initialExam?.startTime || new Date().toISOString(),
         endTime: initialExam?.endTime || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
         isPublished: finalPublished,
+        isSecure,
+        isTrial,
+        trialCode: trialCode.trim() || `EDUTEST-${grade}`,
+        allowRetake,
+        maxAttempts: Number(maxAttempts) || 0,
+        showScoreAfterExam,
         shuffleQuestions,
         shuffleOptions,
         showAnswersAfterExam,
@@ -622,6 +676,17 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
+                    onClick={handleAiCheckExam}
+                    disabled={isAiChecking}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold border border-purple-200 cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+                    title="Nhờ AI rà soát toàn bộ đề thi, kiểm tra đáp án đúng và đưa ra nhắc nhở để chỉnh sửa"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span>{isAiChecking ? 'AI đang rà soát...' : 'AI Rà soát đề & Đáp án'}</span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleNormalizeAllMath}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold border border-indigo-200 cursor-pointer transition-colors shadow-2xs"
                     title="Tự động chuẩn hóa toàn bộ công thức toán học trong đề sang KaTeX LaTeX chuẩn"
@@ -792,17 +857,17 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                               }`}
                             >
                               <Calculator className="w-3.5 h-3.5" />
-                              <span>{activeFormulaTarget?.qIndex === index && activeFormulaTarget?.field === 'prompt' ? 'Đóng bộ công thức' : 'Bật bộ gõ công thức'}</span>
+                              <span>{activeFormulaTarget?.qIndex === index && activeFormulaTarget?.field === 'prompt' ? 'Đóng thanh soạn thảo' : '🎨 Soạn thảo: Đậm/Nghiêng/Tô màu/Toán'}</span>
                             </button>
-                            <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
-                              {'Ví dụ: $\\frac{a}{b}, \\sqrt{x}, x^2$'}
+                            <span className="text-[10px] text-slate-400 hidden sm:inline">
+                              Hỗ trợ **đậm**, *nghiêng*, <u>gạch chân</u>, ==tô vàng==, $công thức$
                             </span>
                           </div>
                         </div>
 
                         {activeFormulaTarget?.qIndex === index && activeFormulaTarget?.field === 'prompt' && (
                           <div className="mb-2">
-                            <MathFormulaToolbar
+                            <RichTextEditorToolbar
                               onInsert={(snippet) => {
                                 handleUpdateQuestion(index, {
                                   ...q,
@@ -962,33 +1027,62 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                                   placeholder={`Nội dung khẳng định ý ${sub.key}...`}
                                   className="flex-1 bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800"
                                 />
-                                <div className="flex items-center gap-1 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const nextSub = [...(q.subQuestions || [])];
-                                      nextSub[sIdx] = { ...sub, correct: true };
-                                      handleUpdateQuestion(index, { ...q, subQuestions: nextSub });
-                                    }}
-                                    className={`px-2.5 py-1 rounded-lg font-bold text-xs cursor-pointer ${
-                                      sub.correct ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                    }`}
-                                  >
-                                    Đúng
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const nextSub = [...(q.subQuestions || [])];
-                                      nextSub[sIdx] = { ...sub, correct: false };
-                                      handleUpdateQuestion(index, { ...q, subQuestions: nextSub });
-                                    }}
-                                    className={`px-2.5 py-1 rounded-lg font-bold text-xs cursor-pointer ${
-                                      !sub.correct ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                                    }`}
-                                  >
-                                    Sai
-                                  </button>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Points per sub-question */}
+                                  <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1" title="Điểm số cho riêng mệnh đề này">
+                                    <span className="text-[10px] text-slate-400 font-semibold">Điểm:</span>
+                                    <input
+                                      type="number"
+                                      step="0.05"
+                                      min="0"
+                                      max="10"
+                                      value={sub.points ?? 0.25}
+                                      onChange={(e) => {
+                                        const nextSub = [...(q.subQuestions || [])];
+                                        nextSub[sIdx] = { ...sub, points: parseFloat(e.target.value) || 0 };
+                                        handleUpdateQuestion(index, { ...q, subQuestions: nextSub });
+                                      }}
+                                      className="w-12 text-xs font-bold text-indigo-700 bg-transparent border-none p-0 focus:outline-hidden"
+                                    />
+                                    <span className="text-[10px] text-slate-400">đ</span>
+                                  </div>
+
+                                  {/* Selection toggle buttons */}
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextSub = [...(q.subQuestions || [])];
+                                        nextSub[sIdx] = { ...sub, correct: true };
+                                        handleUpdateQuestion(index, { ...q, subQuestions: nextSub });
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg font-bold text-xs cursor-pointer transition-colors ${
+                                        sub.correct ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                      }`}
+                                    >
+                                      Đúng
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextSub = [...(q.subQuestions || [])];
+                                        nextSub[sIdx] = { ...sub, correct: false };
+                                        handleUpdateQuestion(index, { ...q, subQuestions: nextSub });
+                                      }}
+                                      className={`px-2.5 py-1 rounded-lg font-bold text-xs cursor-pointer transition-colors ${
+                                        !sub.correct ? 'bg-rose-600 text-white shadow-xs' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                                      }`}
+                                    >
+                                      Sai
+                                    </button>
+                                  </div>
+
+                                  {/* Explicit notification of the selected answer */}
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    sub.correct ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                  }`}>
+                                    {sub.correct ? '✓ ĐÚNG' : '✗ SAI'}
+                                  </span>
                                 </div>
                               </div>
                             ))}
@@ -1187,46 +1281,142 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                 </div>
 
                 {/* Options */}
-                <div className="space-y-2 pt-2 border-t border-slate-200 text-xs">
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={isPublished}
-                      onChange={(e) => setIsPublished(e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                    />
-                    <span>Kích hoạt kỳ thi ngay (Học sinh có thể thấy và tham gia)</span>
-                  </label>
+                <div className="space-y-3 pt-3 border-t border-slate-200 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isPublished}
+                        onChange={(e) => setIsPublished(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block">Kích hoạt kỳ thi ngay</span>
+                        <span className="text-[11px] text-slate-500">Mở phòng cho học sinh tham gia</span>
+                      </div>
+                    </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={shuffleQuestions}
-                      onChange={(e) => setShuffleQuestions(e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                    />
-                    <span className="font-semibold text-indigo-900">🔀 Tự động trộn ngẫu nhiên thứ tự câu hỏi khi học sinh làm bài</span>
-                  </label>
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isSecure}
+                        onChange={(e) => setIsSecure(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="font-bold text-indigo-900 block">🔒 Đề thi bảo mật chính thức</span>
+                        <span className="text-[11px] text-slate-500">Chỉ hiển thị khi người dùng đăng nhập tài khoản</span>
+                      </div>
+                    </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={shuffleOptions}
-                      onChange={(e) => setShuffleOptions(e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                    />
-                    <span className="font-semibold text-indigo-900">🔀 Tự động hoán vị thứ tự các phương án lựa chọn A, B, C, D</span>
-                  </label>
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isTrial}
+                        onChange={(e) => setIsTrial(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block">⭐ Cho phép thi thử tự do</span>
+                        <span className="text-[11px] text-slate-500">Hiển thị ở trang chủ cho thi thử không cần đăng nhập</span>
+                      </div>
+                    </label>
 
-                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={showAnswersAfterExam}
-                      onChange={(e) => setShowAnswersAfterExam(e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
-                    />
-                    <span>Cho phép học sinh xem đáp án và lời giải sau khi nộp bài</span>
-                  </label>
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={allowRetake}
+                        onChange={(e) => setAllowRetake(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-indigo-600 rounded focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block">🔁 Cho phép thi lại nhiều lần</span>
+                        <span className="text-[11px] text-slate-500">Học sinh có thể cải thiện điểm số</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={showScoreAfterExam}
+                        onChange={(e) => setShowScoreAfterExam(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block">📊 Xem điểm số ngay sau khi nộp</span>
+                        <span className="text-[11px] text-slate-500">Nếu tắt, điểm số được bảo mật chờ giáo viên duyệt</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={showAnswersAfterExam}
+                        onChange={(e) => setShowAnswersAfterExam(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-slate-900 block">📖 Xem đáp án và lời giải chi tiết</span>
+                        <span className="text-[11px] text-slate-500">Hiển thị bảng giải thích sau khi nộp bài</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Detail configs for Trial code & max attempts */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {isTrial && (
+                      <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200">
+                        <label className="block text-[11px] font-bold text-emerald-900 mb-1">
+                          Mã đề thi thử tự do:
+                        </label>
+                        <input
+                          type="text"
+                          value={trialCode}
+                          onChange={(e) => setTrialCode(e.target.value.toUpperCase())}
+                          placeholder={`Ví dụ: TOAN${grade}-01, THITHU-01`}
+                          className="w-full text-xs font-bold text-emerald-900 bg-white border border-emerald-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                    )}
+
+                    {allowRetake && (
+                      <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200">
+                        <label className="block text-[11px] font-bold text-indigo-900 mb-1">
+                          Số lần làm bài tối đa (0 = Không giới hạn):
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={20}
+                          value={maxAttempts}
+                          onChange={(e) => setMaxAttempts(Number(e.target.value))}
+                          className="w-full text-xs font-bold text-indigo-900 bg-white border border-indigo-300 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={shuffleQuestions}
+                        onChange={(e) => setShuffleQuestions(e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <span className="font-semibold text-indigo-900">🔀 Tự động trộn câu hỏi trong từng phần (giữ nguyên thứ tự Phần 1, 2, 3)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={shuffleOptions}
+                        onChange={(e) => setShuffleOptions(e.target.checked)}
+                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <span className="font-semibold text-indigo-900">🔀 Tự động hoán vị thứ tự các phương án lựa chọn A, B, C, D</span>
+                    </label>
+                  </div>
                 </div>
               </div>
 
@@ -1309,6 +1499,112 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
             )}
           </div>
         </div>
+        {/* AI Exam Review & Reminder Modal */}
+        {showAiReviewModal && aiReviewResult && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-2xl w-full p-6 space-y-4 max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900">
+                      Kết quả AI Rà soát & Thẩm định đề thi
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      Trợ lý khảo thí AI tự động phát hiện lỗi và đề xuất nhắc nhở
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAiReviewModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Overview Status Banner */}
+              <div className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                aiReviewResult.overallStatus === 'good'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : aiReviewResult.overallStatus === 'has_warnings'
+                  ? 'bg-amber-50 border-amber-200 text-amber-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}>
+                {aiReviewResult.overallStatus === 'good' ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                )}
+                <div className="text-xs space-y-1">
+                  <p className="font-bold">
+                    {aiReviewResult.overallSummary || 'Đề thi đã được rà soát chi tiết.'}
+                  </p>
+                  <p className="text-[11px] opacity-80">
+                    Phát hiện: {aiReviewResult.reminders?.length || 0} điểm lưu ý / nhắc nhở chỉnh sửa.
+                  </p>
+                </div>
+              </div>
+
+              {/* Reminders List */}
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                {aiReviewResult.reminders && aiReviewResult.reminders.length > 0 ? (
+                  aiReviewResult.reminders.map((rem, rIdx) => {
+                    const isErr = rem.severity === 'error';
+                    const isWarn = rem.severity === 'warning';
+                    return (
+                      <div 
+                        key={rIdx} 
+                        className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+                          isErr ? 'bg-rose-50/60 border-rose-200 text-rose-900' :
+                          isWarn ? 'bg-amber-50/60 border-amber-200 text-amber-900' :
+                          'bg-slate-50 border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold flex items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded bg-white text-slate-900 border text-[10px] font-bold">
+                              Câu {rem.questionNumber}
+                            </span>
+                            <span>{rem.issue}</span>
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                            isErr ? 'bg-rose-200 text-rose-800' :
+                            isWarn ? 'bg-amber-200 text-amber-800' :
+                            'bg-slate-200 text-slate-700'
+                          }`}>
+                            {rem.severity}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 bg-white/70 p-2 rounded-lg border border-slate-200/50">
+                          <strong>Gợi ý khắc phục:</strong> {rem.suggestion}
+                        </p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+                    <p className="font-bold text-slate-700">Tất cả câu hỏi và đáp án đều chuẩn xác!</p>
+                    <p className="text-[11px] text-slate-400 mt-1">Không phát hiện lỗi cú pháp, trùng lặp hay thiếu đáp án.</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAiReviewModal(false)}
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                >
+                  Đã hiểu & Tiếp tục chỉnh sửa
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

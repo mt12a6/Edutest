@@ -21,10 +21,12 @@ import {
   Layers,
   Shield,
   Users,
-  Award
+  Award,
+  Share2
 } from 'lucide-react';
 import { UserRole } from '../../types';
 import { LoginModal } from '../auth/LoginModal';
+import { ShareDeployModal } from '../common/ShareDeployModal';
 
 interface NavbarProps {
   currentTab: string;
@@ -35,6 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
   const { user, profile, activeRole, setActiveRole, isAdmin, logout, isLoading } = useAuth();
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const getRoleBadge = (role: UserRole) => {
@@ -92,10 +95,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
           {/* Right actions: Online status, Role badge, Profile / Login */}
           <div className="flex items-center gap-3 sm:gap-4">
+            {/* Share & Deploy Button */}
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-all cursor-pointer border border-emerald-200 shadow-2xs"
+              title="Mở link công khai hoặc kết nối triển khai Vercel"
+            >
+              <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Chia sẻ & Vercel</span>
+            </button>
+
             {/* Real-time Status */}
             <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-100/80 px-2.5 py-1 rounded-lg">
               <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Máy chủ kết nối ổn định</span>
+              <span>Online</span>
             </div>
 
             {(user || profile) ? (
@@ -301,6 +314,13 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
         <LoginModal 
           isOpen={showLoginModal} 
           onClose={() => setShowLoginModal(false)} 
+        />
+      )}
+
+      {showShareModal && (
+        <ShareDeployModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
         />
       )}
     </header>

@@ -31,6 +31,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Admin bootstrapped email as specified in system metadata
 const BOOTSTRAP_ADMIN_EMAIL = 'mt12a6@gmail.com';
 
+const STORAGE_CREDENTIAL_SESSION = 'edutest_active_user_session';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -42,6 +44,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (!currentUser) {
+        // Check if there is an active username/password credential session
+        try {
+          const cachedSession = localStorage.getItem(STORAGE_CREDENTIAL_SESSION);
+          if (cachedSession) {
+            const parsed = JSON.parse(cachedSession) as UserProfile;
+            setProfile(parsed);
+            setActiveRole(parsed.role);
+            setUser({
+              uid: parsed.id,
+              email: parsed.email,
+              displayName: parsed.displayName,
+              photoURL: parsed.photoURL
+            } as any);
+            setIsLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('Error reading cached session:', e);
+        }
+
         setProfile(null);
         setActiveRole('student');
         setIsLoading(false);
@@ -148,6 +170,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setProfile(matchedProfile);
       setActiveRole(matchedProfile.role);
+      setUser({
+        uid: matchedProfile.id,
+        email: matchedProfile.email,
+        displayName: matchedProfile.displayName,
+        photoURL: matchedProfile.photoURL
+      } as any);
+      localStorage.setItem(STORAGE_CREDENTIAL_SESSION, JSON.stringify(matchedProfile));
       return true;
     } catch (err: unknown) {
       console.error('Credential sign-in failed:', err);
@@ -160,6 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      localStorage.removeItem(STORAGE_CREDENTIAL_SESSION);
       await firebaseSignOut(auth);
       setProfile(null);
       setUser(null);

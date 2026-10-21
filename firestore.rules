@@ -32,11 +32,9 @@ service cloud.firestore {
 
     // User collection - allow self registration and admin bulk management
     match /users/{userId} {
-      allow read: if true;
-      allow create: if true;
-      allow update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if true;
     }
+
 
     // Classes collection
     match /classes/{classId} {

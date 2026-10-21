@@ -282,9 +282,66 @@ function saveLocalResult(result: ExamResult) {
 
 // ==================== USERS ====================
 
+export function getDefaultUsers(): UserProfile[] {
+  return [
+    {
+      id: 'u_admin',
+      username: 'admin',
+      email: 'admin@edutest.edu.vn',
+      password: '123456',
+      displayName: 'Quản trị viên Hệ thống',
+      role: 'admin',
+      status: 'active',
+      createdAt: '2024-09-01T08:00:00.000Z'
+    },
+    {
+      id: 'u_giaovien',
+      username: 'giaovien',
+      email: 'giaovien@edutest.edu.vn',
+      password: '123456',
+      displayName: 'Thầy Trương - GV Toán',
+      role: 'teacher',
+      status: 'active',
+      createdAt: '2024-09-01T08:00:00.000Z'
+    },
+    {
+      id: 'u_hocsinh',
+      username: 'hocsinh',
+      email: 'hocsinh@edutest.edu.vn',
+      password: '123456',
+      displayName: 'Nguyễn Văn An',
+      role: 'student',
+      status: 'active',
+      className: '10A1',
+      classIds: ['10A1'],
+      createdAt: '2024-09-01T08:00:00.000Z'
+    }
+  ];
+}
+
 export async function getAllUsers(): Promise<UserProfile[]> {
   const collectionPath = 'users';
-  const localList = getLocalUsers();
+  let localList = getLocalUsers();
+  
+  // Seed default users if local list is empty
+  if (localList.length === 0) {
+    localList = getDefaultUsers();
+    saveLocalUsers(localList);
+  } else {
+    // Ensure default demo accounts exist
+    const defaultAccounts = getDefaultUsers();
+    let hasChanged = false;
+    defaultAccounts.forEach(def => {
+      if (!localList.some(u => u.username === def.username || u.id === def.id)) {
+        localList.push(def);
+        hasChanged = true;
+      }
+    });
+    if (hasChanged) {
+      saveLocalUsers(localList);
+    }
+  }
+
   try {
     const q = query(collection(db, collectionPath));
     const snap = await getDocs(q);
@@ -295,54 +352,89 @@ export async function getAllUsers(): Promise<UserProfile[]> {
     localList.forEach(u => mergedMap.set(u.id, u));
     firestoreUsers.forEach(u => mergedMap.set(u.id, u));
     
-    return Array.from(mergedMap.values());
+    const combined = Array.from(mergedMap.values());
+    saveLocalUsers(combined);
+    return combined;
   } catch (err) {
     console.warn('Firestore fetch users note, returning local cache:', err);
     return localList;
   }
 }
 
-export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
-  const path = `users/${userId}`;
-  // Update local storage first
-  const current = getLocalUsers();
-  const idx = current.findIndex(u => u.id === userId);
+export async function createUserProfile(userData: Partial<UserProfile> & { username: string; displayName: string; role: UserRole }): Promise<UserProfile> {
+  const safeId = userData.id || ('u_' + userData.username.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() + '_' + Date.now().toString(36));
+  const newProfile: UserProfile = {
+    id: safeId,
+    username: userData.username.trim(),
+    displayName: userData.displayName.trim(),
+    email: userData.email?.trim() || `${userData.username.trim()}@edutest.edu.vn`,
+    password: userData.password || '123456',
+    role: userData.role || 'student',
+    status: userData.status || 'active',
+    className: userData.className || '10A1',
+    classIds: userData.classIds || (userData.className ? [userData.className] : ['10A1']),
+    photoURL: userData.photoURL,
+    createdAt: new Date().toISOString()
+  };
+
+  const currentLocal = getLocalUsers();
+  const updatedLocal = [newProfile, ...currentLocal.filter(u => u.id !== safeId && u.username !== newProfile.username)];
+  saveLocalUsers(updatedLocal);
+
+  try {
+    await setDoc(doc(db, 'users', safeId), sanitizeForFirestore(newProfile), { merge: true });
+  } catch (err) {
+    console.warn('createUserProfile Firestore note:', err);
+  }
+
+  return newProfile;
+}
+
+export async function updateUserProfile(userId: string, data: Partial<UserProfile>): Promise<void> {
+  const currentLocal = getLocalUsers();
+  const idx = currentLocal.findIndex(u => u.id === userId);
   if (idx !== -1) {
-    current[idx].role = role;
-    saveLocalUsers(current);
+    currentLocal[idx] = { ...currentLocal[idx], ...data, updatedAt: new Date().toISOString() };
+    saveLocalUsers(currentLocal);
   }
 
   try {
-    await updateDoc(doc(db, 'users', userId), {
-      role,
+    await updateDoc(doc(db, 'users', userId), sanitizeForFirestore({
+      ...data,
       updatedAt: new Date().toISOString()
-    });
+    }));
   } catch (err) {
-    console.warn('Update user role Firestore note:', err);
+    console.warn('updateUserProfile Firestore note:', err);
   }
+}
+
+export async function deleteUserProfile(userId: string): Promise<void> {
+  const currentLocal = getLocalUsers();
+  const updated = currentLocal.filter(u => u.id !== userId);
+  saveLocalUsers(updated);
+
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (err) {
+    console.warn('deleteUserProfile Firestore note:', err);
+  }
+}
+
+export async function resetUserPassword(userId: string, newPassword?: string): Promise<string> {
+  const targetPassword = newPassword && newPassword.trim() ? newPassword.trim() : '123456';
+  await updateUserProfile(userId, { password: targetPassword });
+  return targetPassword;
+}
+
+export async function updateUserRole(userId: string, role: UserRole): Promise<void> {
+  await updateUserProfile(userId, { role });
 }
 
 export async function toggleUserStatus(userId: string, status: 'active' | 'disabled'): Promise<void> {
-  const path = `users/${userId}`;
-  const current = getLocalUsers();
-  const idx = current.findIndex(u => u.id === userId);
-  if (idx !== -1) {
-    current[idx].status = status;
-    saveLocalUsers(current);
-  }
-
-  try {
-    await updateDoc(doc(db, 'users', userId), {
-      status,
-      updatedAt: new Date().toISOString()
-    });
-  } catch (err) {
-    console.warn('Toggle user status Firestore note:', err);
-  }
+  await updateUserProfile(userId, { status });
 }
 
 export async function batchCreateUsers(importedRecords: import('../types').ImportedUserRecord[]): Promise<number> {
-  const collectionPath = 'users';
   const validRecords = importedRecords.filter(r => r.isValid);
   if (validRecords.length === 0) return 0;
 
@@ -390,13 +482,27 @@ export async function batchCreateUsers(importedRecords: import('../types').Impor
 export async function loginWithUsernamePassword(identifier: string, password: string): Promise<UserProfile | null> {
   const clean = identifier.trim().toLowerCase();
   
-  // Check local users first
-  const localList = getLocalUsers();
+  // Check local users first (which includes seeded default accounts)
+  let localList = getLocalUsers();
+  if (localList.length === 0) {
+    localList = getDefaultUsers();
+    saveLocalUsers(localList);
+  }
+
   for (const u of localList) {
     const matchId = (u.username && u.username.toLowerCase() === clean) ||
                     (u.email && u.email.toLowerCase() === clean);
-    if (matchId && u.password === password) {
+    if (matchId && (u.password === password || (!u.password && password === '123456'))) {
       return u;
+    }
+  }
+
+  // Also check default hardcoded accounts as safe fallback
+  for (const def of getDefaultUsers()) {
+    const matchDef = (def.username && def.username.toLowerCase() === clean) || 
+                     (def.email && def.email.toLowerCase() === clean);
+    if (matchDef && def.password === password) {
+      return def;
     }
   }
 
@@ -801,6 +907,31 @@ export async function toggleExamShuffle(
     await updateDoc(doc(db, 'exams', examId), updateData);
   } catch (err) {
     console.warn('Toggle exam shuffle note:', err);
+  }
+}
+
+export async function toggleExamTrial(
+  examId: string,
+  isTrial: boolean,
+  trialCode?: string
+): Promise<void> {
+  const current = getLocalExams();
+  const found = current.find(e => e.id === examId);
+  if (found) {
+    found.isTrial = isTrial;
+    if (trialCode) found.trialCode = trialCode;
+    saveLocalExams(current);
+  }
+
+  try {
+    const updateData: any = {
+      isTrial,
+      updatedAt: new Date().toISOString()
+    };
+    if (trialCode) updateData.trialCode = trialCode;
+    await updateDoc(doc(db, 'exams', examId), updateData);
+  } catch (err) {
+    console.warn('Toggle exam trial note:', err);
   }
 }
 

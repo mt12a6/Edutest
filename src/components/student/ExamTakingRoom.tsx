@@ -13,7 +13,8 @@ import {
   ShieldAlert,
   HelpCircle,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Shuffle
 } from 'lucide-react';
 import { Exam, Question, ExamAttempt, ExamResult } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -279,22 +280,48 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     return true;
   };
 
-  // Shuffled questions order if exam.shuffleQuestions is enabled
-  const displayQuestions = React.useMemo(() => {
-    if (!exam.shuffleQuestions || questions.length <= 1) return questions;
+  // Group questions into 3 distinct parts and shuffle strictly within each part
+  const { displayQuestions, section1Count, section2Count, section3Count } = React.useMemo(() => {
+    const p1 = questions.filter(q => q.type === 'multiple_choice');
+    const p2 = questions.filter(q => q.type === 'true_false');
+    const p3 = questions.filter(q => q.type === 'fill_blank' || q.type === 'essay');
 
-    const seed = (initialAttempt.id || 'shuffle').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    const copy = [...questions];
-    let m = copy.length, t, i;
-    let s = seed;
-    while (m) {
-      s = (s * 9301 + 49297) % 233280;
-      i = Math.floor((s / 233280) * m--);
-      t = copy[m];
-      copy[m] = copy[i];
-      copy[i] = t;
+    if (!exam.shuffleQuestions) {
+      return {
+        displayQuestions: [...p1, ...p2, ...p3],
+        section1Count: p1.length,
+        section2Count: p2.length,
+        section3Count: p3.length
+      };
     }
-    return copy;
+
+    const shuffleWithSeed = (list: Question[], seedNum: number): Question[] => {
+      if (list.length <= 1) return list;
+      const copy = [...list];
+      let m = copy.length, t, i;
+      let s = seedNum;
+      while (m) {
+        s = (s * 9301 + 49297) % 233280;
+        i = Math.floor((s / 233280) * m--);
+        t = copy[m];
+        copy[m] = copy[i];
+        copy[i] = t;
+      }
+      return copy;
+    };
+
+    const baseSeed = (initialAttempt.id || 'shuffle').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    // Shuffle strictly WITHIN each part (keeping Part 1 -> Part 2 -> Part 3 order fixed)
+    const shuffledP1 = shuffleWithSeed(p1, baseSeed + 17);
+    const shuffledP2 = shuffleWithSeed(p2, baseSeed + 53);
+    const shuffledP3 = shuffleWithSeed(p3, baseSeed + 97);
+
+    return {
+      displayQuestions: [...shuffledP1, ...shuffledP2, ...shuffledP3],
+      section1Count: p1.length,
+      section2Count: p2.length,
+      section3Count: p3.length
+    };
   }, [exam.shuffleQuestions, questions, initialAttempt.id]);
 
   const totalQuestions = displayQuestions.length;
@@ -303,6 +330,41 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
 
   const currentQ = displayQuestions[currentIndex] || displayQuestions[0];
   const qType = currentQ?.type || 'multiple_choice';
+
+  const currentSection = React.useMemo(() => {
+    if (currentIndex < section1Count) {
+      return {
+        badge: 'PHẦN I',
+        title: 'CÂU TRẮC NGHIỆM NHIỀU PHƯƠNG ÁN LỰA CHỌN',
+        introText: `Thí sinh trả lời từ câu 1 đến câu ${section1Count}. Mỗi câu hỏi thí sinh chỉ chọn một phương án.`,
+        rangeText: `Câu 1 - ${section1Count}`,
+        color: 'from-blue-950 via-slate-900 to-indigo-950',
+        badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-400/30'
+      };
+    } else if (currentIndex < section1Count + section2Count) {
+      const start = section1Count + 1;
+      const end = section1Count + section2Count;
+      return {
+        badge: 'PHẦN II',
+        title: 'CÂU TRẮC NGHIỆM ĐÚNG / SAI',
+        introText: `Thí sinh trả lời từ câu ${start} đến câu ${end}. Trong mỗi ý a), b), c), d) ở mỗi câu, thí sinh chọn đúng hoặc sai.`,
+        rangeText: `Câu ${start} - ${end}`,
+        color: 'from-emerald-950 via-teal-950 to-slate-900',
+        badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+      };
+    } else {
+      const start = section1Count + section2Count + 1;
+      const end = totalQuestions;
+      return {
+        badge: 'PHẦN III',
+        title: 'CÂU TRẢ LỜI NGẮN HOẶC TỰ LUẬN',
+        introText: `Thí sinh trả lời từ câu ${start} đến câu ${end}. Thí sinh điền kết quả hoặc trình bày bài làm chi tiết.`,
+        rangeText: `Câu ${start} - ${end}`,
+        color: 'from-purple-950 via-slate-900 to-indigo-950',
+        badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-400/30'
+      };
+    }
+  }, [currentIndex, section1Count, section2Count, totalQuestions]);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col select-none">
@@ -400,8 +462,31 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
         {/* Left: Current Question Area */}
         <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
           
+          {/* Section Introductory Banner with Explanatory Text */}
+          <div className={`px-5 py-3.5 bg-gradient-to-r ${currentSection.color} text-white border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner`}>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase border ${currentSection.badgeColor}`}>
+                  {currentSection.badge} • {currentSection.rangeText}
+                </span>
+                <span className="font-extrabold text-xs sm:text-sm text-white tracking-tight">
+                  {currentSection.title}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-medium">
+                {currentSection.introText}
+              </p>
+            </div>
+            {exam.shuffleQuestions && (
+              <span className="self-start sm:self-center shrink-0 inline-flex items-center gap-1 text-[10px] text-indigo-300 bg-white/10 px-2.5 py-1 rounded-lg border border-white/10">
+                <Shuffle className="w-3 h-3 text-indigo-300" />
+                <span>Chỉ đảo trong {currentSection.badge}</span>
+              </span>
+            )}
+          </div>
+
           {/* Question Title & Actions */}
-          <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div className="flex items-center gap-3">
               <span className="px-3 py-1 bg-slate-900 text-white font-bold text-xs rounded-lg">
                 Câu {currentIndex + 1} / {totalQuestions}
@@ -532,33 +617,51 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
                           </div>
                         </div>
 
-                        {/* Two big selection buttons */}
-                        <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleSelectTrueFalse(currentQ.id, sub.key, true)}
-                            className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                              isTrueSelected
-                                ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-400'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>ĐÚNG</span>
-                          </button>
+                        {/* Two big selection buttons & Feedback Status */}
+                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 self-end sm:self-center shrink-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-slate-400 bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                              {sub.points !== undefined ? `${sub.points} điểm` : '0.25 điểm'}
+                            </span>
 
-                          <button
-                            type="button"
-                            onClick={() => handleSelectTrueFalse(currentQ.id, sub.key, false)}
-                            className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                              isFalseSelected
-                                ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-400'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <span>SAI</span>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSelectTrueFalse(currentQ.id, sub.key, true)}
+                              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isTrueSelected
+                                  ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-400 font-black'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>ĐÚNG</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSelectTrueFalse(currentQ.id, sub.key, false)}
+                              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isFalseSelected
+                                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-400 font-black'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>SAI</span>
+                            </button>
+                          </div>
+
+                          {/* Selected notification badge */}
+                          {isTrueSelected && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 animate-in fade-in">
+                              ✓ Bạn đã chọn: ĐÚNG
+                            </span>
+                          )}
+                          {isFalseSelected && (
+                            <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 animate-in fade-in">
+                              ✗ Bạn đã chọn: SAI
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -677,37 +780,109 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
               </div>
             </div>
 
-            {/* Question numbers grid */}
-            <div className="grid grid-cols-5 gap-2 max-h-[380px] overflow-y-auto pr-1 py-1">
-              {displayQuestions.map((q, idx) => {
-                const isAnswered = isQuestionAnswered(q);
-                const isFlagged = !!flagged[q.id];
-                const isCurrent = idx === currentIndex;
+            {/* Question numbers grouped by 3 sections */}
+            <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1 py-1">
+              {/* Part 1 */}
+              {section1Count > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                    <span className="text-blue-700">PHẦN I: Trắc nghiệm 4 lựa chọn</span>
+                    <span className="text-[10px] text-slate-400">1 - {section1Count}</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {displayQuestions.slice(0, section1Count).map((q, localIdx) => {
+                      const idx = localIdx;
+                      const isAnswered = isQuestionAnswered(q);
+                      const isFlagged = !!flagged[q.id];
+                      const isCurrent = idx === currentIndex;
 
-                let btnClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200';
-                if (isAnswered) {
-                  btnClass = 'bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 font-bold';
-                }
-                if (isFlagged) {
-                  btnClass = 'bg-amber-400 text-slate-900 border-amber-500 font-extrabold ring-2 ring-amber-300';
-                }
-                if (isCurrent) {
-                  btnClass += ' ring-2 ring-slate-900 ring-offset-2';
-                }
+                      let btnClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200';
+                      if (isAnswered) btnClass = 'bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 font-bold';
+                      if (isFlagged) btnClass = 'bg-amber-400 text-slate-900 border-amber-500 font-extrabold ring-2 ring-amber-300';
+                      if (isCurrent) btnClass += ' ring-2 ring-slate-900 ring-offset-1';
 
-                return (
-                  <button
-                    key={q.id}
-                    onClick={() => setCurrentIndex(idx)}
-                    className={`h-9 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
-                  >
-                    {idx + 1}
-                    {isFlagged && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-600 absolute top-1 right-1"></span>
-                    )}
-                  </button>
-                );
-              })}
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={() => setCurrentIndex(idx)}
+                          className={`h-8 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
+                        >
+                          {idx + 1}
+                          {isFlagged && <span className="w-1.5 h-1.5 rounded-full bg-rose-600 absolute top-1 right-1"></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Part 2 */}
+              {section2Count > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                    <span className="text-emerald-700">PHẦN II: Trắc nghiệm Đúng / Sai</span>
+                    <span className="text-[10px] text-slate-400">{section1Count + 1} - {section1Count + section2Count}</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {displayQuestions.slice(section1Count, section1Count + section2Count).map((q, localIdx) => {
+                      const idx = section1Count + localIdx;
+                      const isAnswered = isQuestionAnswered(q);
+                      const isFlagged = !!flagged[q.id];
+                      const isCurrent = idx === currentIndex;
+
+                      let btnClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200';
+                      if (isAnswered) btnClass = 'bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 font-bold';
+                      if (isFlagged) btnClass = 'bg-amber-400 text-slate-900 border-amber-500 font-extrabold ring-2 ring-amber-300';
+                      if (isCurrent) btnClass += ' ring-2 ring-slate-900 ring-offset-1';
+
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={() => setCurrentIndex(idx)}
+                          className={`h-8 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
+                        >
+                          {idx + 1}
+                          {isFlagged && <span className="w-1.5 h-1.5 rounded-full bg-rose-600 absolute top-1 right-1"></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Part 3 */}
+              {section3Count > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                    <span className="text-purple-700">PHẦN III: Trả lời ngắn / Tự luận</span>
+                    <span className="text-[10px] text-slate-400">{section1Count + section2Count + 1} - {totalQuestions}</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {displayQuestions.slice(section1Count + section2Count).map((q, localIdx) => {
+                      const idx = section1Count + section2Count + localIdx;
+                      const isAnswered = isQuestionAnswered(q);
+                      const isFlagged = !!flagged[q.id];
+                      const isCurrent = idx === currentIndex;
+
+                      let btnClass = 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200';
+                      if (isAnswered) btnClass = 'bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600 font-bold';
+                      if (isFlagged) btnClass = 'bg-amber-400 text-slate-900 border-amber-500 font-extrabold ring-2 ring-amber-300';
+                      if (isCurrent) btnClass += ' ring-2 ring-slate-900 ring-offset-1';
+
+                      return (
+                        <button
+                          key={q.id}
+                          onClick={() => setCurrentIndex(idx)}
+                          className={`h-8 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
+                        >
+                          {idx + 1}
+                          {isFlagged && <span className="w-1.5 h-1.5 rounded-full bg-rose-600 absolute top-1 right-1"></span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Quick Submit inside Palette */}

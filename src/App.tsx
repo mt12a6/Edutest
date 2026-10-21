@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
+import { Footer } from './components/layout/Footer';
 import { HomeLanding } from './components/home/HomeLanding';
 import { WordExamUploadModal } from './components/teacher/WordExamUploadModal';
 import { ExamManager } from './components/teacher/ExamManager';
@@ -262,10 +263,16 @@ function MainApp() {
                 setEditingExamSession(null);
                 setShowWordUpload(true);
               }}
+              onSelectExamToTake={(exam, questions) => {
+                setLobbyExam({ exam, questions });
+              }}
             />
           )}
         </main>
       </div>
+
+      {/* Persistent EduTest PRO Footer */}
+      <Footer />
 
       {/* Word / PDF / JSON Upload & Edit Modal */}
       {showWordUpload && (

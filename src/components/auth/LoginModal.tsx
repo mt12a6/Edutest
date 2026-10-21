@@ -148,9 +148,49 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
           {/* Tab 2: Username & Password Sign In */}
           {activeTab === 'credentials' && (
             <form onSubmit={handleCredentialSubmit} className="space-y-3.5 text-xs">
-              <p className="text-slate-500 text-[11px]">
-                Dành cho tài khoản học sinh, giáo viên được nhập danh sách từ tệp Excel / CSV của trường.
-              </p>
+              {/* Quick fill demo accounts */}
+              <div className="pt-1 pb-1">
+                <span className="text-[11px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">
+                  Chọn nhanh tài khoản mẫu:
+                </span>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIdentifier('admin');
+                      setPassword('123456');
+                    }}
+                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-bold text-center cursor-pointer transition-colors"
+                  >
+                    👑 Admin
+                    <span className="block text-[9px] font-normal text-rose-600">admin / 123456</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIdentifier('giaovien');
+                      setPassword('123456');
+                    }}
+                    className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[11px] font-bold text-center cursor-pointer transition-colors"
+                  >
+                    🧑‍🏫 Giáo viên
+                    <span className="block text-[9px] font-normal text-indigo-600">giaovien / 123456</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIdentifier('hocsinh');
+                      setPassword('123456');
+                    }}
+                    className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold text-center cursor-pointer transition-colors"
+                  >
+                    🎒 Học sinh
+                    <span className="block text-[9px] font-normal text-emerald-600">hocsinh / 123456</span>
+                  </button>
+                </div>
+              </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
@@ -161,7 +201,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                   <input
                     type="text"
                     required
-                    placeholder="Ví dụ: hocsinh01@thpt.edu.vn"
+                    placeholder="Ví dụ: admin, giaovien, hocsinh..."
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
@@ -178,7 +218,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                   <input
                     type="password"
                     required
-                    placeholder="Nhập mật khẩu..."
+                    placeholder="Nhập mật khẩu (mặc định 123456)..."
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"

@@ -43,20 +43,21 @@ export const BulkUserUploadModal: React.FC<BulkUserUploadModalProps> = ({
   if (!isOpen) return null;
 
   // Validate a single record
-  const validateRecord = (record: Partial<ImportedUserRecord>): { isValid: boolean; error: string } => {
+  const validateRecord = (record: Partial<ImportedUserRecord>): { isValid: boolean; error: string; password: string } => {
     const username = (record.username || '').trim();
-    const password = (record.password || '').trim();
+    let password = (record.password || '').trim();
 
     if (!username) {
-      return { isValid: false, error: 'Thiếu tên đăng nhập hoặc email' };
+      return { isValid: false, error: 'Thiếu tên đăng nhập hoặc email', password: '' };
     }
+    // Auto-assign default password if not provided in spreadsheet
     if (!password) {
-      return { isValid: false, error: 'Thiếu mật khẩu' };
+      password = '123456';
     }
     if (password.length < 4) {
-      return { isValid: false, error: 'Mật khẩu quá ngắn (tối thiểu 4 ký tự)' };
+      return { isValid: false, error: 'Mật khẩu quá ngắn (tối thiểu 4 ký tự)', password };
     }
-    return { isValid: true, error: '' };
+    return { isValid: true, error: '', password };
   };
 
   // Generate and download template Excel file
@@ -127,17 +128,27 @@ export const BulkUserUploadModal: React.FC<BulkUserUploadModalProps> = ({
         const username = String(
           row['Tên đăng nhập / Email'] ||
           row['Tên đăng nhập'] ||
+          row['Tài khoản'] ||
+          row['Mã học sinh'] ||
+          row['Mã HS'] ||
+          row['Mã SV'] ||
+          row['SBD'] ||
+          row['Số báo danh'] ||
           row['Email'] ||
           row['username'] ||
           row['Username'] ||
+          row['User'] ||
+          row['Account'] ||
           row['email'] ||
           ''
         ).trim();
 
-        const password = String(
+        const rawPassword = String(
           row['Mật khẩu'] ||
+          row['Mật khẩu (mặc định 123456)'] ||
           row['password'] ||
           row['Password'] ||
+          row['Pass'] ||
           row['MatKhau'] ||
           ''
         ).trim();
@@ -145,16 +156,19 @@ export const BulkUserUploadModal: React.FC<BulkUserUploadModalProps> = ({
         const displayName = String(
           row['Họ và tên'] ||
           row['Họ tên'] ||
+          row['Họ và tên học sinh'] ||
+          row['Tên học sinh'] ||
           row['Tên'] ||
           row['name'] ||
           row['FullName'] ||
-          username.split('@')[0] ||
-          'Người dùng'
+          (username ? username.split('@')[0] : 'Học sinh')
         ).trim();
 
         let rawRole = String(
           row['Vai trò (student/teacher/admin)'] ||
           row['Vai trò'] ||
+          row['Phân quyền'] ||
+          row['Quyền'] ||
           row['role'] ||
           row['Role'] ||
           'student'
@@ -174,18 +188,19 @@ export const BulkUserUploadModal: React.FC<BulkUserUploadModalProps> = ({
           row['Lớp'] ||
           row['class'] ||
           row['Class'] ||
-          ''
+          row['Khối'] ||
+          '10A1'
         ).trim();
 
-        const val = validateRecord({ username, password });
+        const val = validateRecord({ username, password: rawPassword });
 
         return {
           username,
           email: username.includes('@') ? username : `${username}@edutest.local`,
-          password,
-          displayName,
+          password: val.password,
+          displayName: displayName || username,
           role,
-          classId: classId || undefined,
+          classId: classId || '10A1',
           isValid: val.isValid,
           error: val.error
         };

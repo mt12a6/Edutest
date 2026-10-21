@@ -20,14 +20,18 @@ import {
   Settings2,
   CheckCircle2,
   AlertCircle,
-  Edit3
+  Edit3,
+  Star,
+  Printer
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
   toggleExamPublish, 
   toggleExamHide,
   toggleExamShuffle,
+  toggleExamTrial,
   deleteExam, 
+  getExamQuestions,
   logSystemAction,
   getTeacherScope,
   isExamInTeacherScope,
@@ -37,6 +41,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { TeacherScopeModal } from '../common/TeacherScopeModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
+import { ShuffledExamExportModal } from './ShuffledExamExportModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -68,8 +73,12 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [selectedGrade, setSelectedGrade] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft' | 'trial'>('all');
   const [showHiddenExams, setShowHiddenExams] = useState(false);
+
+  // Shuffled exam export modal
+  const [shuffledModalExam, setShuffledModalExam] = useState<Exam | null>(null);
+  const [shuffledModalQuestions, setShuffledModalQuestions] = useState<Question[]>([]);
 
   // Exam preview modal
   const [previewExam, setPreviewExam] = useState<Exam | null>(null);
@@ -103,6 +112,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     // Status filter
     if (statusFilter === 'published' && !e.isPublished) return false;
     if (statusFilter === 'draft' && e.isPublished) return false;
+    if (statusFilter === 'trial' && !e.isTrial) return false;
 
     const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           e.subjectName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -110,6 +120,30 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     const matchesGrade = selectedGrade === 'all' || e.grade === selectedGrade;
     return matchesSearch && matchesSub && matchesGrade;
   });
+
+  const handleOpenShuffledModal = async (targetExam: Exam) => {
+    try {
+      const qList = await getExamQuestions(targetExam.id);
+      setShuffledModalQuestions(qList);
+      setShuffledModalExam(targetExam);
+    } catch (err) {
+      console.error('Lỗi tải câu hỏi để xuất mã đề:', err);
+      showError('Không thể tải danh sách câu hỏi của đề thi.');
+    }
+  };
+
+  const handleToggleTrial = async (targetExam: Exam) => {
+    const nextTrial = !targetExam.isTrial;
+    const defaultCode = targetExam.trialCode || `EDUTEST-${targetExam.grade}`;
+    try {
+      await toggleExamTrial(targetExam.id, nextTrial, defaultCode);
+      showSuccess(nextTrial ? `Đã chuyển "${targetExam.title}" thành Đề thi thử tự do (Mã: ${defaultCode}).` : `Đã tắt chế độ thi thử của "${targetExam.title}".`);
+      onRefreshExams();
+    } catch (err) {
+      console.error('Lỗi khi bật/tắt thi thử:', err);
+      showError('Lỗi cập nhật trạng thái thi thử tự do.');
+    }
+  };
 
   const handleTogglePublish = async (exam: Exam) => {
     try {
@@ -314,6 +348,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             className="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white font-medium text-slate-700 cursor-pointer"
           >
             <option value="all">Tất cả trạng thái</option>
+            <option value="trial">⭐ Đề thi thử tự do</option>
             <option value="published">Đang mở thi</option>
             <option value="draft">Bản nháp / Đang đóng</option>
           </select>
@@ -361,6 +396,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md">
                       Khối {exam.grade}
                     </span>
+                    {exam.isTrial ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-800 rounded-md border border-amber-200 flex items-center gap-1" title="Đề thi thử tự do - Học sinh có thể làm không cần đăng nhập">
+                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                        Thi thử: {exam.trialCode || 'Tự do'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md">
+                        Chính khóa
+                      </span>
+                    )}
                     {isShuffled && (
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-200 flex items-center gap-1" title="Đã kích hoạt tự động đảo vị trí câu hỏi & đáp án khi học sinh làm bài">
                         <Shuffle className="w-3 h-3 text-indigo-600" />
@@ -473,14 +518,36 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     <span>Xem đề</span>
                   </button>
 
+                  <button
+                    onClick={() => handleOpenShuffledModal(exam)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer flex items-center gap-1"
+                    title="Tạo các mã đề đảo (101, 102, 103...), xuất đề thi, link đề thi và đáp án chấm tương ứng"
+                  >
+                    <Shuffle className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Mã đề đảo & Xuất đề</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleTrial(exam)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+                      exam.isTrial
+                        ? 'bg-amber-100 border border-amber-300 text-amber-800 hover:bg-amber-200 font-bold'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                    title={exam.isTrial ? `Đề thi thử tự do (Mã: ${exam.trialCode || 'Tự do'}). Nhấn để tắt.` : 'Bật tính năng thi thử tự do cho học sinh trên Trang chủ'}
+                  >
+                    <Star className={`w-3.5 h-3.5 ${exam.isTrial ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+                    <span>{exam.isTrial ? 'Thi thử: Bật' : 'Thi thử'}</span>
+                  </button>
+
                   {onEditExam && (
                     <button
                       onClick={() => onEditExam(exam)}
-                      className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-200 transition-colors cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1"
                       title="Chỉnh sửa câu hỏi, đáp án và thông số đề thi"
                     >
-                      <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Sửa</span>
+                      <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Sửa đề</span>
                     </button>
                   )}
                 </div>
@@ -557,6 +624,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             if (onEditExam) onEditExam(ex);
           }}
           onRefreshExams={onRefreshExams}
+        />
+      )}
+
+      {/* Shuffled Exam Codes & Export Modal */}
+      {shuffledModalExam && (
+        <ShuffledExamExportModal
+          isOpen={shuffledModalExam !== null}
+          onClose={() => setShuffledModalExam(null)}
+          exam={shuffledModalExam}
+          questions={shuffledModalQuestions}
         />
       )}
     </div>

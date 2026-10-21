@@ -16,11 +16,14 @@ import {
   GraduationCap,
   Sparkles,
   ShieldAlert,
-  ChevronDown
+  ChevronDown,
+  PenTool,
+  Eye
 } from 'lucide-react';
-import { Exam, ExamResult, Question, SchoolClass } from '../../types';
-import { getExamResults, getExamQuestions, getAttemptsForExam } from '../../services/db';
+import { Exam, ExamResult, Question, SchoolClass, ExamAttempt } from '../../types';
+import { getExamResults, getExamQuestions, getAttemptsForExam, gradeEssaySubmission } from '../../services/db';
 import { exportResultsToCsv } from '../../utils/exportUtils';
+import { StudentGradingDetailModal } from './StudentGradingDetailModal';
 import * as XLSX from 'xlsx';
 
 interface ExamResultsViewerProps {
@@ -57,6 +60,8 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
 }) => {
   const [results, setResults] = useState<ExamResult[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
+  const [selectedGradingResult, setSelectedGradingResult] = useState<ExamResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
@@ -65,24 +70,85 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   const [activeTab, setActiveTab] = useState<'by_class' | 'students' | 'questions'>('by_class');
   const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
 
+  // AI Essay Grading State
+  const [isAiGradingAll, setIsAiGradingAll] = useState<boolean>(false);
+  const [gradingProgress, setGradingProgress] = useState<string>('');
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [resList, qList, attList] = await Promise.all([
+        getExamResults(exam.id),
+        getExamQuestions(exam.id),
+        getAttemptsForExam(exam.id)
+      ]);
+      setResults(resList);
+      setQuestions(qList);
+      setAttempts(attList);
+    } catch (err) {
+      console.error('Lỗi khi tải kết quả thi:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [resList, qList] = await Promise.all([
-          getExamResults(exam.id),
-          getExamQuestions(exam.id)
-        ]);
-        setResults(resList);
-        setQuestions(qList);
-      } catch (err) {
-        console.error('Lỗi khi tải kết quả thi:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchData();
   }, [exam.id]);
+
+  // Bulk AI essay grading function
+  const handleAiGradeAllEssays = async () => {
+    setIsAiGradingAll(true);
+    setGradingProgress('Đang chuẩn bị dữ liệu bài làm...');
+    try {
+      const attempts = await getAttemptsForExam(exam.id);
+      const essayQ = questions.find(q => q.type === 'essay');
+      if (!essayQ) return;
+
+      const pendingResults = results.filter(r => r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy));
+      let count = 0;
+
+      for (const res of pendingResults) {
+        count++;
+        setGradingProgress(`AI đang chấm bài ${count}/${pendingResults.length}: ${res.studentName}...`);
+        const att = attempts.find(a => a.id === res.attemptId || a.id === res.id);
+        const studentAns = att?.answers?.[essayQ.id] || '';
+
+        try {
+          const apiRes = await fetch('/api/grade-essay', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: essayQ.prompt,
+              sampleAnswer: essayQ.sampleAnswer,
+              rubric: essayQ.rubric,
+              studentAnswer: studentAns,
+              maxPoints: essayQ.points || 2
+            })
+          });
+          const apiJson = await apiRes.json();
+          if (apiJson.success && apiJson.data) {
+            await gradeEssaySubmission(
+              res.attemptId || res.id,
+              apiJson.data.score || 0,
+              apiJson.data.feedback || 'Bài làm đã được chấm bởi AI',
+              true, // isAiGraded
+              'Trợ lý khảo thí AI (EduTest)'
+            );
+          }
+        } catch (subErr) {
+          console.warn('Lỗi chấm tự luận học sinh:', res.studentName, subErr);
+        }
+      }
+
+      await fetchData();
+    } catch (err) {
+      console.error('Lỗi quy trình AI chấm bài tự luận:', err);
+    } finally {
+      setIsAiGradingAll(false);
+      setGradingProgress('');
+    }
+  };
 
   // Overall Calculations
   const totalSubmissions = results.length;
@@ -280,6 +346,79 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
           <p className="text-[11px] text-slate-500 mt-1">Cảnh báo chống gian lận</p>
         </div>
       </div>
+
+      {/* AI Essay Grading Notice & Action Banner */}
+      {questions.some(q => q.type === 'essay') && (
+        <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+          results.some(r => r.status === 'pending_essay_grading')
+            ? 'bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-amber-300 shadow-xs'
+            : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              results.some(r => r.status === 'pending_essay_grading')
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-bold text-sm text-slate-900">
+                  {results.some(r => r.status === 'pending_essay_grading')
+                    ? `Phát hiện ${results.filter(r => r.status === 'pending_essay_grading').length} bài thi có câu tự luận chưa được chấm điểm`
+                    : 'Tất cả các bài thi tự luận đã hoàn tất chấm điểm'}
+                </h4>
+                {results.some(r => r.status === 'pending_essay_grading') ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900">
+                    Chờ chấm tự luận
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    Đã chấm đầy đủ
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600">
+                {results.some(r => r.status === 'pending_essay_grading')
+                  ? 'Theo quy định, bảng thống kê và phổ điểm hoàn tất sau khi chấm phần tự luận. Bạn có thể nhấn nút để AI chấm tự động theo đáp án mẫu.'
+                  : 'Điểm số và phân tích phổ điểm đã cập nhật đầy đủ kết quả câu tự luận.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const firstPending = results.find(r => r.status === 'pending_essay_grading');
+                if (firstPending) {
+                  setSelectedGradingResult(firstPending);
+                } else if (results.length > 0) {
+                  setSelectedGradingResult(results[0]);
+                } else {
+                  setActiveTab('students');
+                }
+              }}
+              className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              title="Mở giao diện để giáo viên trực tiếp chấm bài tự luận từng học sinh"
+            >
+              <PenTool className="w-4 h-4" />
+              <span>Giáo viên chấm tự luận</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isAiGradingAll}
+              onClick={handleAiGradeAllEssays}
+              className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{isAiGradingAll ? (gradingProgress || 'AI đang chấm bài...') : 'AI Chấm tự luận tự động'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -501,7 +640,8 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                                 <th className="py-2 px-3">Học sinh</th>
                                 <th className="py-2 px-3 text-center">Điểm</th>
                                 <th className="py-2 px-3 text-center">Đúng/Sai</th>
-                                <th className="py-2 px-3 text-right">Tab</th>
+                                <th className="py-2 px-3 text-center">Tab</th>
+                                <th className="py-2 px-3 text-right">Chấm tự luận / Xem bài</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -515,11 +655,21 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                                   </td>
                                   <td className="py-2 px-3 text-center font-bold text-emerald-600">
                                     {st.score}
+                                    {st.isAiGraded && (
+                                      <span className="block text-[8px] font-bold text-purple-700 bg-purple-50 px-1 py-0.2 rounded-full border border-purple-200 mt-0.5 mx-auto w-max">
+                                        🤖 AI Chấm
+                                      </span>
+                                    )}
+                                    {st.status === 'pending_essay_grading' && (
+                                      <span className="block text-[8px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded-full border border-amber-200 mt-0.5 mx-auto w-max">
+                                        Chờ chấm
+                                      </span>
+                                    )}
                                   </td>
                                   <td className="py-2 px-3 text-center text-slate-500">
                                     {st.correctCount} / {st.wrongCount}
                                   </td>
-                                  <td className="py-2 px-3 text-right">
+                                  <td className="py-2 px-3 text-center">
                                     {st.tabViolations ? (
                                       <span className="px-1.5 py-0.2 rounded bg-rose-100 text-rose-700 font-bold text-[10px]">
                                         {st.tabViolations} vi phạm
@@ -527,6 +677,21 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                                     ) : (
                                       <span className="text-slate-300">0</span>
                                     )}
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedGradingResult(st)}
+                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs ${
+                                        st.status === 'pending_essay_grading'
+                                          ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                                          : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200'
+                                      }`}
+                                      title="Xem chi tiết từng câu và chấm điểm tự luận"
+                                    >
+                                      <PenTool className="w-3 h-3" />
+                                      <span>{st.status === 'pending_essay_grading' ? 'Chấm tự luận ngay' : 'Xem & Sửa điểm'}</span>
+                                    </button>
                                   </td>
                                 </tr>
                               ))}
@@ -589,7 +754,8 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                   <th className="py-3 px-4 text-center">Tỷ lệ</th>
                   <th className="py-3 px-4 text-center">Cảnh báo tab</th>
                   <th className="py-3 px-4">Thời gian nộp bài</th>
-                  <th className="py-3 px-4 text-right">Đánh giá</th>
+                  <th className="py-3 px-4 text-center">Đánh giá</th>
+                  <th className="py-3 px-4 text-right">Thao tác chấm</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -609,6 +775,16 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                         </td>
                         <td className="py-3 px-4 text-center font-extrabold text-sm text-slate-900">
                           {r.score}
+                          {r.isAiGraded && (
+                            <span className="block text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-200 mt-0.5 mx-auto w-max">
+                              🤖 AI Chấm
+                            </span>
+                          )}
+                          {r.status === 'pending_essay_grading' && (
+                            <span className="block text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded-full border border-amber-200 mt-0.5 mx-auto w-max">
+                              Chờ chấm tự luận
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-center text-slate-500">
                           <span className="text-emerald-600 font-semibold">{r.correctCount}</span> / <span className="text-rose-500">{r.wrongCount}</span>
@@ -629,19 +805,33 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                         <td className="py-3 px-4 text-slate-500 text-[11px]">
                           {new Date(r.submittedAt).toLocaleString('vi-VN')}
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-4 text-center">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                           }`}>
                             {passed ? 'Đạt' : 'Chưa đạt'}
                           </span>
                         </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => setSelectedGradingResult(r)}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all ${
+                              r.status === 'pending_essay_grading'
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            }`}
+                            title="Xem chi tiết câu Đúng/Sai và chấm tự luận"
+                          >
+                            <PenTool className="w-3.5 h-3.5" />
+                            <span>{r.status === 'pending_essay_grading' ? 'Chấm tự luận ngay' : 'Xem & Sửa điểm'}</span>
+                          </button>
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
                       Chưa có kết quả nộp bài nào thỏa mãn điều kiện lọc.
                     </td>
                   </tr>
@@ -696,6 +886,19 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
             })}
           </div>
         </div>
+      )}
+
+      {/* Teacher Student Grading & Detail Modal */}
+      {selectedGradingResult && (
+        <StudentGradingDetailModal
+          isOpen={!!selectedGradingResult}
+          onClose={() => setSelectedGradingResult(null)}
+          exam={exam}
+          questions={questions}
+          result={selectedGradingResult}
+          attempt={attempts.find(a => a.id === selectedGradingResult.attemptId || a.id === selectedGradingResult.id)}
+          onGradedSuccess={fetchData}
+        />
       )}
 
     </div>

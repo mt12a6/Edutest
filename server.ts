@@ -303,6 +303,10 @@ if (process.env.NODE_ENV === 'production') {
   app.use(vite.middlewares);
 }
 
-app.listen(port, '0.0.0.0', () => {
-  console.log(`EduTest Server listening on port ${port}`);
-});
+if (process.env.NODE_ENV !== 'test' && process.env.VERCEL !== '1') {
+  app.listen(port, '0.0.0.0', () => {
+    console.log(`EduTest Server listening on port ${port}`);
+  });
+}
+
+export default app;
