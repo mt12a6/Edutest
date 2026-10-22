@@ -1,11 +1,11 @@
 
 {
-  "apiKey": "AIzaSyCQr9RgIcZ-PaLezikRX68Qv-W_o5f4Zgw",
-  "authDomain": "edutest1-768a4.firebaseapp.com",
-  "databaseURL": "https://edutest1-768a4-default-rtdb.asia-southeast1.firebasedatabase.app",
-  "projectId": "edutest1-768a4",
-  "storageBucket": "edutest1-768a4.firebasestorage.app",
+  "apiKey": "AIzaSyDhEtvX60newMSHI6JEOKaQEUhAhlc9m5A",
+  "authDomain": "gen-lang-client-0935948948.firebaseapp.com",
+  "databaseURL": "en-lang-client-0935948948.firebasestorage.app",
+  "projectId": "gen-lang-client-0935948948",
+  "storageBucket": "gen-lang-client-0935948948.firebasestorage.app",
   "messagingSenderId": "619172228918",
-  "appId": "1:619172228918:web:1ff6c9444e11487db14d97",
+  "appId": "1:348308907572:web:e9ba08c3c76041eb1f4c61",
   "measurementId": "G-TXZMP47ZP9"
 }
