@@ -9,6 +9,7 @@ import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 import { UserProfile, UserRole } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
+import { ShieldAlert } from 'lucide-react';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -18,6 +19,7 @@ interface AuthContextType {
   isLoading: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithCredentials: (identifier: string, password: string) => Promise<boolean>;
+  loginAsDemoRole: (role: UserRole) => Promise<boolean>;
   logout: () => Promise<void>;
   isAdmin: boolean;
   isTeacher: boolean;
@@ -39,6 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeRole, setActiveRole] = useState<UserRole>('student');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [kickedModal, setKickedModal] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -139,15 +142,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const remoteSession = data.currentSessionId;
         const localSession = localStorage.getItem(STORAGE_SESSION_TOKEN_KEY);
         if (remoteSession && localSession && remoteSession !== localSession) {
-          alert('⚠️ CẢNH BÁO BẢO MẬT: Tài khoản của bạn vừa được đăng nhập trên một thiết bị hoặc trình duyệt khác. Để đảm bảo an toàn và tính công bằng trong thi cử, hệ thống đã ngắt kết nối phiên đăng nhập này.');
+          setKickedModal(true);
           logout();
           return;
         }
 
         setProfile(data);
-        if (data.role !== 'admin') {
-          setActiveRole(data.role);
-        }
+        setActiveRole(data.role);
       }
     }, (err) => {
       console.warn('Profile snapshot listener warning:', err.message);
@@ -160,7 +161,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setError(null);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const cred = await signInWithPopup(auth, googleProvider);
+      if (cred.user) {
+        const sessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem(STORAGE_SESSION_TOKEN_KEY, sessionToken);
+        try {
+          const { setDoc, doc } = await import('firebase/firestore');
+          await setDoc(doc(db, 'users', cred.user.uid), { currentSessionId: sessionToken }, { merge: true });
+        } catch (e) {
+          console.warn('Google sign-in session push note:', e);
+        }
+      }
     } catch (err: unknown) {
       console.error('Google Sign-In failed:', err);
       const msg = err instanceof Error ? err.message : 'Đăng nhập không thành công';
@@ -175,7 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setError(null);
     try {
-      const { loginWithUsernamePassword } = await import('../services/db');
+      const { loginWithUsernamePassword, sanitizeForFirestore } = await import('../services/db');
       const matchedProfile = await loginWithUsernamePassword(identifier, password);
       if (!matchedProfile) {
         setError('Tên đăng nhập hoặc mật khẩu không chính xác.');
@@ -199,8 +210,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Push session token to Firestore so other devices will be kicked immediately
       try {
-        const { updateDoc, doc } = await import('firebase/firestore');
-        await updateDoc(doc(db, 'users', matchedProfile.id), { currentSessionId: sessionToken });
+        const { setDoc, doc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'users', matchedProfile.id), sanitizeForFirestore(updatedProfile), { merge: true });
       } catch (e) {
         console.warn('Update session ID note:', e);
       }
@@ -209,6 +220,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: unknown) {
       console.error('Credential sign-in failed:', err);
       setError('Đăng nhập tài khoản thất bại.');
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Instant 1-click test role login (crucial for incognito testing)
+  const loginAsDemoRole = async (targetRole: UserRole): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { getDefaultUsers, sanitizeForFirestore } = await import('../services/db');
+      const defaultUsers = getDefaultUsers();
+      const matched = defaultUsers.find(u => u.role === targetRole) || defaultUsers[0];
+
+      const sessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem(STORAGE_SESSION_TOKEN_KEY, sessionToken);
+
+      const updatedProfile = { ...matched, currentSessionId: sessionToken };
+      setProfile(updatedProfile);
+      setActiveRole(matched.role);
+      setUser({
+        uid: matched.id,
+        email: matched.email,
+        displayName: matched.displayName,
+        photoURL: matched.photoURL
+      } as any);
+      localStorage.setItem(STORAGE_CREDENTIAL_SESSION, JSON.stringify(updatedProfile));
+
+      try {
+        const { setDoc, doc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'users', matched.id), sanitizeForFirestore(updatedProfile), { merge: true });
+      } catch (e) {
+        console.warn('Demo session firestore sync note:', e);
+      }
+      return true;
+    } catch (err) {
+      console.error('loginAsDemoRole failed:', err);
       return false;
     } finally {
       setIsLoading(false);
@@ -229,9 +278,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
 
-  const isAdmin = profile?.role === 'admin';
-  const isTeacher = profile?.role === 'teacher' || isAdmin;
-  const isStudent = profile?.role === 'student';
+  const isAdmin = profile?.role === 'admin' || activeRole === 'admin';
+  const isTeacher = profile?.role === 'teacher' || isAdmin || activeRole === 'teacher';
+  const isStudent = activeRole === 'student';
 
   return (
     <AuthContext.Provider
@@ -239,10 +288,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         activeRole,
-        setActiveRole,
+        setActiveRole: (newRole) => {
+          setActiveRole(newRole);
+          // If no user exists, auto login as demo role so full capabilities unlock smoothly
+          if (!user && !profile) {
+            loginAsDemoRole(newRole);
+          }
+        },
         isLoading,
         loginWithGoogle,
         loginWithCredentials,
+        loginAsDemoRole,
         logout,
         isAdmin,
         isTeacher,
@@ -252,6 +308,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }}
     >
       {children}
+
+      {/* Security alert modal for single active session restriction */}
+      {kickedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-rose-200 text-center space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900">Phiên làm việc đã bị ngắt</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Tài khoản của bạn vừa được đăng nhập trên một thiết bị hoặc trình duyệt khác. Để đảm bảo an toàn và tính công bằng trong thi cử (hạn chế chỉ 1 tài khoản đăng nhập ở 1 thời điểm), phiên làm việc này đã được đăng xuất.
+            </p>
+            <button
+              onClick={() => setKickedModal(false)}
+              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              Đã hiểu
+            </button>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 };

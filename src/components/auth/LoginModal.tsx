@@ -17,9 +17,9 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-  const { loginWithGoogle, loginWithCredentials, isLoading, error, clearError } = useAuth();
+  const { loginWithGoogle, loginWithCredentials, loginAsDemoRole, isLoading, error, clearError } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<'google' | 'credentials'>('google');
+  const [activeTab, setActiveTab] = useState<'credentials' | 'google'>('credentials');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
@@ -145,49 +145,50 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* Tab 2: Username & Password Sign In */}
+          {/* Tab 1: Username & Password Sign In */}
           {activeTab === 'credentials' && (
             <form onSubmit={handleCredentialSubmit} className="space-y-3.5 text-xs">
               {/* Quick fill demo accounts */}
               <div className="pt-1 pb-1">
-                <span className="text-[11px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">
-                  Chọn nhanh tài khoản mẫu:
+                <span className="text-[11px] font-bold text-slate-500 block mb-1.5 uppercase tracking-wider flex items-center justify-between">
+                  <span>1-Chạm đăng nhập thử nghiệm ngay:</span>
+                  <span className="text-[10px] text-emerald-600 font-semibold">Không cần gõ mật khẩu</span>
                 </span>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => {
-                      setIdentifier('admin');
-                      setPassword('123456');
+                    onClick={async () => {
+                      await loginAsDemoRole('admin');
+                      onClose();
                     }}
-                    className="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-bold text-center cursor-pointer transition-colors"
+                    className="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-[11px] font-bold text-center cursor-pointer transition-all hover:scale-[1.02] shadow-2xs"
                   >
                     👑 Admin
-                    <span className="block text-[9px] font-normal text-rose-600">admin / 123456</span>
+                    <span className="block text-[9px] font-normal text-rose-600 mt-0.5">Toàn quyền hệ thống</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setIdentifier('giaovien');
-                      setPassword('123456');
+                    onClick={async () => {
+                      await loginAsDemoRole('teacher');
+                      onClose();
                     }}
-                    className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[11px] font-bold text-center cursor-pointer transition-colors"
+                    className="p-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-800 text-[11px] font-bold text-center cursor-pointer transition-all hover:scale-[1.02] shadow-2xs"
                   >
                     🧑‍🏫 Giáo viên
-                    <span className="block text-[9px] font-normal text-indigo-600">giaovien / 123456</span>
+                    <span className="block text-[9px] font-normal text-indigo-600 mt-0.5">Soạn đề & Giám sát</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setIdentifier('hocsinh');
-                      setPassword('123456');
+                    onClick={async () => {
+                      await loginAsDemoRole('student');
+                      onClose();
                     }}
-                    className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold text-center cursor-pointer transition-colors"
+                    className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-[11px] font-bold text-center cursor-pointer transition-all hover:scale-[1.02] shadow-2xs"
                   >
                     🎒 Học sinh
-                    <span className="block text-[9px] font-normal text-emerald-600">hocsinh / 123456</span>
+                    <span className="block text-[9px] font-normal text-emerald-600 mt-0.5">Vào thi & Tra điểm</span>
                   </button>
                 </div>
               </div>

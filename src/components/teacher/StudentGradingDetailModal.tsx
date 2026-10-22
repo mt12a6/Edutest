@@ -16,6 +16,11 @@ import {
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
 import { gradeEssaySubmission } from '../../services/db';
+import { 
+  isMultipleChoiceCorrect as checkMCCorrect, 
+  isFillBlankCorrect as checkFBCorrect, 
+  evaluateTrueFalseQuestion as evalTF 
+} from '../../utils/grading';
 
 interface StudentGradingDetailModalProps {
   isOpen: boolean;
@@ -47,21 +52,16 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
 
   if (!isOpen) return null;
 
-  const studentAnswers = attempt?.answers || {};
+  const studentAnswers = attempt?.answers || (result as any)?.answers || {};
 
   // Check if multiple choice is correct
   const isMultipleChoiceCorrect = (q: Question) => {
-    return studentAnswers[q.id] === q.correctOption;
+    return checkMCCorrect(studentAnswers[q.id], q.correctOption, q.options);
   };
 
   // Check fill blank
   const isFillBlankCorrect = (q: Question) => {
-    const studentChoice = studentAnswers[q.id];
-    if (studentChoice === undefined || studentChoice === null || studentChoice === '') return false;
-    const cleanAns = String(studentChoice).trim().toLowerCase().replace(/\s+/g, '');
-    const acceptable = (q.acceptableAnswers || []).map(a => String(a).trim().toLowerCase().replace(/\s+/g, ''));
-    const altAns = cleanAns.includes('.') ? cleanAns.replace('.', ',') : cleanAns.replace(',', '.');
-    return acceptable.some(a => a === cleanAns || a === altAns);
+    return checkFBCorrect(studentAnswers[q.id], q.acceptableAnswers, q.correctOption, q.sampleAnswer);
   };
 
   // Calculate True/False details

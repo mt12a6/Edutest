@@ -25,7 +25,7 @@ interface ExamTakingRoomProps {
   exam: Exam;
   questions: Question[];
   initialAttempt: ExamAttempt;
-  onFinishExam: (result: ExamResult) => void;
+  onFinishExam: (result: ExamResult, finalAttempt?: ExamAttempt) => void;
   onExit: () => void;
 }
 
@@ -219,17 +219,40 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      if (profile) {
-        const result = await submitExamAttempt(
-          initialAttempt.id,
-          exam,
-          profile,
-          answers,
-          questions,
-          tabViolations
-        );
-        onFinishExam(result);
-      }
+      const effectiveProfile = profile || {
+        id: initialAttempt.studentId || 'guest_' + Date.now().toString(36),
+        displayName: initialAttempt.studentName || 'Học sinh tự do',
+        username: initialAttempt.studentName || 'hocsinh_tudo',
+        email: initialAttempt.studentEmail || 'guest@edutest.local',
+        role: 'student' as const,
+        status: 'active' as const,
+        className: initialAttempt.classId || 'Tự do',
+        classIds: [initialAttempt.classId || 'Tự do'],
+        createdAt: new Date().toISOString()
+      };
+
+      const result = await submitExamAttempt(
+        initialAttempt.id,
+        exam,
+        effectiveProfile,
+        answers,
+        questions,
+        tabViolations
+      );
+
+      const finalAttempt: ExamAttempt = {
+        ...initialAttempt,
+        answers,
+        flaggedQuestions: flagged,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+        score: result.score,
+        maxScore: result.maxScore,
+        answeredCount: Object.keys(answers).length,
+        tabViolations
+      };
+
+      onFinishExam(result, finalAttempt);
     } catch (err) {
       console.error('Lỗi khi tự động nộp bài:', err);
     }
@@ -261,8 +284,21 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
         questions,
         tabViolations
       );
+
+      const finalAttempt: ExamAttempt = {
+        ...initialAttempt,
+        answers,
+        flaggedQuestions: flagged,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+        score: result.score,
+        maxScore: result.maxScore,
+        answeredCount: Object.keys(answers).length,
+        tabViolations
+      };
+
       setShowSubmitModal(false);
-      onFinishExam(result);
+      onFinishExam(result, finalAttempt);
     } catch (err) {
       console.error('Lỗi khi nộp bài:', err);
       setSubmitError('Không thể nộp bài vào máy chủ. Vui lòng kiểm tra lại kết nối mạng và thử lại.');
@@ -584,8 +620,8 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
 
               return (
                 <div className="space-y-3.5 max-w-3xl">
-                  {displayKeys.map((originalKey, visualIndex) => {
-                    const visualLabel = defaultKeys[visualIndex] || originalKey;
+                  {displayKeys.map((originalKey) => {
+                    const visualLabel = originalKey;
                     const optionText = currentQ.options?.[originalKey];
                     if (!optionText && optionText !== '0') return null;
                     const isSelected = answers[currentQ.id] === originalKey;

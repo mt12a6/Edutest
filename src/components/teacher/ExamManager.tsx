@@ -30,6 +30,7 @@ import {
   toggleExamHide,
   toggleExamShuffle,
   toggleExamTrial,
+  toggleExamTabWarning,
   deleteExam, 
   getExamQuestions,
   logSystemAction,
@@ -186,6 +187,18 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
       onRefreshExams();
     } catch (err) {
       console.error('Lỗi cập nhật trộn đề:', err);
+    }
+  };
+
+  const handleToggleTabWarning = async (exam: Exam) => {
+    const nextWarning = !(exam.enableTabWarning || exam.warnOnTabSwitch);
+    try {
+      await toggleExamTabWarning(exam.id, nextWarning);
+      showSuccess(nextWarning ? `Đã bật cảnh báo chuyển tab cho "${exam.title}".` : `Đã tắt cảnh báo chuyển tab cho "${exam.title}".`);
+      onRefreshExams();
+    } catch (err) {
+      console.error('Lỗi cập nhật cảnh báo chuyển tab:', err);
+      showError('Không thể cập nhật cấu hình cảnh báo tab.');
     }
   };
 
@@ -556,6 +569,19 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   >
                     <Star className={`w-3.5 h-3.5 ${exam.isTrial ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
                     <span>{exam.isTrial ? 'Thi thử: Bật' : 'Thi thử'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleToggleTabWarning(exam)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+                      exam.enableTabWarning || exam.warnOnTabSwitch
+                        ? 'bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 font-bold'
+                        : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-100'
+                    }`}
+                    title="Bật hoặc tắt chức năng cảnh báo khi học sinh chuyển tab màn hình"
+                  >
+                    <AlertCircle className={`w-3.5 h-3.5 ${exam.enableTabWarning || exam.warnOnTabSwitch ? 'text-amber-600' : 'text-slate-400'}`} />
+                    <span>{exam.enableTabWarning || exam.warnOnTabSwitch ? 'Cảnh báo tab: Bật' : 'Cảnh báo tab: Tắt'}</span>
                   </button>
 
                   {onEditExam && (

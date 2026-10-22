@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
+import { isQuestionCorrect, evaluateTrueFalseQuestion } from '../../utils/grading';
 
 interface ExamResultViewProps {
   exam: Exam;
@@ -39,34 +40,13 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
   const [filter, setFilter] = useState<'all' | 'correct' | 'wrong'>('all');
 
   const isPassed = result.score >= (exam.passScore || 5);
-  const studentAnswers = attempt?.answers || {};
+  // Guarantee studentAnswers is never empty by reading from attempt or result
+  const studentAnswers = attempt?.answers || result?.answers || {};
 
-  const isQuestionCorrect = (q: Question) => {
-    const studentChoice = studentAnswers[q.id];
-    if (studentChoice === undefined || studentChoice === null || studentChoice === '') return false;
-    
-    if (q.type === 'true_false') {
-      if (typeof studentChoice !== 'object') return false;
-      const subList = q.subQuestions || [];
-      return subList.every(sub => studentChoice[sub.key] === sub.correct);
-    }
-
-    if (q.type === 'fill_blank') {
-      const cleanAns = String(studentChoice).trim().toLowerCase().replace(/\s+/g, '');
-      const acceptable = (q.acceptableAnswers || []).map(a => String(a).trim().toLowerCase().replace(/\s+/g, ''));
-      const altAns = cleanAns.includes('.') ? cleanAns.replace('.', ',') : cleanAns.replace(',', '.');
-      return acceptable.some(a => a === cleanAns || a === altAns);
-    }
-
-    if (q.type === 'essay') {
-      return String(studentChoice).trim().length > 0;
-    }
-
-    return studentChoice === q.correctOption;
-  };
+  const checkCorrect = (q: Question) => isQuestionCorrect(q, studentAnswers);
 
   const filteredQuestions = questions.filter(q => {
-    const isCorrect = isQuestionCorrect(q);
+    const isCorrect = checkCorrect(q);
     if (filter === 'correct') return isCorrect;
     if (filter === 'wrong') return !isCorrect;
     return true;
@@ -179,7 +159,7 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
           <div className="space-y-4">
             {filteredQuestions.map((q) => {
               const studentChoice = studentAnswers[q.id];
-              const isCorrect = isQuestionCorrect(q);
+              const isCorrect = checkCorrect(q);
               const isUnattempted = studentChoice === undefined || studentChoice === null || studentChoice === '';
               const qType = q.type || 'multiple_choice';
 
@@ -261,8 +241,12 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
                         const text = q.options?.[key];
                         if (!text && text !== '0') return null;
 
-                        const isKeyCorrect = q.correctOption === key;
-                        const isStudentKey = studentChoice === key;
+                        const cleanCorrect = (q.correctOption || '').toUpperCase().replace(/[^A-D]/g, '');
+                        const cleanStudent = String(studentChoice || '').toUpperCase().replace(/[^A-D]/g, '');
+                        const isKeyCorrect = cleanCorrect === key;
+                        const isStudentKey = cleanStudent === key || (
+                          String(studentChoice || '').trim().toLowerCase() === String(text || '').trim().toLowerCase()
+                        );
 
                         let cardStyle = 'bg-slate-50 border-slate-200 text-slate-700';
                         if (isKeyCorrect) {

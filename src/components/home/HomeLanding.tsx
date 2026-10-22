@@ -26,6 +26,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { getExamQuestions } from '../../services/db';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface HomeLandingProps {
   exams: Exam[];
@@ -49,13 +50,14 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   onDeleteExam
 }) => {
 
-  const { user, profile, activeRole, isTeacher, isAdmin, loginWithGoogle } = useAuth();
+  const { user, profile, activeRole, isTeacher, isAdmin, loginWithGoogle, loginAsDemoRole } = useAuth();
 
   // Free trial code search state
   const [trialCodeInput, setTrialCodeInput] = useState<string>('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [loadingExamId, setLoadingExamId] = useState<string | null>(null);
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
+  const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
 
   // Statistics
   const totalExams = exams.length;
@@ -201,39 +203,53 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
           {/* Call to action buttons */}
           <div className="pt-2 flex flex-wrap items-center gap-3.5">
-            {user ? (
-              <>
-                {(activeRole === 'teacher' || activeRole === 'admin') && (
-                  <button
-                    onClick={onOpenWordUpload}
-                    className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    <FileUp className="w-4 h-4" />
-                    <span>Tải đề Word .docx tự động</span>
-                  </button>
-                )}
+            <button
+              onClick={() => {
+                if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
+                if (onOpenWordUpload) onOpenWordUpload();
+              }}
+              className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <FileUp className="w-4 h-4" />
+              <span>Tải đề Word .docx tự động</span>
+            </button>
 
+            <button
+              onClick={() => {
+                if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
+                onNavigateTab('teacher-exams');
+              }}
+              className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Play className="w-4 h-4 fill-white" />
+              <span>Quản lý Đề & Giám sát LIVE</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            {!user && (
+              <div className="flex items-center gap-2 text-xs text-slate-300 bg-white/10 py-1.5 px-3 rounded-xl border border-white/10">
+                <span className="font-semibold text-teal-300">Thử nhanh vai trò:</span>
                 <button
-                  onClick={() => onNavigateTab(activeRole === 'student' ? 'student-exams' : 'teacher-exams')}
-                  className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 transition-all flex items-center gap-2 cursor-pointer"
+                  type="button"
+                  onClick={() => loginAsDemoRole('admin')}
+                  className="px-2 py-1 rounded-lg bg-rose-500/80 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer transition-colors"
                 >
-                  <Play className="w-4 h-4 fill-white" />
-                  <span>{activeRole === 'student' ? 'Vào phòng thi chính thức' : 'Xem danh sách đề thi'}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  👑 Admin
                 </button>
-              </>
-            ) : (
-              <div className="flex items-center gap-3 flex-wrap">
                 <button
-                  onClick={loginWithGoogle}
-                  className="px-6 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2.5 cursor-pointer"
+                  type="button"
+                  onClick={() => loginAsDemoRole('teacher')}
+                  className="px-2 py-1 rounded-lg bg-indigo-500/80 hover:bg-indigo-500 text-white font-bold text-[11px] cursor-pointer transition-colors"
                 >
-                  <GraduationCap className="w-5 h-5" />
-                  <span>Đăng nhập để vào đề thi bảo mật</span>
+                  🧑‍🏫 Giáo viên
                 </button>
-                <span className="text-xs text-slate-400">
-                  (Hoặc thi thử tự do các đề mở bên dưới mà không cần đăng nhập)
-                </span>
+                <button
+                  type="button"
+                  onClick={() => loginAsDemoRole('student')}
+                  className="px-2 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-500 text-slate-950 font-bold text-[11px] cursor-pointer transition-colors"
+                >
+                  🎒 Học sinh
+                </button>
               </div>
             )}
           </div>
@@ -451,51 +467,48 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 mt-4 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-medium text-emerald-700 flex items-center gap-1">
+                <div className="pt-4 border-t border-slate-100 mt-4 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Miễn phí
+                      Miễn phí / Tự do
                     </span>
 
-                    {(isTeacher || isAdmin) && (
-                      <div className="flex items-center gap-1 ml-2">
-                        {onEditExam && (
-                          <button
-                            type="button"
-                            onClick={() => onEditExam(exam)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                            title="Chỉnh sửa đề thi này"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {onDeleteExam && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`Bạn có chắc chắn muốn xóa đề thi "${exam.title}"?`)) {
-                                onDeleteExam(exam);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Xóa đề thi này"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <button
+                      onClick={() => handleTakeTrialExam(exam)}
+                      disabled={isLoadingThis}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>{isLoadingThis ? 'Đang mở đề...' : 'Vào thi ngay'}</span>
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => handleTakeTrialExam(exam)}
-                    disabled={isLoadingThis}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>{isLoadingThis ? 'Đang mở đề...' : 'Thi thử ngay'}</span>
-                  </button>
+                  {/* Edit and Delete action buttons for free practice exams */}
+                  <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-dashed border-slate-100">
+                    {onEditExam && (
+                      <button
+                        type="button"
+                        onClick={() => onEditExam(exam)}
+                        className="px-2.5 py-1.5 rounded-lg text-slate-700 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Chỉnh sửa câu hỏi, đáp án, thời gian làm bài của đề thi này"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-slate-500 hover:text-indigo-600" />
+                        <span>Sửa đề</span>
+                      </button>
+                    )}
+                    {onDeleteExam && (
+                      <button
+                        type="button"
+                        onClick={() => setExamToDelete(exam)}
+                        className="px-2.5 py-1.5 rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Xóa vĩnh viễn đề thi này khỏi hệ thống"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Xoá đề</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -528,7 +541,10 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Module 1: Quản lý đề thi */}
           <div 
-            onClick={() => onNavigateTab('teacher-exams')}
+            onClick={() => {
+              if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
+              onNavigateTab('teacher-exams');
+            }}
             className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer group flex flex-col justify-between"
           >
             <div className="space-y-3">
@@ -550,7 +566,10 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
           {/* Module 2: Tổ chức thi an toàn */}
           <div 
-            onClick={() => onNavigateTab('student-exams')}
+            onClick={() => {
+              if (!user && loginAsDemoRole) loginAsDemoRole('student');
+              onNavigateTab('student-exams');
+            }}
             className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col justify-between"
           >
             <div className="space-y-3">
@@ -572,7 +591,10 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
           {/* Module 3: Chấm điểm & Báo cáo */}
           <div 
-            onClick={() => onNavigateTab('teacher-results')}
+            onClick={() => {
+              if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
+              onNavigateTab('teacher-results');
+            }}
             className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-teal-300 transition-all cursor-pointer group flex flex-col justify-between"
           >
             <div className="space-y-3">
@@ -594,7 +616,10 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
           {/* Module 4: Quản trị & Phân quyền */}
           <div 
-            onClick={() => onNavigateTab('admin-users')}
+            onClick={() => {
+              if (!user && loginAsDemoRole) loginAsDemoRole('admin');
+              onNavigateTab('admin-users');
+            }}
             className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-rose-300 transition-all cursor-pointer group flex flex-col justify-between"
           >
             <div className="space-y-3">
@@ -615,6 +640,22 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Confirmation Modal for Free / Trial Exam Deletion */}
+      <ConfirmModal
+        isOpen={examToDelete !== null}
+        title={`Xác nhận xóa đề thi "${examToDelete?.title}"?`}
+        message={`Đề thi tự do "${examToDelete?.title}" và toàn bộ câu hỏi liên quan sẽ bị xóa khỏi hệ thống. Thao tác này không thể hoàn tác.`}
+        confirmText="Xóa đề thi này"
+        onConfirm={async () => {
+          if (examToDelete && onDeleteExam) {
+            const target = examToDelete;
+            setExamToDelete(null);
+            await onDeleteExam(target);
+          }
+        }}
+        onCancel={() => setExamToDelete(null)}
+      />
     </div>
   );
 };

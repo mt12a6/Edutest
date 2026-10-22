@@ -131,13 +131,16 @@ function MainApp() {
         exam={activeTakingSession.exam}
         questions={activeTakingSession.questions}
         initialAttempt={activeTakingSession.attempt}
-        onFinishExam={(result) => {
+        onFinishExam={(result, finalAttempt) => {
           setActiveTakingSession(null);
           setViewingResultSession({
             exam: activeTakingSession.exam,
             result,
             questions: activeTakingSession.questions,
-            attempt: activeTakingSession.attempt
+            attempt: finalAttempt || {
+              ...activeTakingSession.attempt,
+              answers: result.answers || {}
+            }
           });
         }}
         onExit={() => setActiveTakingSession(null)}

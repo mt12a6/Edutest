@@ -26,6 +26,11 @@ import {
   UserRole
 } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
+import { 
+  isMultipleChoiceCorrect, 
+  isFillBlankCorrect, 
+  evaluateTrueFalseQuestion 
+} from '../utils/grading';
 
 // Utility to recursively strip undefined keys so Firebase never throws Unsupported field value: undefined
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
@@ -975,6 +980,29 @@ export async function toggleExamTrial(
   }
 }
 
+export async function toggleExamTabWarning(
+  examId: string,
+  enableTabWarning: boolean
+): Promise<void> {
+  const current = getLocalExams();
+  const found = current.find(e => e.id === examId);
+  if (found) {
+    found.enableTabWarning = enableTabWarning;
+    found.warnOnTabSwitch = enableTabWarning;
+    saveLocalExams(current);
+  }
+
+  try {
+    await updateDoc(doc(db, 'exams', examId), {
+      enableTabWarning,
+      warnOnTabSwitch: enableTabWarning,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn('Toggle exam tab warning note:', err);
+  }
+}
+
 // ==================== ATTEMPTS & RESULTS ====================
 
 export async function startExamAttempt(
@@ -1102,51 +1130,28 @@ export async function submitExamAttempt(
     const qType = q.type || 'multiple_choice';
 
     if (qType === 'multiple_choice') {
-      if (studentAns === q.correctOption) {
+      const isCorrect = isMultipleChoiceCorrect(studentAns, q.correctOption, q.options);
+      if (isCorrect) {
         correctCount++;
         earnedPoints += qWeight;
       } else {
         wrongCount++;
       }
     } else if (qType === 'true_false') {
-      const subList = q.subQuestions || [];
-      if (typeof studentAns === 'object') {
-        let subMatches = 0;
-        subList.forEach(sub => {
-          if (studentAns[sub.key] !== undefined && studentAns[sub.key] === sub.correct) {
-            subMatches++;
-          }
-        });
+      const { subMatches, totalSubs, ratio, earnedPoints: tfEarned } = evaluateTrueFalseQuestion(studentAns, q.subQuestions, qWeight);
+      earnedPoints += tfEarned;
 
-        // 2025 Ministry of Education True/False formula: 1 = 0.1, 2 = 0.25, 3 = 0.5, 4 = 1.0
-        let ratio = 0;
-        if (subMatches === 4) ratio = 1.0;
-        else if (subMatches === 3) ratio = 0.5;
-        else if (subMatches === 2) ratio = 0.25;
-        else if (subMatches === 1) ratio = 0.1;
-
-        earnedPoints += qWeight * ratio;
-        if (subMatches === subList.length) {
-          correctCount++;
-        } else if (subMatches > 0) {
-          correctCount += ratio;
-          wrongCount += (1 - ratio);
-        } else {
-          wrongCount++;
-        }
+      if (subMatches === totalSubs && totalSubs > 0) {
+        correctCount++;
+      } else if (subMatches > 0) {
+        correctCount += ratio;
+        wrongCount += (1 - ratio);
       } else {
         wrongCount++;
       }
     } else if (qType === 'fill_blank') {
-      const cleanStudentAns = String(studentAns).trim().toLowerCase().replace(/\s+/g, '');
-      const acceptable = (q.acceptableAnswers || []).map(a => String(a).trim().toLowerCase().replace(/\s+/g, ''));
-      
-      const cleanAlt = cleanStudentAns.includes('.') 
-        ? cleanStudentAns.replace('.', ',') 
-        : cleanStudentAns.replace(',', '.');
-
-      const isMatch = acceptable.some(ans => ans === cleanStudentAns || ans === cleanAlt);
-      if (isMatch) {
+      const isCorrect = isFillBlankCorrect(studentAns, q.acceptableAnswers, q.correctOption, q.sampleAnswer);
+      if (isCorrect) {
         correctCount++;
         earnedPoints += qWeight;
       } else {
@@ -1192,11 +1197,37 @@ export async function submitExamAttempt(
       : (finalScore >= (exam.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'),
     tabViolations,
     status: hasEssayQuestions ? 'pending_essay_grading' : 'completed',
-    hasEssay: hasEssayQuestions
+    hasEssay: hasEssayQuestions,
+    answers // Attach answers directly for persistent review
   };
 
   // Save to local
   saveLocalResult(result);
+
+  // Also update local cached attempt if stored
+  try {
+    const rawAttempts = localStorage.getItem('edutest_custom_attempts');
+    if (rawAttempts) {
+      const list = JSON.parse(rawAttempts);
+      if (Array.isArray(list)) {
+        const idx = list.findIndex(a => a.id === attemptId);
+        if (idx !== -1) {
+          list[idx] = {
+            ...list[idx],
+            status: 'submitted',
+            submittedAt: nowStr,
+            answers,
+            score: finalScore,
+            answeredCount: Object.keys(answers).length,
+            tabViolations
+          };
+          localStorage.setItem('edutest_custom_attempts', JSON.stringify(list));
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Update local custom attempts note:', e);
+  }
 
   // Save to Firestore
   try {
@@ -1412,6 +1443,15 @@ export async function checkAndSeedInitialData(): Promise<void> {
     addDeletedClassId('6A1');
     const existingClasses = getLocalClasses().filter(c => c.name !== '6A1' && c.id !== 'c_6a' && c.id !== '6A1');
     saveLocalClasses(existingClasses);
+
+    // Always ensure demo accounts (admin, giaovien, hocsinh) exist in Firestore
+    for (const defUser of getDefaultUsers()) {
+      try {
+        await setDoc(doc(db, 'users', defUser.id), sanitizeForFirestore(defUser), { merge: true });
+      } catch (e) {
+        // non-blocking
+      }
+    }
 
     const hasSeeded = localStorage.getItem('edutest_initial_seeded_done');
     if (hasSeeded === 'true') {

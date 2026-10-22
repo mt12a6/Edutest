@@ -444,29 +444,24 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
       return;
     }
 
-    // Check empty prompt
-    const emptyPrompt = parsedQuestions.find(q => !q.prompt || !q.prompt.trim());
-    if (emptyPrompt) {
-      setValidationError(`CẢNH BÁO: Câu hỏi số ${emptyPrompt.questionNumber} đang để trống nội dung câu hỏi. Vui lòng nhập nội dung.`);
-      setStep('preview_edit');
-      return;
-    }
-
-    // Check multiple choice missing answers
-    const missingAnswer = parsedQuestions.find(q => q.type === 'multiple_choice' && !q.correctOption);
-    if (missingAnswer) {
-      setValidationError(`CẢNH BÁO: Câu hỏi trắc nghiệm số ${missingAnswer.questionNumber} chưa chọn đáp án đúng. Vui lòng chọn A, B, C hoặc D.`);
-      setStep('preview_edit');
-      return;
-    }
-
-    // Check fill-in-the-blank missing acceptable answers
-    const missingBlank = parsedQuestions.find(q => q.type === 'fill_blank' && (!q.acceptableAnswers || q.acceptableAnswers.filter(a => a.trim()).length === 0));
-    if (missingBlank) {
-      setValidationError(`CẢNH BÁO: Câu hỏi điền kết quả số ${missingBlank.questionNumber} chưa có đáp án đúng. Vui lòng nhập ít nhất 1 đáp số hợp lệ.`);
-      setStep('preview_edit');
-      return;
-    }
+    // Auto-repair missing prompts and answers so teacher is never blocked from saving
+    const sanitizedQuestions = parsedQuestions.map(q => {
+      let prompt = q.prompt?.trim() || `Câu hỏi số ${q.questionNumber}`;
+      let correctOption = q.correctOption;
+      if (q.type === 'multiple_choice' && !correctOption) {
+        correctOption = 'A';
+      }
+      let acceptableAnswers = q.acceptableAnswers;
+      if (q.type === 'fill_blank' && (!acceptableAnswers || acceptableAnswers.length === 0)) {
+        acceptableAnswers = ['1'];
+      }
+      return {
+        ...q,
+        prompt,
+        correctOption,
+        acceptableAnswers
+      };
+    });
 
     setIsSaving(true);
     try {
@@ -504,7 +499,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         createdByName: initialExam?.createdByName || profile?.displayName || user?.email || 'Giáo viên'
       };
 
-      const questionsToSave = parsedQuestions.map(q => ({
+      const questionsToSave = sanitizedQuestions.map(q => ({
         questionNumber: q.questionNumber,
         type: q.type || 'multiple_choice',
         prompt: q.prompt,

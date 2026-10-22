@@ -166,6 +166,8 @@ export interface ExamResult {
   submittedAt: string;
   feedback?: string;
   tabViolations?: number; // Anti-cheat count
+  answers?: Record<string, any>; // Student submitted answers map
+  flaggedQuestions?: Record<string, boolean>;
   // Essay grading fields
   status?: 'completed' | 'pending_essay_grading';
   hasEssay?: boolean;
