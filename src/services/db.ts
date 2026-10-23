@@ -324,49 +324,65 @@ export function getDefaultUsers(): UserProfile[] {
   ];
 }
 
+const STORAGE_DELETED_USERS_KEY = 'edutest_deleted_user_ids';
+
+export function getDeletedUserIds(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_DELETED_USERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addDeletedUserId(id: string) {
+  try {
+    const list = getDeletedUserIds();
+    if (!list.includes(id)) {
+      list.push(id);
+      localStorage.setItem(STORAGE_DELETED_USERS_KEY, JSON.stringify(list));
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+export function removeDeletedUserId(id: string) {
+  try {
+    const list = getDeletedUserIds().filter(x => x !== id);
+    localStorage.setItem(STORAGE_DELETED_USERS_KEY, JSON.stringify(list));
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
 export async function getAllUsers(): Promise<UserProfile[]> {
   const collectionPath = 'users';
-  let localList = getLocalUsers();
+  const deletedIds = getDeletedUserIds();
+  let localList = getLocalUsers().filter(u => !deletedIds.includes(u.id));
   
-  // Seed default users if local list is empty
-  if (localList.length === 0) {
-    localList = getDefaultUsers();
+  // Seed default users ONLY once if local list is genuinely empty
+  if (localList.length === 0 && !localStorage.getItem('edutest_users_initialized')) {
+    localList = getDefaultUsers().filter(u => !deletedIds.includes(u.id));
     saveLocalUsers(localList);
-  } else {
-    // Ensure default demo accounts exist
-    const defaultAccounts = getDefaultUsers();
-    let hasChanged = false;
-    defaultAccounts.forEach(def => {
-      if (!localList.some(u => u.username === def.username || u.id === def.id)) {
-        localList.push(def);
-        hasChanged = true;
-      }
-    });
-    if (hasChanged) {
-      saveLocalUsers(localList);
-    }
+    localStorage.setItem('edutest_users_initialized', 'true');
   }
 
   try {
     const q = query(collection(db, collectionPath));
     const snap = await getDocs(q);
-    const firestoreUsers = snap.docs.map(d => ({ ...d.data(), id: d.id } as UserProfile));
+    const firestoreUsers = snap.docs
+      .map(d => ({ ...d.data(), id: d.id } as UserProfile))
+      .filter(u => !deletedIds.includes(u.id));
     
-    // Merge firestore and local users by ID
+    // Merge firestore and local users by ID without resurrecting deleted users
     const mergedMap = new Map<string, UserProfile>();
-    localList.forEach(u => mergedMap.set(u.id, u));
-    firestoreUsers.forEach(u => mergedMap.set(u.id, u));
-
-    // Push any local users not yet in firestore to firestore so incognito / student devices can log in
-    for (const u of localList) {
-      if (!firestoreUsers.some(fu => fu.id === u.id || (fu.username && u.username && fu.username.toLowerCase() === u.username.toLowerCase()))) {
-        try {
-          await setDoc(doc(db, 'users', u.id), sanitizeForFirestore(u), { merge: true });
-        } catch (e) {
-          // ignore
-        }
-      }
-    }
+    localList.forEach(u => {
+      if (!deletedIds.includes(u.id)) mergedMap.set(u.id, u);
+    });
+    firestoreUsers.forEach(u => {
+      if (!deletedIds.includes(u.id)) mergedMap.set(u.id, u);
+    });
 
     const combined = Array.from(mergedMap.values());
     saveLocalUsers(combined);
@@ -381,11 +397,13 @@ export async function getAllUsers(): Promise<UserProfile[]> {
 
 export async function createUserProfile(userData: Partial<UserProfile> & { username: string; displayName: string; role: UserRole }): Promise<UserProfile> {
   const safeId = userData.id || ('u_' + userData.username.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase() + '_' + Date.now().toString(36));
+  removeDeletedUserId(safeId);
+
   const newProfile: UserProfile = {
     id: safeId,
     username: userData.username.trim(),
     displayName: userData.displayName.trim(),
-    email: userData.email?.trim() || `${userData.username.trim()}@edutest.edu.vn`,
+    email: userData.email?.trim() || `${userData.username.trim().toLowerCase()}@edutest.edu.vn`,
     password: userData.password || '123456',
     role: userData.role || 'student',
     status: userData.status || 'active',
@@ -395,8 +413,9 @@ export async function createUserProfile(userData: Partial<UserProfile> & { usern
     createdAt: new Date().toISOString()
   };
 
-  const currentLocal = getLocalUsers();
-  const updatedLocal = [newProfile, ...currentLocal.filter(u => u.id !== safeId && u.username !== newProfile.username)];
+  const newUsernameLower = (newProfile.username || '').toLowerCase();
+  const currentLocal = getLocalUsers().filter(u => u.id !== safeId && (!u.username || !newUsernameLower || u.username.toLowerCase() !== newUsernameLower));
+  const updatedLocal = [newProfile, ...currentLocal];
   saveLocalUsers(updatedLocal);
 
   try {
@@ -417,19 +436,19 @@ export async function updateUserProfile(userId: string, data: Partial<UserProfil
   }
 
   try {
-    await updateDoc(doc(db, 'users', userId), sanitizeForFirestore({
+    await setDoc(doc(db, 'users', userId), sanitizeForFirestore({
       ...data,
       updatedAt: new Date().toISOString()
-    }));
+    }), { merge: true });
   } catch (err) {
     console.warn('updateUserProfile Firestore note:', err);
   }
 }
 
 export async function deleteUserProfile(userId: string): Promise<void> {
-  const currentLocal = getLocalUsers();
-  const updated = currentLocal.filter(u => u.id !== userId);
-  saveLocalUsers(updated);
+  addDeletedUserId(userId);
+  const currentLocal = getLocalUsers().filter(u => u.id !== userId);
+  saveLocalUsers(currentLocal);
 
   try {
     await deleteDoc(doc(db, 'users', userId));
@@ -1018,10 +1037,12 @@ export async function startExamAttempt(
   const attempt: ExamAttempt = {
     id: attemptId,
     examId: exam.id,
+    examTitle: exam.title,
+    subjectName: exam.subjectName,
     studentId: student.id,
     studentEmail: student.email,
     studentName: student.displayName,
-    classId: student.classIds?.[0] || '10A1',
+    classId: student.classIds?.[0] || student.className || '10A1',
     startedAt,
     deadline,
     durationMinutes: exam.durationMinutes,
@@ -1036,7 +1057,15 @@ export async function startExamAttempt(
   };
 
   try {
-    await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore(attempt));
+    const localSaved = localStorage.getItem('edutest_custom_attempts');
+    const list: ExamAttempt[] = localSaved ? JSON.parse(localSaved) : [];
+    localStorage.setItem('edutest_custom_attempts', JSON.stringify([attempt, ...list.filter(x => x.id !== attemptId)]));
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore(attempt), { merge: true });
   } catch (err) {
     console.warn('Save attempt start note:', err);
   }
@@ -1097,7 +1126,21 @@ export async function saveAttemptProgress(
   if (tabViolationLogs !== undefined) updateData.tabViolationLogs = tabViolationLogs;
 
   try {
-    await updateDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore(updateData));
+    const localSaved = localStorage.getItem('edutest_custom_attempts');
+    if (localSaved) {
+      const list: ExamAttempt[] = JSON.parse(localSaved);
+      const idx = list.findIndex(x => x.id === attemptId);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], ...updateData };
+        localStorage.setItem('edutest_custom_attempts', JSON.stringify(list));
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore(updateData), { merge: true });
   } catch (err) {
     console.warn('Lưu tiến độ làm bài note:', err);
   }
@@ -1444,12 +1487,15 @@ export async function checkAndSeedInitialData(): Promise<void> {
     const existingClasses = getLocalClasses().filter(c => c.name !== '6A1' && c.id !== 'c_6a' && c.id !== '6A1');
     saveLocalClasses(existingClasses);
 
-    // Always ensure demo accounts (admin, giaovien, hocsinh) exist in Firestore
+    // Always ensure demo accounts exist in Firestore if not deleted
+    const deletedUserIds = getDeletedUserIds();
     for (const defUser of getDefaultUsers()) {
-      try {
-        await setDoc(doc(db, 'users', defUser.id), sanitizeForFirestore(defUser), { merge: true });
-      } catch (e) {
-        // non-blocking
+      if (!deletedUserIds.includes(defUser.id)) {
+        try {
+          await setDoc(doc(db, 'users', defUser.id), sanitizeForFirestore(defUser), { merge: true });
+        } catch (e) {
+          // non-blocking
+        }
       }
     }
 

@@ -19,6 +19,13 @@ interface AuthContextType {
   isLoading: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithCredentials: (identifier: string, password: string) => Promise<boolean>;
+  registerStudent: (data: {
+    username: string;
+    displayName: string;
+    email: string;
+    password: string;
+    className?: string;
+  }) => Promise<boolean>;
   loginAsDemoRole: (role: UserRole) => Promise<boolean>;
   logout: () => Promise<void>;
   isAdmin: boolean;
@@ -129,7 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const STORAGE_SESSION_TOKEN_KEY = 'edutest_session_token';
 
-  // Listen to profile updates & Enforce single active session
+  // Listen to profile updates & Enforce single active session ONLY for students
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
@@ -137,14 +144,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = snapshot.data() as UserProfile;
         
         // Single Active Session check:
-        // If Firestore has a session token different from this browser's session token,
-        // it means another browser/device just logged in with this account.
-        const remoteSession = data.currentSessionId;
-        const localSession = localStorage.getItem(STORAGE_SESSION_TOKEN_KEY);
-        if (remoteSession && localSession && remoteSession !== localSession) {
-          setKickedModal(true);
-          logout();
-          return;
+        // APPLIES ONLY TO STUDENTS (Học sinh) per user instruction:
+        // "chỉ trường hợp học sinh đăng nhập 1 lúc hai thiết bị thì chỉ ghi nhận là thiết bị sau được đăng nhập và thoát thiết bị đầu."
+        if (data.role === 'student') {
+          const remoteSession = data.currentSessionId;
+          const localSession = localStorage.getItem(STORAGE_SESSION_TOKEN_KEY);
+          if (remoteSession && localSession && remoteSession !== localSession) {
+            setKickedModal(true);
+            logout();
+            return;
+          }
         }
 
         setProfile(data);
@@ -208,7 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as any);
       localStorage.setItem(STORAGE_CREDENTIAL_SESSION, JSON.stringify(updatedProfile));
 
-      // Push session token to Firestore so other devices will be kicked immediately
+      // Push session token to Firestore so previous device will be kicked if student
       try {
         const { setDoc, doc } = await import('firebase/firestore');
         await setDoc(doc(db, 'users', matchedProfile.id), sanitizeForFirestore(updatedProfile), { merge: true });
@@ -226,7 +235,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Instant 1-click test role login (crucial for incognito testing)
+  // Self-Registration for Students (Người dùng tự đăng ký với vai trò Học sinh)
+  const registerStudent = async (data: {
+    username: string;
+    displayName: string;
+    email: string;
+    password: string;
+    className?: string;
+  }): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const { createUserProfile, sanitizeForFirestore } = await import('../services/db');
+      const newProfile = await createUserProfile({
+        username: data.username.trim(),
+        displayName: data.displayName.trim(),
+        email: data.email.trim() || `${data.username.trim().toLowerCase()}@edutest.edu.vn`,
+        password: data.password || '123456',
+        role: 'student',
+        status: 'active',
+        className: data.className || '10A1',
+        classIds: [data.className || '10A1']
+      });
+
+      const sessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem(STORAGE_SESSION_TOKEN_KEY, sessionToken);
+
+      const updated = { ...newProfile, currentSessionId: sessionToken };
+      setProfile(updated);
+      setActiveRole('student');
+      setUser({
+        uid: updated.id,
+        email: updated.email,
+        displayName: updated.displayName,
+        photoURL: updated.photoURL
+      } as any);
+      localStorage.setItem(STORAGE_CREDENTIAL_SESSION, JSON.stringify(updated));
+
+      try {
+        const { setDoc, doc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'users', updated.id), sanitizeForFirestore(updated), { merge: true });
+      } catch (e) {
+        console.warn('Register firestore sync note:', e);
+      }
+
+      return true;
+    } catch (err: unknown) {
+      console.error('Student registration error:', err);
+      const msg = err instanceof Error ? err.message : 'Đăng ký tài khoản không thành công';
+      setError(msg);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 1-click test role login fallback (if needed)
   const loginAsDemoRole = async (targetRole: UserRole): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
@@ -288,16 +352,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         profile,
         activeRole,
-        setActiveRole: (newRole) => {
-          setActiveRole(newRole);
-          // If no user exists, auto login as demo role so full capabilities unlock smoothly
-          if (!user && !profile) {
-            loginAsDemoRole(newRole);
-          }
-        },
+        setActiveRole,
         isLoading,
         loginWithGoogle,
         loginWithCredentials,
+        registerStudent,
         loginAsDemoRole,
         logout,
         isAdmin,

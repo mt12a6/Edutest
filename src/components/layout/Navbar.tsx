@@ -93,49 +93,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
             </div>
           </div>
 
-          {/* Center / Right: Quick Role Switcher for instant testing */}
-          <div className="hidden md:flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 text-xs font-semibold">
-            <span className="text-[11px] text-slate-400 font-bold px-2 uppercase tracking-wider">
-              Chế độ:
-            </span>
-            <button
-              onClick={() => loginAsDemoRole('admin')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeRole === 'admin'
-                  ? 'bg-rose-600 text-white shadow-sm font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-              title="Kích hoạt góc nhìn Quản trị viên (Toàn quyền quản trị, lớp học, giáo viên)"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Admin</span>
-            </button>
-            <button
-              onClick={() => loginAsDemoRole('teacher')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeRole === 'teacher'
-                  ? 'bg-indigo-600 text-white shadow-sm font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-              title="Kích hoạt góc nhìn Giáo viên (Soạn đề, Nhập Word, Giám sát LIVE, Thống kê)"
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Giáo viên</span>
-            </button>
-            <button
-              onClick={() => loginAsDemoRole('student')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeRole === 'student'
-                  ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-              title="Kích hoạt góc nhìn Học sinh (Làm bài thi, Tra cứu kết quả)"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Học sinh</span>
-            </button>
-          </div>
-
           {/* Right actions: Online status, Role badge, Profile / Login */}
           <div className="flex items-center gap-2.5 sm:gap-3">
             {/* Share & Deploy Button */}
@@ -156,37 +113,41 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
             {(user || profile) ? (
               <div className="flex items-center gap-2.5">
-                {/* Role indicator & test switcher dropdown */}
+                {/* Role indicator */}
                 <div className="relative">
-                  <button
-                    onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                    className="flex items-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer"
-                    title="Chuyển đổi vai trò để kiểm thử"
-                  >
-                    {getRoleBadge(activeRole)}
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                  </button>
+                  {isAdmin ? (
+                    <button
+                      onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                      className="flex items-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer"
+                      title="Chuyển đổi góc nhìn vai trò"
+                    >
+                      {getRoleBadge(activeRole)}
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                  ) : (
+                    getRoleBadge(activeRole)
+                  )}
 
-                  {/* Dropdown for role simulation */}
-                  {showRoleDropdown && (
+                  {/* Dropdown for admin role perspective preview */}
+                  {showRoleDropdown && isAdmin && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in slide-in-from-top-2">
                       <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                        Chuyển đổi vai trò xem:
+                        Xem giao diện theo vai trò:
                       </div>
                       <button
-                        onClick={() => { loginAsDemoRole('admin'); setShowRoleDropdown(false); }}
+                        onClick={() => { setActiveRole('admin'); setShowRoleDropdown(false); }}
                         className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 hover:bg-slate-50 ${activeRole === 'admin' ? 'text-rose-600 bg-rose-50/50 font-semibold' : 'text-slate-700'}`}
                       >
                         <ShieldCheck className="w-4 h-4 text-rose-500" /> Quản trị viên (Admin)
                       </button>
                       <button
-                        onClick={() => { loginAsDemoRole('teacher'); setShowRoleDropdown(false); }}
+                        onClick={() => { setActiveRole('teacher'); setShowRoleDropdown(false); }}
                         className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 hover:bg-slate-50 ${activeRole === 'teacher' ? 'text-indigo-600 bg-indigo-50/50 font-semibold' : 'text-slate-700'}`}
                       >
                         <GraduationCap className="w-4 h-4 text-indigo-500" /> Giáo viên (Teacher)
                       </button>
                       <button
-                        onClick={() => { loginAsDemoRole('student'); setShowRoleDropdown(false); }}
+                        onClick={() => { setActiveRole('student'); setShowRoleDropdown(false); }}
                         className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 hover:bg-slate-50 ${activeRole === 'student' ? 'text-emerald-600 bg-emerald-50/50 font-semibold' : 'text-slate-700'}`}
                       >
                         <UserCheck className="w-4 h-4 text-emerald-500" /> Học sinh (Student)
@@ -229,12 +190,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
             ) : (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => loginAsDemoRole('teacher')}
-                  className="hidden sm:flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                  title="Thử nhanh vai trò Giáo viên"
+                  onClick={() => setShowLoginModal(true)}
+                  className="hidden sm:flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Vào thử Giáo viên</span>
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Đăng ký Học sinh</span>
                 </button>
                 <button
                   onClick={() => setShowLoginModal(true)}
@@ -261,39 +221,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-b border-slate-200 px-4 py-3 space-y-2 animate-in slide-in-from-top-2 shadow-lg">
-          {/* Mobile Role Switcher */}
-          <div className="bg-slate-100 p-2 rounded-xl space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-1">
-              Chuyển nhanh vai trò thử nghiệm:
-            </span>
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                onClick={() => { loginAsDemoRole('admin'); setMobileMenuOpen(false); }}
-                className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeRole === 'admin' ? 'bg-rose-600 text-white shadow-xs' : 'bg-white text-slate-700'
-                }`}
-              >
-                👑 Admin
-              </button>
-              <button
-                onClick={() => { loginAsDemoRole('teacher'); setMobileMenuOpen(false); }}
-                className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeRole === 'teacher' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-white text-slate-700'
-                }`}
-              >
-                🧑‍🏫 Giáo viên
-              </button>
-              <button
-                onClick={() => { loginAsDemoRole('student'); setMobileMenuOpen(false); }}
-                className={`py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  activeRole === 'student' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-white text-slate-700'
-                }`}
-              >
-                🎒 Học sinh
-              </button>
-            </div>
-          </div>
-
           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-1">
             Điều hướng chung
           </div>

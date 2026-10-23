@@ -205,7 +205,6 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
           <div className="pt-2 flex flex-wrap items-center gap-3.5">
             <button
               onClick={() => {
-                if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
                 if (onOpenWordUpload) onOpenWordUpload();
               }}
               className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
@@ -216,42 +215,24 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
             <button
               onClick={() => {
-                if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
-                onNavigateTab('teacher-exams');
+                onNavigateTab('teacher-live');
               }}
               className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs sm:text-sm border border-white/20 transition-all flex items-center gap-2 cursor-pointer"
             >
               <Play className="w-4 h-4 fill-white" />
-              <span>Quản lý Đề & Giám sát LIVE</span>
+              <span>Phòng Giám sát LIVE</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
-            {!user && (
-              <div className="flex items-center gap-2 text-xs text-slate-300 bg-white/10 py-1.5 px-3 rounded-xl border border-white/10">
-                <span className="font-semibold text-teal-300">Thử nhanh vai trò:</span>
-                <button
-                  type="button"
-                  onClick={() => loginAsDemoRole('admin')}
-                  className="px-2 py-1 rounded-lg bg-rose-500/80 hover:bg-rose-500 text-white font-bold text-[11px] cursor-pointer transition-colors"
-                >
-                  👑 Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => loginAsDemoRole('teacher')}
-                  className="px-2 py-1 rounded-lg bg-indigo-500/80 hover:bg-indigo-500 text-white font-bold text-[11px] cursor-pointer transition-colors"
-                >
-                  🧑‍🏫 Giáo viên
-                </button>
-                <button
-                  type="button"
-                  onClick={() => loginAsDemoRole('student')}
-                  className="px-2 py-1 rounded-lg bg-emerald-500/80 hover:bg-emerald-500 text-slate-950 font-bold text-[11px] cursor-pointer transition-colors"
-                >
-                  🎒 Học sinh
-                </button>
-              </div>
-            )}
+            <button
+              onClick={() => {
+                onNavigateTab('student-exams');
+              }}
+              className="px-5 py-3 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 font-bold text-xs sm:text-sm border border-teal-400/30 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <GraduationCap className="w-4 h-4 text-emerald-400" />
+              <span>Kỳ thi & Luyện tập</span>
+            </button>
           </div>
         </div>
 

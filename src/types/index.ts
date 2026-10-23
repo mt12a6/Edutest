@@ -129,6 +129,8 @@ export interface ExamAssignment {
 export interface ExamAttempt {
   id: string;
   examId: string;
+  examTitle?: string;
+  subjectName?: string;
   studentId: string;
   studentEmail: string;
   studentName: string;
