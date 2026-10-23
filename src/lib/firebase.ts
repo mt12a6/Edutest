@@ -1,16 +1,28 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import fileConfig from '../../firebase-applet-config.json';
+
+// Support both firebase-applet-config.json and VITE_ environment variables (for Vercel deployment)
+export const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || fileConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || fileConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || fileConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || fileConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || fileConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || fileConfig.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || fileConfig.measurementId,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || (fileConfig as any).firestoreDatabaseId || 'ai-studio-386028a1-6798-4f45-8bc3-5d3485253eed'
+};
 
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with specific database ID if configured, or default database
-export const db = (firebaseConfig as any).firestoreDatabaseId 
-  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId) 
+// Initialize Firestore with specific database ID (CRITICAL: must connect to ai-studio-386028a1-6798-4f45-8bc3-5d3485253eed)
+const targetDatabaseId = firebaseConfig.firestoreDatabaseId;
+export const db = targetDatabaseId 
+  ? getFirestore(app, targetDatabaseId) 
   : getFirestore(app);
-
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);

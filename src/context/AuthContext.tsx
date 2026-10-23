@@ -37,8 +37,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Admin bootstrapped email as specified in system metadata
-const BOOTSTRAP_ADMIN_EMAIL = 'mt12a6@gmail.com';
+// Admin bootstrapped emails
+const BOOTSTRAP_ADMIN_EMAILS = ['mt12a6@gmail.com', 'daiso2014@gmail.com'];
+const isSuperAdminEmail = (email?: string | null) => {
+  if (!email) return false;
+  const clean = email.trim().toLowerCase();
+  return BOOTSTRAP_ADMIN_EMAILS.some(adm => adm.toLowerCase() === clean);
+};
 
 const STORAGE_CREDENTIAL_SESSION = 'edutest_active_user_session';
 
@@ -88,7 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (!docSnap.exists()) {
           // Initial profile registration
-          const isBootstrapAdmin = currentUser.email?.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
+          const isBootstrapAdmin = isSuperAdminEmail(currentUser.email);
           const initialRole: UserRole = isBootstrapAdmin ? 'admin' : 'student';
 
           userProfile = {
@@ -105,7 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } else {
           userProfile = docSnap.data() as UserProfile;
           // Ensure bootstrap admin always keeps admin rights
-          if (currentUser.email?.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase() && userProfile.role !== 'admin') {
+          if (isSuperAdminEmail(currentUser.email) && userProfile.role !== 'admin') {
             userProfile.role = 'admin';
             await setDoc(userDocRef, { role: 'admin' }, { merge: true });
           }
@@ -116,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.error('Error fetching/creating user profile:', err);
         // Do not crash, still set basic profile
-        const isBootstrapAdmin = currentUser.email?.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
+        const isBootstrapAdmin = isSuperAdminEmail(currentUser.email);
         setProfile({
           id: currentUser.uid,
           email: currentUser.email || '',

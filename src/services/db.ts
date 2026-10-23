@@ -300,6 +300,16 @@ export function getDefaultUsers(): UserProfile[] {
       createdAt: '2024-09-01T08:00:00.000Z'
     },
     {
+      id: 'u_daiso2014',
+      username: 'daiso2014',
+      email: 'daiso2014@gmail.com',
+      password: '123456',
+      displayName: 'Admin daiso2014',
+      role: 'admin',
+      status: 'active',
+      createdAt: '2024-09-01T08:00:00.000Z'
+    },
+    {
       id: 'u_giaovien',
       username: 'giaovien',
       email: 'giaovien@edutest.edu.vn',
@@ -733,6 +743,7 @@ export async function getExams(): Promise<Exam[]> {
     // Merge local and firestore exams
     const mergedMap = new Map<string, Exam>();
     localExams.forEach(e => mergedMap.set(e.id, e));
+    firestoreExams.forEach(e => mergedMap.set(e.id, e));
     const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
     const list = Array.from(mergedMap.values())
       .filter(e => !deletedIds.includes(e.id))

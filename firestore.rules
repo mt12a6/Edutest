@@ -11,12 +11,17 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.email == 'mt12a6@gmail.com');
+      return isSignedIn() && (
+        request.auth.token.email_verified == true || 
+        request.auth.token.email == 'mt12a6@gmail.com' ||
+        request.auth.token.email == 'daiso2014@gmail.com'
+      );
     }
 
     function isAdmin() {
       return isVerified() && (
         request.auth.token.email == 'mt12a6@gmail.com' ||
+        request.auth.token.email == 'daiso2014@gmail.com' ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       );
@@ -28,6 +33,11 @@ service cloud.firestore {
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher')
       );
+    }
+
+    // Test connection doc
+    match /test/{docId} {
+      allow read: if true;
     }
 
     // User collection - allow self registration and admin bulk management
