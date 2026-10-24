@@ -330,6 +330,18 @@ export function getDefaultUsers(): UserProfile[] {
       createdAt: '2024-09-01T08:00:00.000Z'
     },
     {
+      id: 'u_hs006',
+      username: 'hs006',
+      email: 'hs006@edutest.edu.vn',
+      password: '123456',
+      displayName: 'Học sinh HS006',
+      role: 'student',
+      status: 'active',
+      className: '10A1',
+      classIds: ['10A1'],
+      createdAt: '2024-09-01T08:00:00.000Z'
+    },
+    {
       id: 'u_hocsinh',
       username: 'hocsinh',
       email: 'hocsinh@edutest.edu.vn',
