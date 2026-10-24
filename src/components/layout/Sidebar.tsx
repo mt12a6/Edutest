@@ -54,8 +54,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
           </button>
         </div>
 
-        {/* Teacher Navigation (Visible for teachers, admins, or guest previews) */}
-        {activeRole !== 'student' && (
+        {/* Teacher Navigation (Visible for guests, teachers, and admins) */}
+        {profile?.role !== 'student' && (
           <div className="space-y-1 pt-2 border-t border-slate-200">
             <div className="px-3.5 mb-2 text-[11px] font-bold text-indigo-600 uppercase tracking-wider flex items-center justify-between">
               <span>Khu vực Giáo viên</span>
@@ -85,20 +85,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
               </span>
               <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">
                 .docx
-              </span>
-            </button>
-
-            <button 
-              onClick={() => onTabChange('teacher-live')}
-              className={navItemClass('teacher-live')}
-            >
-              <div className="relative">
-                <Radio className="w-4 h-4 text-rose-500" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-              </div>
-              <span className="flex-1 flex items-center justify-between">
-                <span>Giám sát trực tiếp</span>
-                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700">LIVE</span>
               </span>
             </button>
 
@@ -141,6 +127,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             <div className="px-3.5 mb-2 text-[11px] font-bold text-rose-600 uppercase tracking-wider flex items-center justify-between">
               <span>Khu vực Quản trị</span>
             </div>
+
+            {/* Live Exam Monitor - Strictly Admin Only */}
+            <button 
+              onClick={() => onTabChange('teacher-live')}
+              className={navItemClass('teacher-live')}
+            >
+              <div className="relative">
+                <Radio className="w-4 h-4 text-rose-500" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              </div>
+              <span className="flex-1 flex items-center justify-between">
+                <span>Giám sát thi (Admin)</span>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700">LIVE</span>
+              </span>
+            </button>
 
             <button 
               onClick={() => onTabChange('admin-users')}

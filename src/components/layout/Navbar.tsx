@@ -22,7 +22,8 @@ import {
   Shield,
   Users,
   Award,
-  Share2
+  Share2,
+  Radio
 } from 'lucide-react';
 import { UserRole } from '../../types';
 import { LoginModal } from '../auth/LoginModal';
@@ -234,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
             <span>Trang chủ</span>
           </button>
 
-          {(activeRole === 'teacher' || activeRole === 'admin') && (
+          {profile?.role !== 'student' && (
             <>
               <div className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider px-2 pt-2 border-t border-slate-100">
                 Khu vực Giáo viên
@@ -287,6 +288,18 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
               <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wider px-2 pt-2 border-t border-slate-100">
                 Khu vực Quản trị
               </div>
+              <button
+                onClick={() => { onTabChange('teacher-live'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'teacher-live' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Radio className="w-4 h-4 text-rose-500" />
+                  <span>Giám sát thi (Admin)</span>
+                </div>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700">LIVE</span>
+              </button>
               <button
                 onClick={() => { onTabChange('admin-users'); setMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${

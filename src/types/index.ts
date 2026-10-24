@@ -53,6 +53,7 @@ export interface Exam {
   isHidden?: boolean; // Tạm ẩn đề thi / kỳ thi
   isTrial?: boolean; // Đề thi thử tự do cho người dùng chưa đăng nhập
   trialCode?: string; // Mã đề thi thử (e.g. "TOAN6-01", "THITHU-01")
+  isPinned?: boolean; // Ghim đề thi lên đầu để học sinh thấy ngay bài thi cần làm
   isSecure?: boolean; // Đề thi bảo mật (chỉ hiện khi đăng nhập tài khoản hợp lệ)
   enableTabWarning?: boolean; // Cảnh báo khi học sinh rời màn hình / chuyển tab (có thể bật/tắt)
   warnOnTabSwitch?: boolean; // Alias / tương thích

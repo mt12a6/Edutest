@@ -1,35 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users,
-  Cloud,
-  Layers, 
+  Users, 
   ShieldCheck, 
   GraduationCap, 
   UserCheck, 
   Lock, 
   Unlock, 
   Search, 
-  AlertTriangle,
-  CheckCircle2,
-  Filter,
-  Upload,
-  UserPlus,
-  KeyRound,
-  Trash2,
-  Edit2,
-  X,
-  Check
+  AlertTriangle, 
+  CheckCircle2, 
+  Filter, 
+  Upload, 
+  UserPlus, 
+  KeyRound, 
+  Trash2, 
+  Edit2, 
+  X, 
+  Check,
+  CheckSquare,
+  Square,
+  UserX,
+  FolderInput
 } from 'lucide-react';
 import { UserProfile, UserRole } from '../../types';
 import { 
   getAllUsers, 
   updateUserRole, 
   toggleUserStatus, 
-  createUserProfile,
-  updateUserProfile,
-  deleteUserProfile,
-  resetUserPassword,
-  logSystemAction 
+  createUserProfile, 
+  updateUserProfile, 
+  deleteUserProfile, 
+  resetUserPassword, 
+  logSystemAction,
+  bulkDeleteUsers,
+  bulkUpdateUserClass,
+  bulkToggleUserStatus
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { BulkUserUploadModal } from './BulkUserUploadModal';
@@ -43,6 +48,13 @@ export const UserManager: React.FC = () => {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showBulkUpload, setShowBulkUpload] = useState<boolean>(false);
+
+  // Multi-select bulk state
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
+  const [showBulkClassModal, setShowBulkClassModal] = useState<boolean>(false);
+  const [bulkClassInput, setBulkClassInput] = useState<string>('10A1');
+  const [isBulkBusy, setIsBulkBusy] = useState<boolean>(false);
 
   // Modals state
   const [showAddEditModal, setShowAddEditModal] = useState<boolean>(false);
@@ -60,13 +72,6 @@ export const UserManager: React.FC = () => {
   const [newPasswordInput, setNewPasswordInput] = useState<string>('123456');
 
   const [deleteModalUser, setDeleteModalUser] = useState<UserProfile | null>(null);
-
-  // Multi-select & Bulk operations state
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
-  const [showBulkAssignModal, setShowBulkAssignModal] = useState<boolean>(false);
-  const [bulkTargetClass, setBulkTargetClass] = useState<string>('10A1');
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -210,67 +215,6 @@ export const UserManager: React.FC = () => {
     }
   };
 
-    // Toggle select single user
-  const handleToggleSelectUser = (id: string) => {
-    setSelectedUserIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
-  };
-
-  // Toggle select all filtered users
-  const handleToggleSelectAll = () => {
-    if (selectedUserIds.length === filteredUsers.length) {
-      setSelectedUserIds([]);
-    } else {
-      setSelectedUserIds(filteredUsers.map(u => u.id));
-    }
-  };
-
-  // Handle bulk delete
-  const handleConfirmBulkDelete = async () => {
-    if (selectedUserIds.length === 0) return;
-    try {
-      await batchDeleteUserProfiles(selectedUserIds);
-      showSuccessMsg(`Đã xóa thành công ${selectedUserIds.length} tài khoản khỏi hệ thống và Cloud.`);
-      setSelectedUserIds([]);
-      setShowBulkDeleteModal(false);
-      fetchUsers();
-    } catch (err: any) {
-      showErrorMsg('Lỗi khi xóa tài khoản: ' + err?.message);
-    }
-  };
-
-  // Handle bulk assign class
-  const handleConfirmBulkAssignClass = async () => {
-    if (selectedUserIds.length === 0 || !bulkTargetClass.trim()) return;
-    try {
-      await batchAssignClass(selectedUserIds, bulkTargetClass.trim());
-      showSuccessMsg(`Đã chuyển ${selectedUserIds.length} tài khoản vào lớp/nhóm "${bulkTargetClass.trim()}".`);
-      setSelectedUserIds([]);
-      setShowBulkAssignModal(false);
-      fetchUsers();
-    } catch (err: any) {
-      showErrorMsg('Lỗi khi gán lớp: ' + err?.message);
-    }
-  };
-
-  // Handle cloud sync
-  const handleSyncToCloud = async () => {
-    setIsSyncing(true);
-    try {
-      const res = await syncAllUsersToFirestore();
-      if (res.success) {
-        showSuccessMsg(`Đã đồng bộ thành công ${res.count} tài khoản lên Firebase Cloud! Các máy khác có thể đăng nhập được ngay.`);
-      } else {
-        showErrorMsg(`Đồng bộ không thành công: ${res.error || 'Vui lòng kiểm tra quyền Firestore Rules.'}`);
-      }
-    } catch (err: any) {
-      showErrorMsg('Lỗi đồng bộ: ' + err?.message);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const filteredUsers = users.filter(u => {
     const matchesSearch = (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (u.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -278,6 +222,77 @@ export const UserManager: React.FC = () => {
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
+
+  // Bulk selection calculations
+  const selectableUsers = filteredUsers.filter(u => u.id !== user?.uid);
+  const isAllSelected = selectableUsers.length > 0 && selectableUsers.every(u => selectedUserIds.includes(u.id));
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(selectableUsers.map(u => u.id));
+    }
+  };
+
+  const handleToggleSelectUser = (userId: string) => {
+    setSelectedUserIds(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedUserIds.length === 0) return;
+    setIsBulkBusy(true);
+    try {
+      const count = await bulkDeleteUsers(selectedUserIds);
+      showSuccessMsg(`Đã xóa thành công ${count} tài khoản.`);
+      setSelectedUserIds([]);
+      setShowBulkDeleteModal(false);
+      fetchUsers();
+    } catch (err: any) {
+      showErrorMsg('Lỗi khi xóa hàng loạt: ' + (err?.message || 'Không thể xóa'));
+    } finally {
+      setIsBulkBusy(false);
+    }
+  };
+
+  const handleConfirmBulkUpdateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedUserIds.length === 0) return;
+    const targetClass = bulkClassInput.trim();
+    if (!targetClass) {
+      showErrorMsg('Vui lòng nhập tên lớp.');
+      return;
+    }
+    setIsBulkBusy(true);
+    try {
+      const count = await bulkUpdateUserClass(selectedUserIds, targetClass);
+      showSuccessMsg(`Đã phân ${count} tài khoản vào lớp "${targetClass}".`);
+      setSelectedUserIds([]);
+      setShowBulkClassModal(false);
+      fetchUsers();
+    } catch (err: any) {
+      showErrorMsg('Lỗi khi phân lớp hàng loạt: ' + (err?.message || 'Không thể phân lớp'));
+    } finally {
+      setIsBulkBusy(false);
+    }
+  };
+
+  const handleBulkToggleStatus = async (status: 'active' | 'disabled') => {
+    if (selectedUserIds.length === 0) return;
+    setIsBulkBusy(true);
+    try {
+      const count = await bulkToggleUserStatus(selectedUserIds, status);
+      showSuccessMsg(`Đã ${status === 'active' ? 'mở khóa' : 'khóa'} ${count} tài khoản.`);
+      setSelectedUserIds([]);
+      fetchUsers();
+    } catch (err: any) {
+      showErrorMsg('Lỗi khi thay đổi trạng thái: ' + (err?.message || 'Thất bại'));
+    } finally {
+      setIsBulkBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
@@ -300,16 +315,6 @@ export const UserManager: React.FC = () => {
           >
             <UserPlus className="w-4 h-4" />
             <span>Thêm tài khoản mới</span>
-          </button>
-
-          <button
-            onClick={handleSyncToCloud}
-            disabled={isSyncing}
-            className="text-xs font-bold px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-            title="Đồng bộ toàn bộ danh sách tài khoản lên Firebase Cloud để các máy khác có thể đăng nhập được"
-          >
-            <Cloud className="w-4 h-4" />
-            <span>{isSyncing ? 'Đang đồng bộ...' : '☁️ Đồng bộ lên Cloud'}</span>
           </button>
 
           <button
@@ -374,45 +379,69 @@ export const UserManager: React.FC = () => {
         </span>
       </div>
 
-      {/* Bulk Action Bar */}
+      {/* Bulk Action Toolbar */}
       {selectedUserIds.length > 0 && (
-        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
-          <div className="flex items-center gap-3">
-            <span className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 sm:p-4 rounded-2xl shadow-lg border border-indigo-700/50 flex flex-col sm:flex-row items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-lg bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center">
               {selectedUserIds.length}
             </span>
-            <div>
-              <p className="text-xs font-bold text-emerald-950">
-                Đang chọn {selectedUserIds.length} / {filteredUsers.length} tài khoản
-              </p>
-              <p className="text-[11px] text-emerald-700">
-                Chọn thao tác hàng loạt cho các tài khoản đã đánh dấu
-              </p>
-            </div>
+            <span className="text-xs font-bold text-slate-200">
+              Đã chọn <strong className="text-emerald-400 font-extrabold">{selectedUserIds.length}</strong> tài khoản
+            </span>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setShowBulkAssignModal(true)}
-              className="text-xs font-bold px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              type="button"
+              onClick={() => setShowBulkClassModal(true)}
+              disabled={isBulkBusy}
+              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Phân lớp cho các tài khoản đã chọn"
             >
-              <Layers className="w-4 h-4" />
-              <span>Gán vào Lớp / Nhóm</span>
+              <FolderInput className="w-3.5 h-3.5" />
+              <span>Phân vào lớp</span>
             </button>
 
             <button
+              type="button"
+              onClick={() => handleBulkToggleStatus('disabled')}
+              disabled={isBulkBusy}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Khóa tạm thời các tài khoản đã chọn"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Khóa</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleBulkToggleStatus('active')}
+              disabled={isBulkBusy}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Mở khóa các tài khoản đã chọn"
+            >
+              <Unlock className="w-3.5 h-3.5" />
+              <span>Mở khóa</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowBulkDeleteModal(true)}
-              className="text-xs font-bold px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              disabled={isBulkBusy}
+              className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Xóa nhanh nhiều tài khoản đã chọn cùng lúc"
             >
-              <Trash2 className="w-4 h-4" />
-              <span>Xóa {selectedUserIds.length} tài khoản đã chọn</span>
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Xóa ({selectedUserIds.length})</span>
             </button>
 
             <button
+              type="button"
               onClick={() => setSelectedUserIds([])}
-              className="text-xs font-semibold px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 text-xs font-semibold transition-all cursor-pointer"
             >
-              Bỏ chọn tất cả
+              Bỏ chọn
             </button>
           </div>
         </div>
@@ -427,10 +456,10 @@ export const UserManager: React.FC = () => {
                 <th className="py-3 px-3 w-10 text-center">
                   <input
                     type="checkbox"
-                    checked={filteredUsers.length > 0 && selectedUserIds.length === filteredUsers.length}
+                    checked={isAllSelected}
                     onChange={handleToggleSelectAll}
-                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
-                    title="Chọn tất cả"
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    title={isAllSelected ? "Bỏ chọn tất cả" : "Chọn tất cả tài khoản"}
                   />
                 </th>
                 <th className="py-3 px-4">Tên người dùng</th>
@@ -446,15 +475,21 @@ export const UserManager: React.FC = () => {
                 filteredUsers.map((u) => {
                   const isSelf = u.id === user?.uid;
                   const isDisabled = u.status === 'disabled';
+                  const isSelected = selectedUserIds.includes(u.id);
 
                   return (
-                    <tr key={u.id} className={`hover:bg-slate-50/70 transition-colors ${selectedUserIds.includes(u.id) ? 'bg-emerald-50/50' : ''}`}>
+                    <tr 
+                      key={u.id} 
+                      className={`transition-colors ${isSelected ? 'bg-indigo-50/50 hover:bg-indigo-50/80' : 'hover:bg-slate-50/70'}`}
+                    >
                       <td className="py-3 px-3 text-center">
                         <input
                           type="checkbox"
-                          checked={selectedUserIds.includes(u.id)}
+                          disabled={isSelf}
+                          checked={isSelected}
                           onChange={() => handleToggleSelectUser(u.id)}
-                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-20"
+                          title={isSelf ? "Không thể chọn tài khoản của chính bạn" : `Chọn ${u.displayName || u.username}`}
                         />
                       </td>
                       <td className="py-3 px-4 font-semibold text-slate-900">
@@ -785,7 +820,7 @@ export const UserManager: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmDelete}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer"
               >
                 Xác nhận xóa
               </button>
@@ -797,108 +832,107 @@ export const UserManager: React.FC = () => {
       {/* MODAL 4: BULK DELETE CONFIRMATION */}
       {showBulkDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 animate-in zoom-in-95">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-sm w-full p-6 space-y-4 animate-in zoom-in-95">
             <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
 
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-1">
               <h3 className="font-bold text-slate-900 text-base">
-                Xác nhận xóa {selectedUserIds.length} tài khoản?
+                Xóa nhanh {selectedUserIds.length} tài khoản?
               </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Bạn có chắc chắn muốn xóa <strong>{selectedUserIds.length} tài khoản</strong> đã chọn khỏi hệ thống và Firebase Cloud không? Thao tác này không thể hoàn tác.
+              <p className="text-xs text-slate-500">
+                Bạn có chắc chắn muốn xóa đồng thời <strong className="text-rose-600">{selectedUserIds.length} tài khoản</strong> đã chọn? Thao tác này sẽ xóa vĩnh viễn trên cơ sở dữ liệu chung và không thể hoàn tác.
               </p>
-            </div>
-
-            <div className="max-h-36 overflow-y-auto p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
-              {users.filter(u => selectedUserIds.includes(u.id)).map(u => (
-                <div key={u.id} className="flex justify-between">
-                  <span className="font-bold text-slate-800">{u.displayName || u.username}</span>
-                  <span className="font-mono text-slate-400">{u.username}</span>
-                </div>
-              ))}
             </div>
 
             <div className="pt-2 flex items-center justify-center gap-3 text-xs">
               <button
                 type="button"
+                disabled={isBulkBusy}
                 onClick={() => setShowBulkDeleteModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer disabled:opacity-50"
               >
                 Hủy bỏ
               </button>
               <button
                 type="button"
+                disabled={isBulkBusy}
                 onClick={handleConfirmBulkDelete}
-                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer disabled:opacity-50"
               >
-                Xác nhận xóa {selectedUserIds.length} tài khoản
+                {isBulkBusy ? 'Đang xóa...' : `Xác nhận xóa (${selectedUserIds.length})`}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 5: BULK ASSIGN CLASS / GROUP */}
-      {showBulkAssignModal && (
+      {/* MODAL 5: BULK CLASS ASSIGNMENT */}
+      {showBulkClassModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-sm w-full p-6 space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                <Layers className="w-5 h-5" />
-              </div>
+            <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto">
+              <FolderInput className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="font-bold text-slate-900 text-base">
+                Phân lớp cho {selectedUserIds.length} tài khoản
+              </h3>
+              <p className="text-xs text-slate-500">
+                Gán đồng thời tất cả các tài khoản đã chọn vào lớp học cụ thể bên dưới:
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmBulkUpdateClass} className="space-y-3 pt-1 text-xs">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">
-                  Gán vào Lớp / Nhóm
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  Áp dụng cho {selectedUserIds.length} tài khoản đã chọn
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <label className="block font-semibold text-slate-700">
-                Nhập tên lớp hoặc nhóm:
-              </label>
-              <input
-                type="text"
-                value={bulkTargetClass}
-                onChange={(e) => setBulkTargetClass(e.target.value)}
-                placeholder="Ví dụ: 10A1, Nhóm Tin 1, 9A2..."
-                className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white font-medium"
-              />
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {['6A1', '7A1', '8A1', '9A1', '10A1', '11B1', '12A3'].map(c => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setBulkTargetClass(c)}
-                    className="text-[10px] px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border text-slate-600 font-semibold cursor-pointer"
+                <label className="block font-bold text-slate-700 mb-1">
+                  Chọn hoặc nhập tên lớp:
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={bulkClassInput}
+                    onChange={(e) => setBulkClassInput(e.target.value)}
+                    className="p-2 border border-slate-300 rounded-xl bg-white text-xs font-semibold"
                   >
-                    {c}
-                  </button>
-                ))}
+                    <option value="10A1">10A1</option>
+                    <option value="10A2">10A2</option>
+                    <option value="10A3">10A3</option>
+                    <option value="11A1">11A1</option>
+                    <option value="11A2">11A2</option>
+                    <option value="12A1">12A1</option>
+                    <option value="12A2">12A2</option>
+                  </select>
+                  <input
+                    type="text"
+                    required
+                    value={bulkClassInput}
+                    onChange={(e) => setBulkClassInput(e.target.value)}
+                    placeholder="Hoặc nhập tên lớp khác..."
+                    className="flex-1 p-2 border border-slate-300 rounded-xl bg-white text-xs"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => setShowBulkAssignModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmBulkAssignClass}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs cursor-pointer"
-              >
-                Lưu vào lớp
-              </button>
-            </div>
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={isBulkBusy}
+                  onClick={() => setShowBulkClassModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isBulkBusy}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isBulkBusy ? 'Đang lưu...' : 'Lưu phân lớp'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

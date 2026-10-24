@@ -22,7 +22,8 @@ import {
   AlertCircle,
   Edit3,
   Star,
-  Printer
+  Printer,
+  Pin
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
@@ -36,7 +37,8 @@ import {
   logSystemAction,
   getTeacherScope,
   isExamInTeacherScope,
-  TeacherScopeConfig
+  TeacherScopeConfig,
+  togglePinExam
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
@@ -175,6 +177,17 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     } catch (err) {
       console.error('Lỗi khi ẩn/hiện đề thi:', err);
       showError('Lỗi khi thay đổi trạng thái ẩn/hiện.');
+    }
+  };
+
+  const handleTogglePin = async (exam: Exam) => {
+    const nextPin = !exam.isPinned;
+    try {
+      await togglePinExam(exam.id, nextPin);
+      showSuccess(nextPin ? `Đã ghim đề thi lên đầu: "${exam.title}".` : `Đã bỏ ghim đề thi: "${exam.title}".`);
+      onRefreshExams();
+    } catch (err: any) {
+      showError('Lỗi khi thay đổi trạng thái ghim đề: ' + (err?.message || 'Thất bại'));
     }
   };
 
@@ -425,6 +438,12 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                         Trộn đề
                       </span>
                     )}
+                    {exam.isPinned && (
+                      <span className="text-[10px] font-black px-2 py-0.5 bg-amber-500 text-slate-950 rounded-md flex items-center gap-1 shadow-2xs" title="Đề thi đã được ghim ưu tiên lên đầu cho học sinh">
+                        <Pin className="w-3 h-3 fill-slate-950" />
+                        Đã ghim
+                      </span>
+                    )}
                     {exam.isHidden && (
                       <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded">
                         Đang ẩn
@@ -433,6 +452,19 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1">
+                    {/* Pin/Unpin Toggle */}
+                    <button
+                      onClick={() => handleTogglePin(exam)}
+                      className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        exam.isPinned 
+                          ? 'text-amber-600 bg-amber-50 hover:bg-amber-100' 
+                          : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
+                      }`}
+                      title={exam.isPinned ? "Bỏ ghim đề thi (không còn ưu tiên lên đầu)" : "Ghim đề thi lên đầu để học sinh thấy ngay"}
+                    >
+                      <Pin className={`w-4 h-4 ${exam.isPinned ? 'fill-amber-500 text-amber-500' : ''}`} />
+                    </button>
+
                     {/* Hide/Show Toggle */}
                     <button
                       onClick={() => handleToggleHide(exam)}

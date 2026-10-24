@@ -9,7 +9,8 @@ import {
   AlertCircle, 
   ArrowRight,
   Sparkles,
-  Calendar
+  Calendar,
+  Pin
 } from 'lucide-react';
 import { Exam, ExamAttempt, ExamResult, Question } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -204,13 +205,25 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
               return (
                 <div 
                   key={exam.id}
-                  className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all overflow-hidden flex flex-col justify-between"
+                  className={`rounded-2xl transition-all overflow-hidden flex flex-col justify-between ${
+                    exam.isPinned 
+                      ? 'bg-gradient-to-b from-amber-50/40 via-white to-white border-2 border-amber-300 shadow-sm hover:shadow-md' 
+                      : 'bg-white border border-slate-200 shadow-xs hover:shadow-md'
+                  }`}
                 >
                   <div className="p-5 space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        {exam.subjectName} • K{exam.grade}
-                      </span>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {exam.isPinned && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950 flex items-center gap-1 shadow-2xs">
+                            <Pin className="w-3 h-3 fill-slate-950" />
+                            CẦN THI
+                          </span>
+                        )}
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {exam.subjectName} • K{exam.grade}
+                        </span>
+                      </div>
 
                       {status.type === 'completed' && (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">

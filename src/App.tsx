@@ -39,7 +39,7 @@ import {
 import { AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
 
 function MainApp() {
-  const { user, profile, activeRole, isLoading: authLoading } = useAuth();
+  const { user, profile, activeRole, isAdmin, isLoading: authLoading } = useAuth();
 
   // Navigation tab
   const [currentTab, setCurrentTab] = useState<string>('home');
@@ -240,12 +240,32 @@ function MainApp() {
               }}
               onRefreshExams={reloadData}
             />
-          ) : currentTab === 'teacher-live' ? (
-            <LiveExamMonitor
-              exams={exams}
-              classes={classes}
-              subjects={subjects}
-            />
+          ) : (currentTab === 'teacher-live' || currentTab === 'admin-live') ? (
+            isAdmin ? (
+              <LiveExamMonitor
+                exams={exams}
+                classes={classes}
+                subjects={subjects}
+              />
+            ) : (
+              <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center max-w-md mx-auto my-12 space-y-4 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Giới hạn quyền truy cập</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Chức năng <strong>Giám sát trực tiếp (LIVE)</strong> chỉ được phép truy cập bởi tài khoản <strong>Quản trị viên (Admin)</strong>.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCurrentTab('home')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs cursor-pointer shadow-xs"
+                >
+                  Quay lại Trang chủ
+                </button>
+              </div>
+            )
           ) : currentTab === 'teacher-results' ? (
             <AnalyticsDashboard
               exams={exams}

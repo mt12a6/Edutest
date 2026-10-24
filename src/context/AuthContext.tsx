@@ -187,8 +187,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err: unknown) {
-      console.error('Google Sign-In failed:', err);
-      const msg = err instanceof Error ? err.message : 'Đăng nhập không thành công';
+      let msg = err instanceof Error ? err.message : 'Đăng nhập không thành công';
+      if (typeof msg === 'string' && msg.includes('auth/unauthorized-domain')) {
+        msg = 'Tên miền Vercel chưa được thêm vào Authorized Domains của Firebase. Bạn có thể đăng nhập bằng tài khoản "admin" / "123456" bên dưới hoặc thêm "edutest-mrtruong.vercel.app" vào Firebase Console.';
+      }
       setError(msg);
       throw err;
     } finally {

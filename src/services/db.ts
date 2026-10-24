@@ -300,16 +300,6 @@ export function getDefaultUsers(): UserProfile[] {
       createdAt: '2024-09-01T08:00:00.000Z'
     },
     {
-      id: 'u_mt12a6',
-      username: 'mt12a6',
-      email: 'mt12a6@gmail.com',
-      password: '123456',
-      displayName: 'Admin Trương (mt12a6)',
-      role: 'admin',
-      status: 'active',
-      createdAt: '2024-09-01T08:00:00.000Z'
-    },
-    {
       id: 'u_daiso2014',
       username: 'daiso2014',
       email: 'daiso2014@gmail.com',
@@ -327,18 +317,6 @@ export function getDefaultUsers(): UserProfile[] {
       displayName: 'Thầy Trương - GV Toán',
       role: 'teacher',
       status: 'active',
-      createdAt: '2024-09-01T08:00:00.000Z'
-    },
-    {
-      id: 'u_hs006',
-      username: 'hs006',
-      email: 'hs006@edutest.edu.vn',
-      password: '123456',
-      displayName: 'Học sinh HS006',
-      role: 'student',
-      status: 'active',
-      className: '10A1',
-      classIds: ['10A1'],
       createdAt: '2024-09-01T08:00:00.000Z'
     },
     {
@@ -409,9 +387,6 @@ export async function getAllUsers(): Promise<UserProfile[]> {
     
     // Merge firestore and local users by ID without resurrecting deleted users
     const mergedMap = new Map<string, UserProfile>();
-    getDefaultUsers().forEach(u => {
-      if (!deletedIds.includes(u.id)) mergedMap.set(u.id, u);
-    });
     localList.forEach(u => {
       if (!deletedIds.includes(u.id)) mergedMap.set(u.id, u);
     });
@@ -506,73 +481,6 @@ export async function toggleUserStatus(userId: string, status: 'active' | 'disab
   await updateUserProfile(userId, { status });
 }
 
-export async function batchDeleteUserProfiles(userIds: string[]): Promise<void> {
-  if (userIds.length === 0) return;
-  const userSet = new Set(userIds);
-  userIds.forEach(id => addDeletedUserId(id));
-  
-  const currentLocal = getLocalUsers().filter(u => !userSet.has(u.id));
-  saveLocalUsers(currentLocal);
-
-  try {
-    const batch = writeBatch(db);
-    for (const id of userIds) {
-      batch.delete(doc(db, 'users', id));
-    }
-    await batch.commit();
-  } catch (err) {
-    console.warn('batchDeleteUserProfiles Firestore note:', err);
-  }
-}
-
-export async function batchAssignClass(userIds: string[], newClass: string): Promise<void> {
-  if (userIds.length === 0) return;
-  const userSet = new Set(userIds);
-  const currentLocal = getLocalUsers().map(u => {
-    if (userSet.has(u.id)) {
-      return { ...u, className: newClass, classIds: [newClass], updatedAt: new Date().toISOString() };
-    }
-    return u;
-  });
-  saveLocalUsers(currentLocal);
-
-  try {
-    const batch = writeBatch(db);
-    for (const id of userIds) {
-      const userRef = doc(db, 'users', id);
-      batch.set(userRef, { className: newClass, classIds: [newClass], updatedAt: new Date().toISOString() }, { merge: true });
-    }
-    await batch.commit();
-  } catch (err) {
-    console.warn('batchAssignClass Firestore note:', err);
-  }
-}
-
-export async function syncAllUsersToFirestore(): Promise<{ success: boolean; count: number; error?: string }> {
-  try {
-    const localUsers = getLocalUsers();
-    if (localUsers.length === 0) return { success: true, count: 0 };
-    
-    // Firestore batch limit is 500 operations per commit
-    const chunkSize = 400;
-    let totalPushed = 0;
-    for (let i = 0; i < localUsers.length; i += chunkSize) {
-      const chunk = localUsers.slice(i, i + chunkSize);
-      const batch = writeBatch(db);
-      for (const u of chunk) {
-        const ref = doc(db, 'users', u.id);
-        batch.set(ref, sanitizeForFirestore(u), { merge: true });
-      }
-      await batch.commit();
-      totalPushed += chunk.length;
-    }
-    return { success: true, count: totalPushed };
-  } catch (err: any) {
-    console.error('Lỗi đồng bộ tài khoản lên Firestore:', err);
-    return { success: false, count: 0, error: err?.message || 'Không thể kết nối Firestore' };
-  }
-}
-
 export async function batchCreateUsers(importedRecords: import('../types').ImportedUserRecord[]): Promise<number> {
   const validRecords = importedRecords.filter(r => r.isValid);
   if (validRecords.length === 0) return 0;
@@ -618,47 +526,94 @@ export async function batchCreateUsers(importedRecords: import('../types').Impor
   return newProfiles.length;
 }
 
+export async function bulkDeleteUsers(userIds: string[]): Promise<void> {
+  for (const id of userIds) {
+    addDeletedUserId(id);
+  }
+  const currentLocal = getLocalUsers().filter(u => !userIds.includes(u.id));
+  saveLocalUsers(currentLocal);
+
+  try {
+    const batch = writeBatch(db);
+    for (const id of userIds) {
+      batch.delete(doc(db, 'users', id));
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn('bulkDeleteUsers Firestore note:', err);
+  }
+}
+
+export async function bulkUpdateUserClass(userIds: string[], className: string): Promise<void> {
+  const currentLocal = getLocalUsers();
+  const updatedLocal = currentLocal.map(u => {
+    if (userIds.includes(u.id)) {
+      return {
+        ...u,
+        className,
+        classIds: [className],
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return u;
+  });
+  saveLocalUsers(updatedLocal);
+
+  try {
+    const batch = writeBatch(db);
+    for (const id of userIds) {
+      batch.set(doc(db, 'users', id), {
+        className,
+        classIds: [className],
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn('bulkUpdateUserClass Firestore note:', err);
+  }
+}
+
+export async function bulkToggleUserStatus(userIds: string[], status: 'active' | 'disabled'): Promise<void> {
+  const currentLocal = getLocalUsers();
+  const updatedLocal = currentLocal.map(u => {
+    if (userIds.includes(u.id)) {
+      return {
+        ...u,
+        status,
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return u;
+  });
+  saveLocalUsers(updatedLocal);
+
+  try {
+    const batch = writeBatch(db);
+    for (const id of userIds) {
+      batch.set(doc(db, 'users', id), {
+        status,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn('bulkToggleUserStatus Firestore note:', err);
+  }
+}
+
 export async function loginWithUsernamePassword(identifier: string, password: string): Promise<UserProfile | null> {
   const clean = identifier.trim().toLowerCase();
   const inputPass = password.trim();
-  
-  // 1. Check local users first (which includes seeded default accounts)
-  let localList = getLocalUsers();
-  if (localList.length === 0) {
-    localList = getDefaultUsers();
-    saveLocalUsers(localList);
-  }
 
-  for (const u of localList) {
-    const matchId = (u.username && u.username.trim().toLowerCase() === clean) ||
-                    (u.email && u.email.trim().toLowerCase() === clean) ||
-                    (u.email && u.email.trim().toLowerCase().split('@')[0] === clean);
-    if (matchId) {
-      const uPass = (u.password ? u.password.trim() : '123456');
-      if (uPass === inputPass || (!u.password && inputPass === '123456')) {
-        return u;
-      }
-    }
-  }
-
-  // 2. Also check default hardcoded accounts as safe fallback
-  for (const def of getDefaultUsers()) {
-    const matchDef = (def.username && def.username.trim().toLowerCase() === clean) || 
-                     (def.email && def.email.trim().toLowerCase() === clean) ||
-                     (def.email && def.email.trim().toLowerCase().split('@')[0] === clean);
-    if (matchDef && (def.password === inputPass || (!def.password && inputPass === '123456'))) {
-      return def;
-    }
-  }
-
-  // 3. Query Firestore for real-time created accounts (incognito / remote student devices)
+  // 1. Query Firestore first for real-time cross-device sync (machine A to machine B)
   try {
     const snap = await getDocs(collection(db, 'users'));
     for (const d of snap.docs) {
       const data = d.data() as UserProfile;
       const matchIdentifier = (data.username && data.username.trim().toLowerCase() === clean) ||
                               (data.email && data.email.trim().toLowerCase() === clean) ||
-                              (data.email && data.email.trim().toLowerCase().split('@')[0] === clean);
+                              (d.id.toLowerCase() === clean);
       if (matchIdentifier) {
         const uPass = data.password ? data.password.trim() : '123456';
         if (uPass === inputPass || (!data.password && inputPass === '123456')) {
@@ -670,11 +625,40 @@ export async function loginWithUsernamePassword(identifier: string, password: st
         }
       }
     }
-    return null;
   } catch (err) {
-    console.error('Lỗi kiểm tra đăng nhập tài khoản:', err);
-    return null;
+    console.warn('Firestore live user check note, checking local cache:', err);
   }
+  
+  // 2. Check local users fallback (in case offline or local cache)
+  let localList = getLocalUsers();
+  if (localList.length === 0) {
+    localList = getDefaultUsers();
+    saveLocalUsers(localList);
+  }
+
+  for (const u of localList) {
+    const matchId = (u.username && u.username.trim().toLowerCase() === clean) ||
+                    (u.email && u.email.trim().toLowerCase() === clean) ||
+                    (u.id.toLowerCase() === clean);
+    if (matchId) {
+      const uPass = (u.password ? u.password.trim() : '123456');
+      if (uPass === inputPass || (!u.password && inputPass === '123456')) {
+        return u;
+      }
+    }
+  }
+
+  // 3. Check default hardcoded accounts as safe fallback
+  for (const def of getDefaultUsers()) {
+    const matchDef = (def.username && def.username.trim().toLowerCase() === clean) || 
+                     (def.email && def.email.trim().toLowerCase() === clean) ||
+                     (def.id.toLowerCase() === clean);
+    if (matchDef && (def.password === inputPass || (!def.password && inputPass === '123456'))) {
+      return def;
+    }
+  }
+
+  return null;
 }
 
 
@@ -827,13 +811,6 @@ export async function deleteSubject(subjectId: string): Promise<void> {
 
 // ==================== EXAMS & QUESTIONS ====================
 
-export const TARGET_TINHOC_EXAM_TITLES = [
-  'THI THỬ GIỮA KỲ 1 - TIN HỌC 9',
-  'THI THỬ GIỮA KỲ 1 - TIN HỌC 8',
-  'THI THỬ GIỮA KỲ 1 - TIN HỌC 7',
-  'THI THỬ GIỮA KỲ 1 - TIN HỌC 6'
-];
-
 export async function getExams(): Promise<Exam[]> {
   const collectionPath = 'exams';
   const localExams = getLocalExams();
@@ -849,16 +826,6 @@ export async function getExams(): Promise<Exam[]> {
     const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
     const list = Array.from(mergedMap.values())
       .filter(e => !deletedIds.includes(e.id))
-      .filter(e => {
-        const t = (e.title || '').trim().toUpperCase();
-        if (TARGET_TINHOC_EXAM_TITLES.some(title => t === title || t.includes(title))) {
-          return true;
-        }
-        if (e.createdBy && e.createdBy !== 'system_admin' && !e.title.includes('Môn Toán') && !e.title.includes('Khảo sát') && !e.title.includes('Tốt Nghiệp')) {
-          return true;
-        }
-        return false;
-      })
       .map(e => {
         if (!e.classIds || e.classIds.length === 0) return { ...e, classIds: [] };
         const filteredClasses = e.classIds.filter(c => !dummyClasses.includes(c));
@@ -869,26 +836,40 @@ export async function getExams(): Promise<Exam[]> {
       });
 
     saveLocalExams(list);
-    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return list.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   } catch (err) {
     console.warn('Lấy danh sách đề thi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
     const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
     return localExams
       .filter(e => !deletedIds.includes(e.id))
-      .filter(e => {
-        const t = (e.title || '').trim().toUpperCase();
-        if (TARGET_TINHOC_EXAM_TITLES.some(title => t === title || t.includes(title))) {
-          return true;
-        }
-        if (e.createdBy && e.createdBy !== 'system_admin' && !e.title.includes('Môn Toán') && !e.title.includes('Khảo sát') && !e.title.includes('Tốt Nghiệp')) {
-          return true;
-        }
-        return false;
-      })
       .map(e => ({
         ...e,
         classIds: (e.classIds || []).filter(c => !dummyClasses.includes(c))
-      }));
+      }))
+      .sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+  }
+}
+
+export async function togglePinExam(examId: string, isPinned: boolean): Promise<void> {
+  const localExams = getLocalExams();
+  const idx = localExams.findIndex(e => e.id === examId);
+  if (idx !== -1) {
+    localExams[idx] = { ...localExams[idx], isPinned };
+    saveLocalExams(localExams);
+  }
+
+  try {
+    await updateDoc(doc(db, 'exams', examId), { isPinned });
+  } catch (err) {
+    console.warn('togglePinExam Firestore note:', err);
   }
 }
 
@@ -1620,16 +1601,11 @@ export async function checkAndSeedInitialData(): Promise<void> {
     const existingClasses = getLocalClasses().filter(c => c.name !== '6A1' && c.id !== 'c_6a' && c.id !== '6A1');
     saveLocalClasses(existingClasses);
 
-    // Auto-sync all local users to Firestore in the background
-    try {
-      syncAllUsersToFirestore();
-    } catch {
-      // non-blocking
-    }
-
-    // Always ensure demo accounts exist in Firestore if not deleted
+    // Always ensure all user accounts (including local custom accounts) exist in Firestore for cross-device login
     const deletedUserIds = getDeletedUserIds();
-    for (const defUser of getDefaultUsers()) {
+    const localUsers = getLocalUsers();
+    const allUsersToSync = [...getDefaultUsers(), ...localUsers];
+    for (const defUser of allUsersToSync) {
       if (!deletedUserIds.includes(defUser.id)) {
         try {
           await setDoc(doc(db, 'users', defUser.id), sanitizeForFirestore(defUser), { merge: true });
@@ -1639,42 +1615,414 @@ export async function checkAndSeedInitialData(): Promise<void> {
       }
     }
 
-    // Purge old mock exams and re-seed ONLY the 4 requested Tin Học exams
-    const PURGE_EXAMS_KEY = 'edutest_tinhoc_only_v6';
-    if (localStorage.getItem(PURGE_EXAMS_KEY) !== 'true') {
-      saveLocalExams([]);
-      localStorage.removeItem('edutest_initial_seeded_done');
-      localStorage.setItem(PURGE_EXAMS_KEY, 'true');
-    }
+    // Disable automatic exam seeding per user request
+    localStorage.setItem('edutest_initial_seeded_done', 'true');
+    return;
 
-    const hasSeeded = localStorage.getItem('edutest_initial_seeded_done');
-    if (hasSeeded === 'true') {
-      return;
-    }
-
-    // Seed ONLY the 4 requested Tin Học exams: 6, 7, 8, 9
-    const seededExamsData: Array<{
-      exam: Omit<Exam, 'id' | 'createdAt' | 'updatedAt' | 'questionCount'>;
-      questions: Array<Omit<Question, 'id' | 'examId'>>;
-    }> = [
-      // ================= KHỐI 6 =================
+    const seededExamsData: any[] = [
+      // ================= KHỐI 1 =================
       {
         exam: {
-          title: 'THI THỬ GIỮA KỲ 1 - TIN HỌC 6',
-          subjectId: 'IT',
-          subjectName: 'Tin học',
+          title: 'Khảo sát Năng lực Môn Toán Lớp 1 - Đầu năm học',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
+          grade: '1',
+          durationMinutes: 30,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['1A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Cô Mai Lan'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Hình nào dưới đây có 3 quả táo? Em hãy chọn đáp án đúng nhất:',
+            options: {
+              A: 'Hình có 2 quả táo',
+              B: 'Hình có 3 quả táo',
+              C: 'Hình có 5 quả táo',
+              D: 'Hình không có quả nào'
+            },
+            correctOption: 'B',
+            explanation: 'Đếm các quả táo: 1, 2, 3 quả táo tương ứng số 3.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'fill_blank',
+            prompt: 'Điền số thích hợp vào chỗ chấm: Số đứng liền sau của số 4 là số mấy?',
+            acceptableAnswers: ['5', 'số 5', 'năm'],
+            explanation: 'Dãy số tự nhiên liên tiếp: 1, 2, 3, 4, 5. Liền sau số 4 là 5.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'Đúng ghi Đ, Sai ghi S vào các nhận định sau về phép tính cộng trong phạm vi 10:',
+            subQuestions: [
+              { key: 'a', text: '3 + 2 = 5', correct: true },
+              { key: 'b', text: '4 + 1 = 6', correct: false },
+              { key: 'c', text: '5 + 0 = 5', correct: true },
+              { key: 'd', text: '2 + 6 = 8', correct: true }
+            ],
+            explanation: '3+2=5 (Đúng); 4+1=5 không phải 6 (Sai); 5+0=5 (Đúng); 2+6=8 (Đúng).',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Bạn Nam có 3 chiếc bút chì, mẹ mua thêm cho Nam 2 chiếc bút chì nữa. Hỏi Nam có tất cả bao nhiêu chiếc bút chì?',
+            sampleAnswer: 'Phép tính: 3 + 2 = 5 chiếc bút chì. Trả lời: Nam có tất cả 5 chiếc bút chì.',
+            explanation: 'Lấy số bút ban đầu cộng thêm số bút được mẹ cho: 3 + 2 = 5.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 2 =================
+      {
+        exam: {
+          title: 'Kiểm tra Định kỳ Môn Tiếng Anh Lớp 2 - Unit 1 & 2',
+          subjectId: 'ENG',
+          subjectName: 'Tiếng Anh',
+          grade: '2',
+          durationMinutes: 35,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['2A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Cô Jennifer Nguyen'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Choose the correct greeting in the morning: "Good _______, teacher!"',
+            options: {
+              A: 'morning',
+              B: 'evening',
+              C: 'night',
+              D: 'bye'
+            },
+            correctOption: 'A',
+            explanation: 'Buổi sáng chào: "Good morning".',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'fill_blank',
+            prompt: 'Fill in the missing letter: "B _ O K" (Quyển sách)',
+            acceptableAnswers: ['O', 'o', 'book', 'BOOK'],
+            explanation: 'Từ vựng quyển sách trong tiếng Anh là "BOOK".',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'Read and decide True (Đúng) or False (Sai):',
+            subQuestions: [
+              { key: 'a', text: '"Cat" means con mèo.', correct: true },
+              { key: 'b', text: '"Dog" means con chim.', correct: false },
+              { key: 'c', text: '"Red" is the color đỏ.', correct: true },
+              { key: 'd', text: '"Two" means số ba.', correct: false }
+            ],
+            explanation: 'Cat = con mèo; Dog = con chó (không phải con chim); Red = màu đỏ; Two = số 2.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Writing: Write a short sentence to introduce your name. (Example: "My name is Lan.")',
+            sampleAnswer: 'My name is [Học sinh]. / I am [Học sinh].',
+            explanation: 'Cấu trúc giới thiệu tên: My name is + Tên.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 3 =================
+      {
+        exam: {
+          title: 'Đề Kiểm tra Môn Tiếng Việt Lớp 3 - Luyện từ và Câu',
+          subjectId: 'VIE',
+          subjectName: 'Tiếng Việt',
+          grade: '3',
+          durationMinutes: 40,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['3A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Thầy Trần Đình Trọng'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Trong câu thơ: "Trẻ em như búp trên cành / Biết ăn ngủ, biết học hành là ngoan", hình ảnh so sánh là gì?',
+            options: {
+              A: 'Trẻ em so sánh với búp trên cành',
+              B: 'Búp trên cành so sánh với hoa quả',
+              C: 'Ăn ngủ so sánh với học hành',
+              D: 'Không có hình ảnh so sánh'
+            },
+            correctOption: 'A',
+            explanation: 'Từ so sánh "như": so sánh "Trẻ em" với "búp trên cành".',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'true_false',
+            prompt: 'Xác định từ chỉ sự vật hay từ chỉ hoạt động, trạng thái trong các từ sau:',
+            subQuestions: [
+              { key: 'a', text: '"Bút chì" là từ chỉ sự vật.', correct: true },
+              { key: 'b', text: '"Chạy nhảy" là từ chỉ sự vật.', correct: false },
+              { key: 'c', text: '"Bác sĩ" là từ chỉ người (sự vật).', correct: true },
+              { key: 'd', text: '"Vui vẻ" là từ chỉ đặc điểm, cảm xúc.', correct: true }
+            ],
+            explanation: 'Chạy nhảy là từ chỉ hoạt động, không phải sự vật.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'fill_blank',
+            prompt: 'Điền từ còn thiếu vào câu thành ngữ: "Học thầy không tày học ......"',
+            acceptableAnswers: ['bạn', 'Bạn'],
+            explanation: 'Thành ngữ dân gian: "Học thầy không tày học bạn".',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Đặt một câu theo mẫu "Ai là gì?" để giới thiệu về trường hoặc thầy cô giáo của em.',
+            sampleAnswer: 'Ví dụ: Trường Tiểu học Thăng Long là ngôi nhà thứ hai của em. / Cô giáo em là người mẹ hiền thứ hai.',
+            explanation: 'Câu theo mẫu Ai là gì gồm bộ phận CN (Ai/Cái gì) và VN bắt đầu bằng từ "là".',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 4 =================
+      {
+        exam: {
+          title: 'Kiểm tra Giữa kỳ Môn Khoa Học Lớp 4 - Nước và Không Khí',
+          subjectId: 'KHTN',
+          subjectName: 'Khoa học tự nhiên',
+          grade: '4',
+          durationMinutes: 35,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['4A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Cô Đỗ Thu Hà'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Nước nguyên chất có những tính chất vật lí nào sau đây?',
+            options: {
+              A: 'Có màu trắng đục, vị ngọt, mùi thơm',
+              B: 'Không màu, không mùi, không vị, chảy từ cao xuống thấp',
+              C: 'Có hình dạng cố định như hình vuông',
+              D: 'Chỉ chảy từ thấp lên cao'
+            },
+            correctOption: 'B',
+            explanation: 'Nước là chất lỏng không màu, không mùi, không vị, không có hình dạng nhất định.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các nhận định sau về vòng tuần hoàn của nước trong tự nhiên:',
+            subQuestions: [
+              { key: 'a', text: 'Nước ở ao, hồ, biển bay hơi tạo thành hơi nước bay lên cao.', correct: true },
+              { key: 'b', text: 'Lên cao gặp lạnh, hơi nước ngưng tụ thành các hạt nước nhỏ tạo thành mây.', correct: true },
+              { key: 'c', text: 'Mưa là do các đám mây ngưng tụ rơi xuống đất.', correct: true },
+              { key: 'd', text: 'Vòng tuần hoàn của nước dừng lại vĩnh viễn sau một trận mưa.', correct: false }
+            ],
+            explanation: 'Vòng tuần hoàn nước diễn ra liên tục, không dừng lại.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Khí nào trong không khí duy trì sự cháy và cần thiết cho sự sống của con người và động vật?',
+            acceptableAnswers: ['oxi', 'oxy', 'khí oxi', 'oxygen', 'O2'],
+            explanation: 'Khí oxy (O2) chiếm khoảng 21% thể tích không khí và duy trì sự sống, sự cháy.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Em hãy nêu ít nhất 2 hành động cụ thể để tiết kiệm nước sạch và bảo vệ nguồn nước tại gia đình và trường học.',
+            sampleAnswer: '1. Khóa vòi nước khi không sử dụng. 2. Không vứt rác, dầu mỡ thải vào nguồn nước sạch.',
+            explanation: 'Nêu đúng 2 hành động thiết thực tiết kiệm và bảo vệ nguồn nước.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 5 =================
+      {
+        exam: {
+          title: 'Đề Ôn tập Môn Toán Lớp 5 - Số thập phân & Tỉ số phần trăm',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
+          grade: '5',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['5A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Thầy Nguyễn Hữu Dũng'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Viết phân số thập phân $\\frac{75}{100}$ dưới dạng số thập phân là:',
+            options: {
+              A: '$7.5$',
+              B: '$0.75$',
+              C: '$0.075$',
+              D: '$75.0$'
+            },
+            correctOption: 'B',
+            explanation: '$\\frac{75}{100} = 0.75$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Một lớp học có 40 học sinh, trong đó có 24 học sinh nữ. Hỏi số học sinh nữ chiếm bao nhiêu phần trăm số học sinh cả lớp? (Chỉ điền số, ví dụ: 60)',
+            acceptableAnswers: ['60', '60%', '60 %'],
+            explanation: 'Tỉ số phần trăm học sinh nữ: $(24 / 40) \\times 100\\% = 60\\%$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các khẳng định sau về hình học lớp 5:',
+            subQuestions: [
+              { key: 'a', text: 'Diện tích hình tam giác bằng (Đáy × Chiều cao) chia cho 2.', correct: true },
+              { key: 'b', text: 'Chu vi hình tròn đường kính d bằng d × 3.14.', correct: true },
+              { key: 'c', text: '1 m³ = 100 lít nước.', correct: false },
+              { key: 'd', text: '1 ha (héc-ta) = 10000 m².', correct: true }
+            ],
+            explanation: '1 m³ = 1000 dm³ = 1000 lít, không phải 100 lít.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Một thửa ruộng hình thang có đáy lớn 120m, đáy bé bằng 2/3 đáy lớn, chiều cao bằng 40m. Người ta cấy lúa trên thửa ruộng đó, cứ 100 m² thu hoạch được 65kg thóc. Hỏi cả thửa ruộng thu hoạch được bao nhiêu tạ thóc?',
+            sampleAnswer: 'Đáy bé: 120 × 2/3 = 80m. Diện tích: (120 + 80) × 40 / 2 = 4000 m². Số thóc: 4000 / 100 × 65 = 2600 kg = 26 tạ.',
+            explanation: 'Tính đáy bé -> Diện tích thửa ruộng -> Sản lượng kg thóc -> Đổi ra tạ (26 tạ).',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 6 (TOÁN 6 & TIN 6) =================
+      {
+        exam: {
+          title: 'Kiểm tra Giữa kỳ I Môn Toán Lớp 6 - Số tự nhiên & Tính chia hết',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
           grade: '6',
           durationMinutes: 45,
           passScore: 5,
           maxScore: 10,
-          classIds: ['6A1', '6A2'],
+          classIds: ['6A2'],
           isPublished: true,
           shuffleQuestions: true,
           shuffleOptions: true,
           showAnswersAfterExam: true,
           allowReview: true,
           createdBy: 'system_admin',
-          createdByName: 'Thầy Trương - GV Tin Học'
+          createdByName: 'Thầy Giáo Toán'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Tập hợp $A = \\{ x \\in \\mathbb{N} \\mid 5 < x \\le 9 \\}$ gồm các phần tử nào sau đây?',
+            options: {
+              A: '$\\{ 5; 6; 7; 8; 9 \\}$',
+              B: '$\\{ 6; 7; 8; 9 \\}$',
+              C: '$\\{ 6; 7; 8 \\}$',
+              D: '$\\{ 5; 6; 7; 8 \\}$'
+            },
+            correctOption: 'B',
+            explanation: '$x > 5$ nên không lấy số 5; $x \\le 9$ nên lấy đến 9. Các phần tử: 6, 7, 8, 9.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng hay Sai của các khẳng định về dấu hiệu chia hết sau:',
+            subQuestions: [
+              { key: 'a', text: 'Số có chữ số tận cùng là 0 hoặc 5 thì chia hết cho 5.', correct: true },
+              { key: 'b', text: 'Số chia hết cho 3 thì luôn chia hết cho 9.', correct: false },
+              { key: 'c', text: 'Số $135$ vừa chia hết cho 3 vừa chia hết cho 5.', correct: true },
+              { key: 'd', text: 'Mọi số nguyên tố đều là số lẻ.', correct: false }
+            ],
+            explanation: 'Số 2 là số nguyên tố chẵn duy nhất (ý d sai). Số 12 chia hết cho 3 nhưng không chia hết cho 9 (ý b sai).',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Tính giá trị của biểu thức $B = 2^3 \\cdot 5 - 3^2$.',
+            acceptableAnswers: ['31', '=31'],
+            explanation: '$2^3 = 8$, $8 \\times 5 = 40$; $3^2 = 9$. Kết quả: $40 - 9 = 31$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Tìm số tự nhiên $x$ biết: $3 \\cdot (x - 4) + 12 = 36$. Trình bày chi tiết từng bước biến đổi.',
+            sampleAnswer: '3(x - 4) = 36 - 12 => 3(x - 4) = 24 => x - 4 = 8 => x = 12. Vậy x = 12.',
+            explanation: 'Chuyển vế đổi dấu và tìm thừa số chưa biết.',
+            points: 2.5
+          }
+        ]
+      },
+
+      {
+        exam: {
+          title: 'Kiểm tra Định kỳ Môn Tin học Lớp 6 - Thông tin & Soạn thảo văn bản',
+          subjectId: 'IT',
+          subjectName: 'Tin học',
+          grade: '6',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['6A2'],
+          isPublished: true,
+          shuffleQuestions: true,
+          shuffleOptions: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Cô Giáo Tin Học'
         },
         questions: [
           {
@@ -1723,10 +2071,10 @@ export async function checkAndSeedInitialData(): Promise<void> {
         ]
       },
 
-      // ================= KHỐI 7 =================
+      // ================= KHỐI 7 (TIN 7) =================
       {
         exam: {
-          title: 'THI THỬ GIỮA KỲ 1 - TIN HỌC 7',
+          title: 'Kiểm tra Giữa kỳ Môn Tin học Lớp 7 - Bảng tính điện tử Excel',
           subjectId: 'IT',
           subjectName: 'Tin học',
           grade: '7',
@@ -1740,7 +2088,7 @@ export async function checkAndSeedInitialData(): Promise<void> {
           showAnswersAfterExam: true,
           allowReview: true,
           createdBy: 'system_admin',
-          createdByName: 'Thầy Trương - GV Tin Học'
+          createdByName: 'Cô Giáo Tin Học'
         },
         questions: [
           {
@@ -1789,10 +2137,10 @@ export async function checkAndSeedInitialData(): Promise<void> {
         ]
       },
 
-      // ================= KHỐI 8 =================
+      // ================= KHỐI 8 (TIN 8) =================
       {
         exam: {
-          title: 'THI THỬ GIỮA KỲ 1 - TIN HỌC 8',
+          title: 'Kiểm tra Học kỳ Môn Tin học Lớp 8 - Thuật toán & Lập trình',
           subjectId: 'IT',
           subjectName: 'Tin học',
           grade: '8',
@@ -1806,7 +2154,7 @@ export async function checkAndSeedInitialData(): Promise<void> {
           showAnswersAfterExam: true,
           allowReview: true,
           createdBy: 'system_admin',
-          createdByName: 'Thầy Trương - GV Tin Học'
+          createdByName: 'Thầy Giáo Tin Học'
         },
         questions: [
           {
@@ -1855,10 +2203,10 @@ export async function checkAndSeedInitialData(): Promise<void> {
         ]
       },
 
-      // ================= KHỐI 9 =================
+      // ================= KHỐI 9 (TIN 9) =================
       {
         exam: {
-          title: 'THI THỬ GIỮA KỲ 1 - TIN HỌC 9',
+          title: 'Kiểm tra Môn Tin học Lớp 9 - Mạng máy tính & An toàn Internet',
           subjectId: 'IT',
           subjectName: 'Tin học',
           grade: '9',
@@ -1872,7 +2220,7 @@ export async function checkAndSeedInitialData(): Promise<void> {
           showAnswersAfterExam: true,
           allowReview: true,
           createdBy: 'system_admin',
-          createdByName: 'Thầy Trương - GV Tin Học'
+          createdByName: 'Thầy Giáo Tin Học'
         },
         questions: [
           {
@@ -1919,6 +2267,475 @@ export async function checkAndSeedInitialData(): Promise<void> {
             points: 2.5
           }
         ]
+      },
+
+      // ================= KHỐI 6 (KHTN) =================
+      {
+        exam: {
+          title: 'Kiểm tra Giữa kỳ I Môn KHTN Lớp 6 - Vật chất & Năng lượng',
+          subjectId: 'KHTN',
+          subjectName: 'Khoa học tự nhiên',
+          grade: '6',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['6A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Cô Hoàng Minh Thư'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Đơn vị đo khối lượng chính thức trong hệ đo lường quốc tế SI là:',
+            options: {
+              A: 'Gam (g)',
+              B: 'Kilôgam (kg)',
+              C: 'Tấn (t)',
+              D: 'Miligam (mg)'
+            },
+            correctOption: 'B',
+            explanation: 'Trong hệ SI, đơn vị chuẩn của khối lượng là kilôgam (kg).',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các phát biểu về tế bào sinh học:',
+            subQuestions: [
+              { key: 'a', text: 'Tế bào là đơn vị cơ bản cấu tạo nên mọi cơ thể sống.', correct: true },
+              { key: 'b', text: 'Mọi tế bào đều có thành tế bào bằng xenlulôzơ.', correct: false },
+              { key: 'c', text: 'Tế bào nhân thực có nhân hoàn chỉnh chứa màng nhân.', correct: true },
+              { key: 'd', text: 'Lục lạp có ở tế bào động vật.', correct: false }
+            ],
+            explanation: 'Thành xenlulôzơ và lục lạp chỉ có ở tế bào thực vật, tế bào động vật không có lục lạp.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Một vật có khối lượng $m = 250\\text{ g}$ và thể tích $V = 50\\text{ cm}^3$. Khối lượng riêng $D = \\frac{m}{V}$ của vật bằng bao nhiêu $\\text{g/cm}^3$?',
+            acceptableAnswers: ['5', '5 g/cm3', '5g/cm3'],
+            explanation: 'Áp dụng công thức $D = m / V = 250 / 50 = 5\\text{ g/cm}^3$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Phân biệt sự bay hơi và sự sôi. Nêu ví dụ thực tế cho mỗi hiện tượng.',
+            sampleAnswer: 'Bay hơi xảy ra ở mọi nhiệt độ trên bề mặt chất lỏng (vd: phơi quần áo). Sôi xảy ra ở nhiệt độ sôi xác định cả trong lòng và trên bề mặt (vd: nước sôi ở 100 độ C).',
+            explanation: 'Nêu rõ vị trí xảy ra (bề mặt vs toàn khối) và điều kiện nhiệt độ.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 7 =================
+      {
+        exam: {
+          title: 'Khảo sát Chất lượng Môn Toán Lớp 7 - Số hữu tỉ & Góc đối đỉnh',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
+          grade: '7',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['7A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Thầy Vũ Đình Toàn'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Số hữu tỉ là số có thể viết được dưới dạng phân số nào?',
+            options: {
+              A: '$\\frac{a}{b}$ với $a, b \\in \\mathbb{Z}, b \\ne 0$',
+              B: '$\\frac{a}{b}$ với $a, b \\in \\mathbb{N}, b = 0$',
+              C: 'Số thập phân vô hạn không tuần hoàn',
+              D: 'Chỉ gồm các số nguyên dương'
+            },
+            correctOption: 'A',
+            explanation: 'Tập hợp số hữu tỉ $\\mathbb{Q} = \\{ \\frac{a}{b} \\mid a, b \\in \\mathbb{Z}, b \\ne 0 \\}$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Tính giá trị của biểu thức $A = (-2)^3 + 3^2$.',
+            acceptableAnswers: ['1', '+1'],
+            explanation: '$(-2)^3 = -8$, $3^2 = 9$. Do đó $A = -8 + 9 = 1$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các khẳng định hình học về hai góc và đường thẳng:',
+            subQuestions: [
+              { key: 'a', text: 'Hai góc đối đỉnh thì luôn bằng nhau.', correct: true },
+              { key: 'b', text: 'Hai góc bằng nhau thì chắc chắn đối đỉnh.', correct: false },
+              { key: 'c', text: 'Qua một điểm ở ngoài đường thẳng, có duy nhất một đường thẳng song song với đường thẳng đó.', correct: true },
+              { key: 'd', text: 'Hai đường thẳng cùng vuông góc với đường thẳng thứ ba thì song song với nhau.', correct: true }
+            ],
+            explanation: 'Hai góc bằng nhau chưa chắc đối đỉnh (ví dụ hai góc so le trong bằng nhau).',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Tìm x biết: $|x - 1.5| = 2.5$. Nêu chi tiết 2 trường hợp giải.',
+            sampleAnswer: 'TH1: x - 1.5 = 2.5 => x = 4. TH2: x - 1.5 = -2.5 => x = -1. Kết luận: x ∈ {4; -1}.',
+            explanation: 'Phá dấu giá trị tuyệt đối thành 2 phương trình bậc nhất.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 8 =================
+      {
+        exam: {
+          title: 'Kiểm tra Giữa kỳ Môn Hóa Học Lớp 8 - Phản ứng Hóa học & Mol',
+          subjectId: 'CHEM',
+          subjectName: 'Hóa học',
+          grade: '8',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['8A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Cô Lê Bích Nga'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Hiện tượng nào sau đây là hiện tượng hóa học?',
+            options: {
+              A: 'Nước đá tan thành nước lỏng',
+              B: 'Dây sắt bị gỉ sét trong không khí ẩm tạo thành oxit sắt',
+              C: 'Cồn bay hơi khi mở nắp lọ',
+              D: 'Hòa tan muối ăn vào nước'
+            },
+            correctOption: 'B',
+            explanation: 'Gỉ sắt có sinh ra chất mới là oxit sắt nâu đỏ, nên là hiện tượng hóa học.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Khối lượng mol của khí cacbonic ($CO_2$) bằng bao nhiêu g/mol? (Biết C=12, O=16).',
+            acceptableAnswers: ['44', '44 g/mol', '44g/mol'],
+            explanation: '$M_{CO_2} = 12 + 16 \\times 2 = 44\\text{ g/mol}$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các mệnh đề định luật bảo toàn khối lượng:',
+            subQuestions: [
+              { key: 'a', text: 'Trong phản ứng hóa học, tổng khối lượng các chất tham gia bằng tổng khối lượng các chất sản phẩm.', correct: true },
+              { key: 'b', text: 'Số lượng nguyên tử của mỗi nguyên tố được bảo toàn trong phản ứng.', correct: true },
+              { key: 'c', text: 'Liên kết giữa các nguyên tử không đổi trong phản ứng hóa học.', correct: false },
+              { key: 'd', text: '1 mol bất kỳ chất khí nào ở đktc đều chiếm thể tích 22.4 lít.', correct: true }
+            ],
+            explanation: 'Trong phản ứng hóa học, liên kết giữa các nguyên tử thay đổi khiến phân tử này biến thành phân tử khác.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Đốt cháy hoàn toàn 6.2g photpho (P) trong bình chứa khí oxi tạo ra điphotpho pentaoxit ($P_2O_5$). Viết PTHH và tính khối lượng $P_2O_5$ thu được. (Biết P=31, O=16).',
+            sampleAnswer: 'PTHH: 4P + 5O2 -> 2P2O5. n_P = 6.2/31 = 0.2 mol. Theo pt: n_P2O5 = 0.2/2 = 0.1 mol. m_P2O5 = 0.1 × 142 = 14.2g.',
+            explanation: 'Tính số mol P -> Dựa vào phương trình tìm nP2O5 -> Tính khối lượng m = n.M.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 9 =================
+      {
+        exam: {
+          title: 'Đề Thi Thử Vào Lớp 10 Môn Toán - Đề số 1 Chuyên đề Hình & Đại số',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
+          grade: '9',
+          durationMinutes: 90,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['9A1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Thầy Phan Thanh Hải'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Điều kiện xác định của biểu thức $P = \\sqrt{2x - 6}$ là:',
+            options: {
+              A: '$x \\ge 3$',
+              B: '$x > 3$',
+              C: '$x \\le 3$',
+              D: '$x \\ne 3$'
+            },
+            correctOption: 'A',
+            explanation: 'Biểu thức dưới căn không âm: $2x - 6 \\ge 0 \\Leftrightarrow x \\ge 3$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Cho phương trình bậc hai $x^2 - 5x + 6 = 0$. Gọi $x_1, x_2$ là hai nghiệm của phương trình. Theo định lý Vi-ét, tích $x_1 \\cdot x_2$ bằng bao nhiêu?',
+            acceptableAnswers: ['6', '+6'],
+            explanation: 'Theo định lý Vi-ét, với $ax^2 + bx + c = 0$, tích hai nghiệm là $P = c/a = 6/1 = 6$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các khẳng định về tứ giác nội tiếp đường tròn:',
+            subQuestions: [
+              { key: 'a', text: 'Tứ giác có tổng hai góc đối diện bằng 180° là tứ giác nội tiếp.', correct: true },
+              { key: 'b', text: 'Hình thang cân luôn nội tiếp được trong một đường tròn.', correct: true },
+              { key: 'c', text: 'Mọi hình bình hành đều là tứ giác nội tiếp đường tròn.', correct: false },
+              { key: 'd', text: 'Góc nội tiếp chắn nửa đường tròn là góc vuông (90°).', correct: true }
+            ],
+            explanation: 'Hình bình hành thông thường không có tổng 2 góc đối bằng 180°, chỉ có hình chữ nhật hoặc hình vuông mới nội tiếp.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            imageUrl: GEOMETRY_TRIANGLE_IMAGE,
+            prompt: 'Tự luận: Cho tam giác ABC vuông tại A có đường cao AH. Biết AB = 6cm, AC = 8cm. Hãy tính độ dài cạnh huyền BC, đường cao AH và diện tích tam giác ABC.',
+            sampleAnswer: 'BC = √(AB² + AC²) = √(36+64) = 10cm. AH = (AB.AC)/BC = (6.8)/10 = 4.8cm. S_ABC = 1/2.AB.AC = 24 cm².',
+            explanation: 'Áp dụng hệ thức lượng trong tam giác vuông: $BC = \\sqrt{AB^2 + AC^2} = 10\\text{ cm}$. $AH = \\frac{AB \\cdot AC}{BC} = 4.8\\text{ cm}$.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 10 =================
+      {
+        exam: {
+          title: 'Kiểm tra Giữa kỳ I - Môn Toán Lớp 10 (Chuẩn CT GDPT mới)',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
+          grade: '10',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['10A1', '10A2'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Thầy Nguyễn Văn An'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Trong các mệnh đề sau về tập hợp số thực $\\mathbb{R}$, mệnh đề nào là chân lý đúng?',
+            options: {
+              A: 'Mọi số thực $x$ đều thỏa mãn $x^2 > 0$.',
+              B: '$\\exists x \\in \\mathbb{R}: x^2 + 1 = 0$.',
+              C: '$\\forall x \\in \\mathbb{R}: x^2 \\ge 0$.',
+              D: 'Phương trình $\\sqrt{x} = -2$ có nghiệm thực.'
+            },
+            correctOption: 'C',
+            explanation: 'Bình phương của mọi số thực luôn không âm: $\\forall x \\in \\mathbb{R}, x^2 \\ge 0$.',
+            points: 2
+          },
+          {
+            questionNumber: 2,
+            type: 'true_false',
+            imageUrl: PARABOLA_GRAPH_IMAGE,
+            prompt: 'Cho hàm số bậc hai $y = f(x) = x^2 - 4x + 3$ có đồ thị parabol như hình vẽ. Xét tính Đúng / Sai của các nhận định:',
+            subQuestions: [
+              { key: 'a', text: 'Đồ thị hàm số có tọa độ đỉnh là $I(2; -1)$.', correct: true },
+              { key: 'b', text: 'Hàm số đồng biến trên khoảng $(-\\infty; 2)$.', correct: false },
+              { key: 'c', text: 'Phương trình $f(x) = 0$ có hai nghiệm phân biệt $x_1 = 1, x_2 = 3$.', correct: true },
+              { key: 'd', text: 'Giá trị nhỏ nhất của hàm số trên $\\mathbb{R}$ bằng $-1$.', correct: true }
+            ],
+            explanation: 'Tọa độ đỉnh $x_I = -b/(2a) = 2, y_I = -1$. Vì $a > 0$ nên bề lõm quay lên, nghịch biến trên $(-\\infty; 2)$.',
+            points: 3
+          },
+          {
+            questionNumber: 3,
+            type: 'fill_blank',
+            imageUrl: GEOMETRY_TRIANGLE_IMAGE,
+            prompt: 'Điền kết quả: Cho tam giác vuông có hai cạnh góc vuông $a = 6\\text{ cm}$ và $b = 8\\text{ cm}$ (xem hình vẽ minh họa). Độ dài cạnh huyền $c$ bằng bao nhiêu cm?',
+            acceptableAnswers: ['10', '10 cm', '10cm'],
+            explanation: 'Áp dụng định lý Pytago: $c = \\sqrt{6^2 + 8^2} = \\sqrt{100} = 10\\text{ cm}$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Cho hai tập hợp $A = [1; 5]$ và $B = (2; 7)$. Hãy biểu diễn trên trục số và tìm giao $A \\cap B$ và hợp $A \\cup B$. Nêu rõ các bước suy luận.',
+            sampleAnswer: 'Giao: A ∩ B = (2; 5]. Hợp: A ∪ B = [1; 7). Các phần tử thuộc cả A và B thỏa mãn 2 < x ≤ 5.',
+            explanation: 'Biểu diễn khoảng giao và hợp trên trục số thực.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 11 =================
+      {
+        exam: {
+          title: 'Khảo sát Năng lực Môn Vật Lí Lớp 11 - Dao động Điều hòa & Sóng cơ',
+          subjectId: 'PHYS',
+          subjectName: 'Vật lí',
+          grade: '11',
+          durationMinutes: 45,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['11B1'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'Thầy Lâm Quang Trí'
+        },
+        questions: [
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'Một chất điểm dao động điều hòa theo phương trình $x = 5\\cos(4\\pi t + \\frac{\\pi}{3})\\text{ cm}$. Biên độ và chu kỳ dao động của chất điểm là:',
+            options: {
+              A: '$A = 5\\text{ cm}, T = 0.5\\text{ s}$',
+              B: '$A = 5\\text{ cm}, T = 2\\text{ s}$',
+              C: '$A = 4\\text{ cm}, T = 0.5\\text{ s}$',
+              D: '$A = 10\\text{ cm}, T = 1\\text{ s}$'
+            },
+            correctOption: 'A',
+            explanation: 'Biên độ $A = 5\\text{ cm}$. Tần số góc $\\omega = 4\\pi \\Rightarrow T = \\frac{2\\pi}{\\omega} = \\frac{2\\pi}{4\\pi} = 0.5\\text{ s}$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 2,
+            type: 'true_false',
+            prompt: 'Xét tính Đúng / Sai của các phát biểu về dao động điều hòa của con lắc lò xo:',
+            subQuestions: [
+              { key: 'a', text: 'Vận tốc biến thiên điều hòa sớm pha $\\pi/2$ so với li độ.', correct: true },
+              { key: 'b', text: 'Gia tốc ngược pha với li độ ($a = -\\omega^2 x$).', correct: true },
+              { key: 'c', text: 'Ở vị trí cân bằng, cơ năng của vật bằng 0.', correct: false },
+              { key: 'd', text: 'Ở vị trí biên, vận tốc của vật đạt giá trị cực đại.', correct: false }
+            ],
+            explanation: 'Cơ năng bảo toàn và không bằng 0; ở vị trí biên vận tốc bằng 0.',
+            points: 2.5
+          },
+          {
+            questionNumber: 3,
+            type: 'fill_blank',
+            prompt: 'Điền kết quả: Một sóng cơ truyền trên mặt nước với bước sóng $\\lambda = 20\\text{ cm}$ và chu kỳ $T = 0.1\\text{ s}$. Tốc độ truyền sóng $v = \\frac{\\lambda}{T}$ bằng bao nhiêu m/s?',
+            acceptableAnswers: ['2', '2 m/s', '2m/s'],
+            explanation: '$v = \\frac{20\\text{ cm}}{0.1\\text{ s}} = 200\\text{ cm/s} = 2\\text{ m/s}$.',
+            points: 2.5
+          },
+          {
+            questionNumber: 4,
+            type: 'essay',
+            prompt: 'Tự luận: Nêu hiện tượng cộng hưởng cơ học và đưa ra ít nhất một ứng dụng có lợi cùng một tác hại cần phòng tránh trong đời sống hoặc kỹ thuật.',
+            sampleAnswer: 'Hiện tượng: Biên độ dao động cưỡng bức tăng cực đại khi tần số lực cưỡng bức bằng tần số riêng. Có lợi: Hộp đàn ghita, cộng hưởng âm. Có hại: Sập cầu, nứt vỡ công trình do rung chấn.',
+            explanation: 'Trình bày định nghĩa hiện tượng cộng hưởng và ví dụ thực tế.',
+            points: 2.5
+          }
+        ]
+      },
+
+      // ================= KHỐI 12 =================
+      {
+        exam: {
+          title: 'Đề Thi Thử Tốt Nghiệp THPT 2025 Môn Toán (Cấu trúc mới 4 Phần của Bộ GD&ĐT)',
+          subjectId: 'MATH',
+          subjectName: 'Toán học',
+          grade: '12',
+          durationMinutes: 90,
+          passScore: 5,
+          maxScore: 10,
+          classIds: ['12A3'],
+          isPublished: true,
+          showAnswersAfterExam: true,
+          allowReview: true,
+          createdBy: 'system_admin',
+          createdByName: 'TS. Nguyễn Hoàng Nam'
+        },
+        questions: [
+          // PHẦN I: Trắc nghiệm 4 lựa chọn
+          {
+            questionNumber: 1,
+            type: 'multiple_choice',
+            prompt: 'PHẦN I - Trắc nghiệm 4 lựa chọn: Cho hàm số $y = f(x)$ có bảng biến thiên với đạo hàm $f\'(x) = (x - 1)^2(x + 2)(x - 3)$. Số điểm cực trị của hàm số đã cho là:',
+            options: {
+              A: '1 điểm',
+              B: '2 điểm',
+              C: '3 điểm',
+              D: '4 điểm'
+            },
+            correctOption: 'B',
+            explanation: '$f\'(x) = 0$ tại $x=1$ (bội 2 chẵn - không đổi dấu), $x=-2$ (bội 1 lẻ - đổi dấu), $x=3$ (bội 1 lẻ - đổi dấu). Vậy hàm số có đúng 2 điểm cực trị.',
+            points: 1.5
+          },
+          {
+            questionNumber: 2,
+            type: 'multiple_choice',
+            prompt: 'Họ nguyên hàm của hàm số $f(x) = 3x^2 + e^x$ trên tập số thực $\\mathbb{R}$ là:',
+            options: {
+              A: '$\\int f(x)dx = x^3 + e^x + C$',
+              B: '$\\int f(x)dx = 6x + e^x + C$',
+              C: '$\\int f(x)dx = x^3 - e^x + C$',
+              D: '$\\int f(x)dx = 3x^3 + e^x + C$'
+            },
+            correctOption: 'A',
+            explanation: '$\\int 3x^2 dx = x^3 + C_1$ và $\\int e^x dx = e^x + C_2$. Tổng lại ta được $x^3 + e^x + C$.',
+            points: 1.5
+          },
+          // PHẦN II: Trắc nghiệm Đúng / Sai (Chùm 4 ý chuẩn cấu trúc mới)
+          {
+            questionNumber: 3,
+            type: 'true_false',
+            prompt: 'PHẦN II - Trắc nghiệm Đúng / Sai: Trong không gian với hệ tọa độ Oxyz, cho mặt cầu $(S): (x - 1)^2 + (y + 2)^2 + (z - 3)^2 = 25$ và mặt phẳng $(P): 2x - 2y + z + 1 = 0$. Xét tính Đúng / Sai của các mệnh đề sau:',
+            subQuestions: [
+              { key: 'a', text: 'Tâm của mặt cầu $(S)$ có tọa độ là $I(1; -2; 3)$.', correct: true },
+              { key: 'b', text: 'Bán kính của mặt cầu $(S)$ bằng $R = 25$.', correct: false },
+              { key: 'c', text: 'Khoảng cách từ tâm I đến mặt phẳng $(P)$ bằng $d(I, (P)) = \\frac{|2(1) - 2(-2) + 3 + 1|}{\\sqrt{2^2 + (-2)^2 + 1^2}} = \\frac{10}{3} < 5$.', correct: true },
+              { key: 'd', text: 'Mặt phẳng $(P)$ cắt mặt cầu $(S)$ theo một đường tròn có bán kính $r = \\frac{\\sqrt{125}}{3}$.', correct: true }
+            ],
+            explanation: 'Bán kính $R = \\sqrt{25} = 5$ (ý b sai). Bán kính đường tròn giao tuyến $r = \\sqrt{R^2 - d^2} = \\sqrt{25 - (100/9)} = \\sqrt{125}/3$ (ý d đúng).',
+            points: 3.0
+          },
+          // PHẦN III: Trả lời ngắn / Điền kết quả
+          {
+            questionNumber: 4,
+            type: 'fill_blank',
+            prompt: 'PHẦN III - Điền kết quả: Một người gửi 100 triệu đồng vào ngân hàng với lãi suất 6% mỗi năm theo hình thức lãi kép. Hỏi sau 3 năm, số tiền lãi người đó nhận được là bao nhiêu triệu đồng? (Làm tròn đến 2 chữ số thập phân, ví dụ: 19.10)',
+            acceptableAnswers: ['19.1', '19.10', '19,1', '19,10'],
+            explanation: 'Tổng tiền nhận được: $A = 100 \\times (1 + 0.06)^3 = 100 \\times 1.191016 = 119.1016$ triệu đồng. Tiền lãi: $119.1016 - 100 \\approx 19.10$ triệu đồng.',
+            points: 2.0
+          },
+          // PHẦN IV: Tự luận chuyên sâu
+          {
+            questionNumber: 5,
+            type: 'essay',
+            prompt: 'PHẦN IV - Tự luận: Cho hình chóp $S.ABCD$ có đáy $ABCD$ là hình vuông cạnh $a$, cạnh bên $SA$ vuông góc với mặt phẳng đáy và $SA = a\\sqrt{3}$. Hãy tính góc giữa đường thẳng $SC$ và mặt phẳng đáy $(ABCD)$. Nêu rõ các bước xác định hình chiếu vuông góc.',
+            sampleAnswer: 'Hình chiếu vuông góc của SC lên (ABCD) là AC. Góc cần tìm là góc SCA. Trong tam giác vuông SAC vuông tại A: AC = a√2, SA = a√3. tan(SCA) = SA / AC = a√3 / a√2 = √6 / 2. Góc SCA ≈ 50°46\'.',
+            explanation: 'Xác định hình chiếu: $A$ là hình chiếu của $S$ lên $(ABCD)$, $C$ tự chiếu lên chính nó => $AC$ là hình chiếu của $SC$. Góc giữa $SC$ và đáy là $\\widehat{SCA}$.',
+            points: 2.0
+          }
+        ]
       }
     ];
 
@@ -1927,6 +2744,7 @@ export async function checkAndSeedInitialData(): Promise<void> {
       await createExamWithQuestions(item.exam, item.questions);
     }
 
+    // Seed sample results for rich statistics
     seedSampleResults();
     localStorage.setItem('edutest_initial_seeded_done', 'true');
   } catch (err) {
