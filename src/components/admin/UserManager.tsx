@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, 
+  Users,
+  Cloud,
+  Layers, 
   ShieldCheck, 
   GraduationCap, 
   UserCheck, 
@@ -58,6 +60,13 @@ export const UserManager: React.FC = () => {
   const [newPasswordInput, setNewPasswordInput] = useState<string>('123456');
 
   const [deleteModalUser, setDeleteModalUser] = useState<UserProfile | null>(null);
+
+  // Multi-select & Bulk operations state
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState<boolean>(false);
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState<boolean>(false);
+  const [bulkTargetClass, setBulkTargetClass] = useState<string>('10A1');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -201,6 +210,67 @@ export const UserManager: React.FC = () => {
     }
   };
 
+    // Toggle select single user
+  const handleToggleSelectUser = (id: string) => {
+    setSelectedUserIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Toggle select all filtered users
+  const handleToggleSelectAll = () => {
+    if (selectedUserIds.length === filteredUsers.length) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(filteredUsers.map(u => u.id));
+    }
+  };
+
+  // Handle bulk delete
+  const handleConfirmBulkDelete = async () => {
+    if (selectedUserIds.length === 0) return;
+    try {
+      await batchDeleteUserProfiles(selectedUserIds);
+      showSuccessMsg(`Đã xóa thành công ${selectedUserIds.length} tài khoản khỏi hệ thống và Cloud.`);
+      setSelectedUserIds([]);
+      setShowBulkDeleteModal(false);
+      fetchUsers();
+    } catch (err: any) {
+      showErrorMsg('Lỗi khi xóa tài khoản: ' + err?.message);
+    }
+  };
+
+  // Handle bulk assign class
+  const handleConfirmBulkAssignClass = async () => {
+    if (selectedUserIds.length === 0 || !bulkTargetClass.trim()) return;
+    try {
+      await batchAssignClass(selectedUserIds, bulkTargetClass.trim());
+      showSuccessMsg(`Đã chuyển ${selectedUserIds.length} tài khoản vào lớp/nhóm "${bulkTargetClass.trim()}".`);
+      setSelectedUserIds([]);
+      setShowBulkAssignModal(false);
+      fetchUsers();
+    } catch (err: any) {
+      showErrorMsg('Lỗi khi gán lớp: ' + err?.message);
+    }
+  };
+
+  // Handle cloud sync
+  const handleSyncToCloud = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await syncAllUsersToFirestore();
+      if (res.success) {
+        showSuccessMsg(`Đã đồng bộ thành công ${res.count} tài khoản lên Firebase Cloud! Các máy khác có thể đăng nhập được ngay.`);
+      } else {
+        showErrorMsg(`Đồng bộ không thành công: ${res.error || 'Vui lòng kiểm tra quyền Firestore Rules.'}`);
+      }
+    } catch (err: any) {
+      showErrorMsg('Lỗi đồng bộ: ' + err?.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const filteredUsers = users.filter(u => {
     const matchesSearch = (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (u.username || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -230,6 +300,16 @@ export const UserManager: React.FC = () => {
           >
             <UserPlus className="w-4 h-4" />
             <span>Thêm tài khoản mới</span>
+          </button>
+
+          <button
+            onClick={handleSyncToCloud}
+            disabled={isSyncing}
+            className="text-xs font-bold px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+            title="Đồng bộ toàn bộ danh sách tài khoản lên Firebase Cloud để các máy khác có thể đăng nhập được"
+          >
+            <Cloud className="w-4 h-4" />
+            <span>{isSyncing ? 'Đang đồng bộ...' : '☁️ Đồng bộ lên Cloud'}</span>
           </button>
 
           <button
@@ -294,12 +374,65 @@ export const UserManager: React.FC = () => {
         </span>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedUserIds.length > 0 && (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <span className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+              {selectedUserIds.length}
+            </span>
+            <div>
+              <p className="text-xs font-bold text-emerald-950">
+                Đang chọn {selectedUserIds.length} / {filteredUsers.length} tài khoản
+              </p>
+              <p className="text-[11px] text-emerald-700">
+                Chọn thao tác hàng loạt cho các tài khoản đã đánh dấu
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowBulkAssignModal(true)}
+              className="text-xs font-bold px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Layers className="w-4 h-4" />
+              <span>Gán vào Lớp / Nhóm</span>
+            </button>
+
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              className="text-xs font-bold px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Xóa {selectedUserIds.length} tài khoản đã chọn</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedUserIds([])}
+              className="text-xs font-semibold px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl transition-colors cursor-pointer"
+            >
+              Bỏ chọn tất cả
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
               <tr>
+                <th className="py-3 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredUsers.length > 0 && selectedUserIds.length === filteredUsers.length}
+                    onChange={handleToggleSelectAll}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                    title="Chọn tất cả"
+                  />
+                </th>
                 <th className="py-3 px-4">Tên người dùng</th>
                 <th className="py-3 px-4">Tên đăng nhập / Email</th>
                 <th className="py-3 px-4">Lớp</th>
@@ -315,7 +448,15 @@ export const UserManager: React.FC = () => {
                   const isDisabled = u.status === 'disabled';
 
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={u.id} className={`hover:bg-slate-50/70 transition-colors ${selectedUserIds.includes(u.id) ? 'bg-emerald-50/50' : ''}`}>
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.includes(u.id)}
+                          onChange={() => handleToggleSelectUser(u.id)}
+                          className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                        />
+                      </td>
                       <td className="py-3 px-4 font-semibold text-slate-900">
                         <div className="flex items-center gap-2.5">
                           {u.photoURL ? (
@@ -424,7 +565,7 @@ export const UserManager: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Không tìm thấy tài khoản nào phù hợp với điều kiện tìm kiếm.
                   </td>
                 </tr>
@@ -647,6 +788,115 @@ export const UserManager: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs"
               >
                 Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: BULK DELETE CONFIRMATION */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="font-bold text-slate-900 text-base">
+                Xác nhận xóa {selectedUserIds.length} tài khoản?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Bạn có chắc chắn muốn xóa <strong>{selectedUserIds.length} tài khoản</strong> đã chọn khỏi hệ thống và Firebase Cloud không? Thao tác này không thể hoàn tác.
+              </p>
+            </div>
+
+            <div className="max-h-36 overflow-y-auto p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+              {users.filter(u => selectedUserIds.includes(u.id)).map(u => (
+                <div key={u.id} className="flex justify-between">
+                  <span className="font-bold text-slate-800">{u.displayName || u.username}</span>
+                  <span className="font-mono text-slate-400">{u.username}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex items-center justify-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkDelete}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xs cursor-pointer"
+              >
+                Xác nhận xóa {selectedUserIds.length} tài khoản
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: BULK ASSIGN CLASS / GROUP */}
+      {showBulkAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-sm w-full p-6 space-y-4 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Gán vào Lớp / Nhóm
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Áp dụng cho {selectedUserIds.length} tài khoản đã chọn
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <label className="block font-semibold text-slate-700">
+                Nhập tên lớp hoặc nhóm:
+              </label>
+              <input
+                type="text"
+                value={bulkTargetClass}
+                onChange={(e) => setBulkTargetClass(e.target.value)}
+                placeholder="Ví dụ: 10A1, Nhóm Tin 1, 9A2..."
+                className="w-full p-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white font-medium"
+              />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {['6A1', '7A1', '8A1', '9A1', '10A1', '11B1', '12A3'].map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setBulkTargetClass(c)}
+                    className="text-[10px] px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 border text-slate-600 font-semibold cursor-pointer"
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowBulkAssignModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBulkAssignClass}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs cursor-pointer"
+              >
+                Lưu vào lớp
               </button>
             </div>
           </div>
