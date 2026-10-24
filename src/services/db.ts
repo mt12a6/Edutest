@@ -300,6 +300,16 @@ export function getDefaultUsers(): UserProfile[] {
       createdAt: '2024-09-01T08:00:00.000Z'
     },
     {
+      id: 'u_mt12a6',
+      username: 'mt12a6',
+      email: 'mt12a6@gmail.com',
+      password: '123456',
+      displayName: 'Admin Trương (mt12a6)',
+      role: 'admin',
+      status: 'active',
+      createdAt: '2024-09-01T08:00:00.000Z'
+    },
+    {
       id: 'u_daiso2014',
       username: 'daiso2014',
       email: 'daiso2014@gmail.com',
@@ -387,6 +397,9 @@ export async function getAllUsers(): Promise<UserProfile[]> {
     
     // Merge firestore and local users by ID without resurrecting deleted users
     const mergedMap = new Map<string, UserProfile>();
+    getDefaultUsers().forEach(u => {
+      if (!deletedIds.includes(u.id)) mergedMap.set(u.id, u);
+    });
     localList.forEach(u => {
       if (!deletedIds.includes(u.id)) mergedMap.set(u.id, u);
     });
@@ -539,7 +552,8 @@ export async function loginWithUsernamePassword(identifier: string, password: st
 
   for (const u of localList) {
     const matchId = (u.username && u.username.trim().toLowerCase() === clean) ||
-                    (u.email && u.email.trim().toLowerCase() === clean);
+                    (u.email && u.email.trim().toLowerCase() === clean) ||
+                    (u.email && u.email.trim().toLowerCase().split('@')[0] === clean);
     if (matchId) {
       const uPass = (u.password ? u.password.trim() : '123456');
       if (uPass === inputPass || (!u.password && inputPass === '123456')) {
@@ -551,7 +565,8 @@ export async function loginWithUsernamePassword(identifier: string, password: st
   // 2. Also check default hardcoded accounts as safe fallback
   for (const def of getDefaultUsers()) {
     const matchDef = (def.username && def.username.trim().toLowerCase() === clean) || 
-                     (def.email && def.email.trim().toLowerCase() === clean);
+                     (def.email && def.email.trim().toLowerCase() === clean) ||
+                     (def.email && def.email.trim().toLowerCase().split('@')[0] === clean);
     if (matchDef && (def.password === inputPass || (!def.password && inputPass === '123456'))) {
       return def;
     }
@@ -563,7 +578,8 @@ export async function loginWithUsernamePassword(identifier: string, password: st
     for (const d of snap.docs) {
       const data = d.data() as UserProfile;
       const matchIdentifier = (data.username && data.username.trim().toLowerCase() === clean) ||
-                              (data.email && data.email.trim().toLowerCase() === clean);
+                              (data.email && data.email.trim().toLowerCase() === clean) ||
+                              (data.email && data.email.trim().toLowerCase().split('@')[0] === clean);
       if (matchIdentifier) {
         const uPass = data.password ? data.password.trim() : '123456';
         if (uPass === inputPass || (!data.password && inputPass === '123456')) {
