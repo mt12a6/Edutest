@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Upload, 
@@ -25,7 +25,13 @@ import {
 import { parseExamFile } from '../../utils/docxParser';
 import { normalizeMathFormulas } from '../../utils/mathFormatter';
 import { ParsedDocxQuestion, SchoolClass, Subject, QuestionType, TrueFalseItem, Exam, Question } from '../../types';
-import { createExamWithQuestions, updateExamWithQuestions, logSystemAction } from '../../services/db';
+import { 
+  createExamWithQuestions, 
+  updateExamWithQuestions, 
+  logSystemAction,
+  getDefaultSubjects,
+  getDefaultClasses
+} from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { MathRenderer } from '../common/MathRenderer';
 import { RichTextEditorToolbar } from '../common/RichTextEditorToolbar';
@@ -88,10 +94,40 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
     field: 'prompt' | 'explanation' | 'A' | 'B' | 'C' | 'D';
   } | null>(null);
 
+  // Fallbacks ensuring subjects and classes are never empty even if parent state is loading
+  const effectiveSubjects: Subject[] = (subjects && subjects.length > 0) ? subjects : getDefaultSubjects();
+  const effectiveClasses: SchoolClass[] = (classes && classes.length > 0) ? classes : getDefaultClasses();
+
+  // Custom subject input state
+  const [isCustomSubject, setIsCustomSubject] = useState<boolean>(() => {
+    if (initialExam?.subjectId) {
+      return !effectiveSubjects.some(
+        s => s.code === initialExam.subjectId || s.id === initialExam.subjectId
+      );
+    }
+    return false;
+  });
+  const [customSubjectName, setCustomSubjectName] = useState<string>(() => {
+    if (initialExam && !effectiveSubjects.some(s => s.code === initialExam.subjectId || s.id === initialExam.subjectId)) {
+      return initialExam.subjectName || initialExam.subjectId || '';
+    }
+    return '';
+  });
+
   // Exam Configuration
   const [title, setTitle] = useState<string>(initialExam?.title || '');
-  const [subjectId, setSubjectId] = useState<string>(initialExam?.subjectId || subjects[0]?.code || 'MATH');
+  const [subjectId, setSubjectId] = useState<string>(() => {
+    if (initialExam?.subjectId) return initialExam.subjectId;
+    return effectiveSubjects[0]?.code || 'MATH';
+  });
   const [grade, setGrade] = useState<string>(initialExam?.grade || '6');
+
+  // Ensure subjectId is always valid
+  useEffect(() => {
+    if (!subjectId && effectiveSubjects.length > 0) {
+      setSubjectId(effectiveSubjects[0]?.code || 'MATH');
+    }
+  }, [effectiveSubjects, subjectId]);
   const [durationMinutes, setDurationMinutes] = useState<number>(initialExam?.durationMinutes || 45);
   const [passScore, setPassScore] = useState<number>(initialExam?.passScore ?? 5);
   const [maxScore, setMaxScore] = useState<number>(initialExam?.maxScore ?? 10);
@@ -108,6 +144,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   const [allowReview, setAllowReview] = useState<boolean>(initialExam?.allowReview ?? true);
   const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(initialExam?.shuffleQuestions ?? true);
   const [shuffleOptions, setShuffleOptions] = useState<boolean>(initialExam?.shuffleOptions ?? true);
+  const [isPinned, setIsPinned] = useState<boolean>(initialExam?.isPinned ?? false);
 
 
   // AI Review State
@@ -195,11 +232,14 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         setGrade(result.detectedGrade);
       }
       if (result.detectedSubject) {
-        const found = subjects.find(s => 
+        const found = effectiveSubjects.find(s => 
           s.name.toLowerCase().includes(result.detectedSubject!.toLowerCase()) || 
           s.code.toLowerCase().includes(result.detectedSubject!.toLowerCase())
         );
-        if (found) setSubjectId(found.code);
+        if (found) {
+          setSubjectId(found.code);
+          setIsCustomSubject(false);
+        }
       }
       setStep('preview_edit');
     } catch (err: any) {
@@ -465,14 +505,31 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
 
     setIsSaving(true);
     try {
-      const selectedSubject = subjects.find(s => s.code === subjectId);
-      const subjectName = selectedSubject ? selectedSubject.name : 'Toán học';
+      let finalSubjectId = subjectId || 'MATH';
+      let finalSubjectName = 'Toán học';
+
+      if (isCustomSubject && customSubjectName.trim()) {
+        finalSubjectName = customSubjectName.trim();
+        finalSubjectId = customSubjectName.trim().toUpperCase().replace(/\s+/g, '_');
+      } else {
+        const selectedSubject = effectiveSubjects.find(
+          s => s.code === subjectId || s.id === subjectId || s.name.toLowerCase() === subjectId.toLowerCase()
+        );
+        if (selectedSubject) {
+          finalSubjectId = selectedSubject.code || selectedSubject.id;
+          finalSubjectName = selectedSubject.name;
+        } else {
+          finalSubjectId = subjectId || 'MATH';
+          finalSubjectName = subjectId || 'Toán học';
+        }
+      }
+
       const finalPublished = publishOverride !== undefined ? publishOverride : isPublished;
 
       const examData = {
         title: title.trim(),
-        subjectId,
-        subjectName,
+        subjectId: finalSubjectId,
+        subjectName: finalSubjectName,
         grade,
         durationMinutes: Number(durationMinutes),
         passScore: Number(passScore),
@@ -488,6 +545,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         warnOnTabSwitch: enableTabWarning,
         trialCode: trialCode.trim() || `EDUTEST-${grade}`,
         allowRetake,
+        isPinned,
 
         maxAttempts: Number(maxAttempts) || 0,
         showScoreAfterExam,
@@ -1259,20 +1317,88 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Môn học:
-                    </label>
-                    <select
-                      value={subjectId}
-                      onChange={(e) => setSubjectId(e.target.value)}
-                      className="w-full text-xs font-medium text-slate-800 border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 bg-white"
-                    >
-                      {subjects.map(s => (
-                        <option key={s.id || s.code} value={s.code}>
-                          {s.name} ({s.code})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Môn học: *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCustomSubject(!isCustomSubject);
+                          if (!isCustomSubject && !customSubjectName) {
+                            setCustomSubjectName('');
+                          }
+                        }}
+                        className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline cursor-pointer"
+                      >
+                        {isCustomSubject ? 'Chọn từ danh mục' : '+ Tự nhập môn khác'}
+                      </button>
+                    </div>
+
+                    {!isCustomSubject ? (
+                      <div className="space-y-2">
+                        <select
+                          value={subjectId}
+                          onChange={(e) => {
+                            if (e.target.value === '__CUSTOM__') {
+                              setIsCustomSubject(true);
+                            } else {
+                              setSubjectId(e.target.value);
+                            }
+                          }}
+                          className="w-full text-xs font-semibold text-slate-800 border border-slate-300 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 bg-white"
+                        >
+                          {effectiveSubjects.map(s => {
+                            const val = s.code || s.id;
+                            return (
+                              <option key={s.id || s.code} value={val}>
+                                {s.name} ({s.code || val})
+                              </option>
+                            );
+                          })}
+                          <option value="__CUSTOM__">✍️ Khác (Tự nhập tên môn học...)</option>
+                        </select>
+
+                        {/* Quick pick chips */}
+                        <div className="flex flex-wrap gap-1">
+                          {effectiveSubjects.slice(0, 6).map(s => {
+                            const val = s.code || s.id;
+                            const isSelected = subjectId === val;
+                            return (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => {
+                                  setSubjectId(val);
+                                  setIsCustomSubject(false);
+                                }}
+                                className={`text-[10px] px-2 py-0.5 rounded-md font-medium transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-emerald-700 text-white shadow-2xs'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {s.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 animate-in fade-in">
+                        <input
+                          type="text"
+                          value={customSubjectName}
+                          onChange={(e) => setCustomSubjectName(e.target.value)}
+                          placeholder="Nhập tên môn học (ví dụ: Tin học văn phòng, GDCD...)"
+                          className="w-full text-xs font-semibold text-slate-900 border border-emerald-400 bg-emerald-50/30 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500"
+                          autoFocus
+                        />
+                        <p className="text-[10px] text-slate-500">
+                          Đang bật chế độ tự nhập môn học mới cho đề thi này.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -1365,7 +1491,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                     >
                       🌐 Tất cả các lớp (Đề tự do)
                     </button>
-                    {classes.map(c => {
+                    {effectiveClasses.map(c => {
                       const isSelected = selectedClassIds.includes(c.name);
                       return (
                         <button
@@ -1435,6 +1561,19 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                       <div>
                         <span className="font-bold text-indigo-900 block">🔒 Đề thi bảo mật chính thức</span>
                         <span className="text-[11px] text-slate-500">Chỉ hiển thị khi người dùng đăng nhập tài khoản</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-amber-200 bg-amber-50/70 cursor-pointer hover:bg-amber-100/60 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={isPinned}
+                        onChange={(e) => setIsPinned(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-amber-600 rounded focus:ring-amber-500"
+                      />
+                      <div>
+                        <span className="font-bold text-amber-950 block">📌 Ghim đề thi lên đầu Trang chủ</span>
+                        <span className="text-[11px] text-amber-800">Hiển thị nổi bật ở khu vực "Đề thi được ghim nổi bật" để học sinh thấy ngay</span>
                       </div>
                     </label>
 

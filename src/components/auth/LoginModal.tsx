@@ -111,7 +111,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
             </div>
             <div>
               <h3 className="font-extrabold text-base leading-tight">
-                {activeTab === 'register' ? 'Đăng ký tài khoản Học sinh' : 'Đăng nhập EduTest'}
+                {activeTab === 'register' ? 'Đăng ký tài khoản' : 'Đăng nhập EduTest'}
               </h3>
               <p className="text-xs text-slate-300">
                 Nền tảng khảo thí & thi trực tuyến thông minh
@@ -150,7 +150,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
             }`}
           >
             <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Tự đăng ký Học sinh</span>
+            <span>Đăng ký</span>
           </button>
         </div>
 
@@ -238,63 +238,25 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                 <span>Đăng nhập với Google</span>
               </button>
 
-              {/* Sample credentials hint */}
-              <div className="pt-2 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-[11px] text-slate-600">
-                <p className="font-bold text-slate-800 flex items-center justify-between">
-                  <span>Tài khoản trải nghiệm hệ thống:</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Mật khẩu chung: 123456</span>
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                  <div 
-                    onClick={() => { setIdentifier('admin'); setPassword('123456'); }}
-                    className="p-1.5 bg-white rounded-lg border border-slate-200 hover:border-rose-300 cursor-pointer transition-colors"
-                    title="Bấm để điền nhanh"
-                  >
-                    <span className="font-bold text-rose-700">👑 Quản trị:</span> <code className="bg-slate-100 px-1 rounded font-mono">admin</code>
-                  </div>
-                  <div 
-                    onClick={() => { setIdentifier('giaovien'); setPassword('123456'); }}
-                    className="p-1.5 bg-white rounded-lg border border-slate-200 hover:border-indigo-300 cursor-pointer transition-colors"
-                    title="Bấm để điền nhanh"
-                  >
-                    <span className="font-bold text-indigo-700">🧑‍🏫 Giáo viên:</span> <code className="bg-slate-100 px-1 rounded font-mono">giaovien</code>
-                  </div>
-                  <div 
-                    onClick={() => { setIdentifier('hocsinh'); setPassword('123456'); }}
-                    className="p-1.5 bg-white rounded-lg border border-slate-200 hover:border-emerald-300 cursor-pointer transition-colors"
-                    title="Bấm để điền nhanh"
-                  >
-                    <span className="font-bold text-emerald-700">🎒 Học sinh:</span> <code className="bg-slate-100 px-1 rounded font-mono">hocsinh</code>
-                  </div>
-                  <div 
-                    onClick={() => { setIdentifier('daiso2014'); setPassword('123456'); }}
-                    className="p-1.5 bg-white rounded-lg border border-slate-200 hover:border-purple-300 cursor-pointer transition-colors"
-                    title="Bấm để điền nhanh"
-                  >
-                    <span className="font-bold text-purple-700">⭐ Admin daiso:</span> <code className="bg-slate-100 px-1 rounded font-mono">daiso2014</code>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-1 text-center text-[11px] text-slate-500">
+              <div className="pt-2 text-center text-[11px] text-slate-500">
                 Chưa có tài khoản?{' '}
                 <button
                   type="button"
                   onClick={() => setActiveTab('register')}
                   className="font-bold text-emerald-600 hover:text-emerald-700 underline cursor-pointer"
                 >
-                  Đăng ký Học sinh ngay
+                  Đăng ký ngay
                 </button>
               </div>
             </form>
           )}
 
-          {/* Form 2: STUDENT SELF-REGISTRATION */}
+          {/* Form 2: SELF-REGISTRATION */}
           {activeTab === 'register' && (
             <form onSubmit={handleRegisterSubmit} className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Họ và tên học sinh: *
+                  Họ và tên: *
                 </label>
                 <input
                   type="text"
@@ -323,7 +285,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Lớp học: *
+                    Lớp / Nhóm: *
                   </label>
                   <select
                     value={regClass}
@@ -376,7 +338,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                 className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>{isLoading ? 'Đang đăng ký...' : 'Đăng ký tài khoản & Vào thi'}</span>
+                <span>{isLoading ? 'Đang đăng ký...' : 'Đăng ký tài khoản'}</span>
               </button>
 
               <div className="pt-2 text-center text-[11px] text-slate-500">

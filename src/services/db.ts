@@ -685,15 +685,16 @@ export async function getClasses(): Promise<SchoolClass[]> {
       classes.forEach(c => map.set(c.id, c));
     }
 
-    const result = Array.from(map.values()).filter(c => !deletedIds.includes(c.id));
+    let result = Array.from(map.values()).filter(c => !deletedIds.includes(c.id));
+    if (result.length === 0) {
+      result = getDefaultClasses().filter(c => !deletedIds.includes(c.id));
+    }
     saveLocalClasses(result);
     return result;
   } catch (err) {
     console.warn('Lấy danh sách lớp note:', err);
-    if (localList.length > 0) {
-      return localList.filter(c => !deletedIds.includes(c.id));
-    }
-    return getDefaultClasses().filter(c => !deletedIds.includes(c.id));
+    const fallback = (localList.length > 0 ? localList : getDefaultClasses()).filter(c => !deletedIds.includes(c.id));
+    return fallback.length > 0 ? fallback : getDefaultClasses().filter(c => !deletedIds.includes(c.id));
   }
 }
 
@@ -766,15 +767,16 @@ export async function getSubjects(): Promise<Subject[]> {
       subjects.forEach(s => map.set(s.id, s));
     }
 
-    const result = Array.from(map.values()).filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.code));
+    let result = Array.from(map.values()).filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.code));
+    if (result.length === 0) {
+      result = getDefaultSubjects();
+    }
     saveLocalSubjects(result);
     return result;
   } catch (err) {
     console.warn('Lấy môn học note:', err);
-    if (localList.length > 0) {
-      return localList.filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.code));
-    }
-    return getDefaultSubjects().filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.code));
+    const fallback = (localList.length > 0 ? localList : getDefaultSubjects()).filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.code));
+    return fallback.length > 0 ? fallback : getDefaultSubjects();
   }
 }
 
@@ -1612,6 +1614,29 @@ export async function checkAndSeedInitialData(): Promise<void> {
         } catch (e) {
           // non-blocking
         }
+      }
+    }
+
+    // Ensure standard subjects exist in Firestore
+    const deletedSubIds = getDeletedSubjectIds();
+    const defaultSubs = getDefaultSubjects();
+    for (const sub of defaultSubs) {
+      if (!deletedSubIds.includes(sub.id) && !deletedSubIds.includes(sub.code)) {
+        try {
+          await setDoc(doc(db, 'subjects', sub.id), sanitizeForFirestore(sub), { merge: true });
+        } catch (e) {
+          // non-blocking
+        }
+      }
+    }
+
+    // Ensure standard classes exist in Firestore
+    const defaultClasses = getDefaultClasses().filter(c => c.name !== '6A1' && c.id !== 'c_6a' && c.id !== '6A1');
+    for (const cls of defaultClasses) {
+      try {
+        await setDoc(doc(db, 'classes', cls.id), sanitizeForFirestore(cls), { merge: true });
+      } catch (e) {
+        // non-blocking
       }
     }
 

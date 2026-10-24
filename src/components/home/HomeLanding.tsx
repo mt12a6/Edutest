@@ -38,6 +38,7 @@ interface HomeLandingProps {
   onSelectExamToTake?: (exam: Exam, questions: Question[]) => void;
   onEditExam?: (exam: Exam) => void;
   onDeleteExam?: (exam: Exam) => void;
+  onRefreshExams?: () => void;
 }
 
 export const HomeLanding: React.FC<HomeLandingProps> = ({
@@ -48,10 +49,20 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   onOpenWordUpload,
   onSelectExamToTake,
   onEditExam,
-  onDeleteExam
+  onDeleteExam,
+  onRefreshExams
 }) => {
 
   const { user, profile, activeRole, isTeacher, isAdmin, loginWithGoogle, loginAsDemoRole } = useAuth();
+
+  // Helper to determine if current user can pin this exam
+  const canPin = (exam: Exam) => Boolean(
+    isAdmin || 
+    isTeacher || 
+    (user && (exam.createdBy === user.uid || exam.createdBy === profile?.id)) ||
+    (profile && exam.createdByName === profile.displayName) ||
+    (profile?.role === 'teacher' || profile?.role === 'admin')
+  );
 
   // Free trial code search state
   const [trialCodeInput, setTrialCodeInput] = useState<string>('');
@@ -99,7 +110,8 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
       const nextPin = !exam.isPinned;
       await togglePinExam(exam.id, nextPin);
       exam.isPinned = nextPin;
-      setPinActionSuccess(`Đã ${nextPin ? 'ghim đề thi lên đầu' : 'bỏ ghim đề thi'}: "${exam.title}"`);
+      setPinActionSuccess(`Đã ${nextPin ? 'ghim đề thi lên đầu Trang chủ' : 'bỏ ghim đề thi'}: "${exam.title}"`);
+      if (onRefreshExams) onRefreshExams();
       setTimeout(() => setPinActionSuccess(null), 3000);
     } catch (err) {
       console.error('Lỗi khi ghim đề thi:', err);
@@ -356,7 +368,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                         </span>
                       </div>
 
-                      {(isAdmin || isTeacher) && (
+                      {canPin(exam) && (
                         <button
                           type="button"
                           onClick={(e) => handleTogglePin(exam, e)}
@@ -433,10 +445,27 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                       Khối {exam.grade} • {exam.subjectName}
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                      Đang mở thi
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {canPin(exam) && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleTogglePin(exam, e)}
+                          className={`p-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
+                            exam.isPinned 
+                              ? 'text-amber-700 bg-amber-100 hover:bg-amber-200' 
+                              : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
+                          }`}
+                          title={exam.isPinned ? "Bỏ ghim đề thi" : "Ghim đề thi lên đầu Trang chủ"}
+                        >
+                          <Pin className={`w-3.5 h-3.5 ${exam.isPinned ? 'fill-amber-500 text-amber-500' : ''}`} />
+                          <span className="text-[10px]">{exam.isPinned ? 'Đã ghim' : 'Ghim'}</span>
+                        </button>
+                      )}
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                        Đang mở thi
+                      </span>
+                    </div>
                   </div>
 
                   <h3 className="font-bold text-sm text-slate-900 line-clamp-2 leading-snug">
@@ -596,7 +625,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
                   {/* Edit, Delete, Pin action buttons for free practice exams */}
                   <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-dashed border-slate-100">
-                    {(isAdmin || isTeacher) && (
+                    {canPin(exam) && (
                       <button
                         type="button"
                         onClick={(e) => handleTogglePin(exam, e)}

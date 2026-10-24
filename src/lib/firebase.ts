@@ -12,16 +12,15 @@ export const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || fileConfig.messagingSenderId,
   appId: import.meta.env.VITE_FIREBASE_APP_ID || fileConfig.appId,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || fileConfig.measurementId,
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || (fileConfig as any).firestoreDatabaseId || ''
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || (fileConfig as any).firestoreDatabaseId || 'ai-studio-386028a1-6798-4f45-8bc3-5d3485253eed'
 };
 
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore: connect to (default) unless a custom valid database ID is provided
-const rawDbId = firebaseConfig.firestoreDatabaseId;
-const targetDatabaseId = (rawDbId && !rawDbId.startsWith('ai-studio-')) ? rawDbId : undefined;
-export const db = targetDatabaseId 
+// Initialize Firestore: connect to the provisioned database ID
+const targetDatabaseId = firebaseConfig.firestoreDatabaseId || 'ai-studio-386028a1-6798-4f45-8bc3-5d3485253eed';
+export const db = (targetDatabaseId && targetDatabaseId !== '(default)')
   ? getFirestore(app, targetDatabaseId) 
   : getFirestore(app);
 
