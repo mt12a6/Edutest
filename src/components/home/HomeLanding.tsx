@@ -77,28 +77,32 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   const totalClasses = classes.length;
   const estimatedStudents = classes.reduce((sum, c) => sum + (c.studentCount || 35), 0);
 
+  // Helper to check if current user is staff or creator of exam
+  const isStaffOrAuthor = (e: Exam) => {
+    if (isAdmin || isTeacher) return true;
+    if (user && (user.uid === e.createdBy || profile?.displayName === e.createdByName)) return true;
+    return false;
+  };
+
   // Filter public trial exams vs secure confidential exams:
-  // - Public trial exams: isTrial === true OR (!isSecure && isPublished)
-  // - Confidential exams: isSecure === true (only visible when user is logged in)
+  // - Published exams are visible to all
+  // - Draft exams are visible to teachers, admins, and the creator so they never "disappear" after saving
   const trialExams = exams.filter(e => {
-    if (!e.isPublished) return false;
-    // If not logged in, exclude confidential/secure exams
-    if (!user && e.isSecure) return false;
+    if (!e.isPublished && !isStaffOrAuthor(e)) return false;
     if (selectedGradeFilter !== 'all' && e.grade !== selectedGradeFilter) return false;
     return true;
   });
 
   // Upcoming exams (Scheduled start time in the future or currently active)
   const upcomingExams = exams.filter(e => {
-    if (!e.isPublished) return false;
-    if (!user && e.isSecure) return false;
+    if (!e.isPublished && !isStaffOrAuthor(e)) return false;
     return true;
   }).slice(0, 4);
 
   // Pinned required exams for students:
   const pinnedExams = exams.filter(e => {
-    if (!e.isPublished || !e.isPinned) return false;
-    if (!user && e.isSecure) return false;
+    if (!e.isPinned) return false;
+    if (!e.isPublished && !isStaffOrAuthor(e)) return false;
     return true;
   });
 
@@ -366,6 +370,16 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
                           Khối {exam.grade} • {exam.subjectName}
                         </span>
+                        {!exam.isPublished && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                            📝 Bản nháp
+                          </span>
+                        )}
+                        {exam.isSecure && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            🔒 Đề chính thức
+                          </span>
+                        )}
                       </div>
 
                       {canPin(exam) && (
@@ -563,6 +577,19 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
           </div>
         </div>
 
+        {selectedGradeFilter !== 'all' && (
+          <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between animate-in fade-in">
+            <span>Đang lọc hiển thị đề thi của <strong>Khối {selectedGradeFilter}</strong> ({trialExams.length} đề thi phù hợp)</span>
+            <button
+              type="button"
+              onClick={() => setSelectedGradeFilter('all')}
+              className="font-bold text-emerald-700 hover:underline cursor-pointer"
+            >
+              ✕ Bỏ lọc / Xem tất cả các khối
+            </button>
+          </div>
+        )}
+
         {/* Trial Exams Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {trialExams.map((exam) => {
@@ -570,13 +597,29 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
             return (
               <div 
                 key={exam.id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all flex flex-col justify-between"
+                className={`bg-white rounded-2xl border p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between ${
+                  exam.isPinned 
+                    ? 'border-amber-300 ring-1 ring-amber-200' 
+                    : 'border-slate-200 hover:border-emerald-300'
+                }`}
               >
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Khối {exam.grade} • {exam.subjectName}
-                    </span>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        Khối {exam.grade} • {exam.subjectName}
+                      </span>
+                      {!exam.isPublished && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                          📝 Bản nháp
+                        </span>
+                      )}
+                      {exam.isSecure && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          🔒 Đề chính thức
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
                       Mã: {exam.trialCode || `EDUTEST-${exam.grade}`}
                     </span>
@@ -608,10 +651,20 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
                 <div className="pt-4 border-t border-slate-100 mt-4 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Miễn phí / Tự do
-                    </span>
+                    {exam.isSecure && !user ? (
+                      <span className="text-[11px] font-bold text-indigo-700 flex items-center gap-1">
+                        🔒 Đề bảo mật (Cần đăng nhập)
+                      </span>
+                    ) : !exam.isPublished ? (
+                      <span className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
+                        📝 Bản nháp (Chưa mở thi)
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Miễn phí / Tự do
+                      </span>
+                    )}
 
                     <button
                       onClick={() => handleTakeTrialExam(exam)}
@@ -619,7 +672,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                       className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
                       <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>{isLoadingThis ? 'Đang mở đề...' : 'Vào thi ngay'}</span>
+                      <span>{isLoadingThis ? 'Đang mở đề...' : (exam.isSecure && !user ? 'Đăng nhập để thi' : 'Vào thi ngay')}</span>
                     </button>
                   </div>
 

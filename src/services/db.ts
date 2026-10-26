@@ -817,20 +817,45 @@ export async function getExams(): Promise<Exam[]> {
   const collectionPath = 'exams';
   const localExams = getLocalExams();
   const deletedIds = getDeletedExamIds();
+  const excludedClasses = ['6A1', 'c_6a'];
+
   try {
     const snap = await getDocs(collection(db, collectionPath));
     const firestoreExams = snap.docs.map(d => ({ ...d.data(), id: d.id } as Exam));
     
-    // Merge local and firestore exams
+    // Server authoritative map
     const mergedMap = new Map<string, Exam>();
-    localExams.forEach(e => mergedMap.set(e.id, e));
-    firestoreExams.forEach(e => mergedMap.set(e.id, e));
-    const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
+    
+    // 1. Put Firestore exams into map (Server Authority)
+    firestoreExams.forEach(e => {
+      if (!deletedIds.includes(e.id)) {
+        mergedMap.set(e.id, e);
+      }
+    });
+
+    // 2. If Firestore is empty (e.g. offline or brand new), fallback to local
+    if (firestoreExams.length === 0) {
+      localExams.forEach(e => {
+        if (!deletedIds.includes(e.id)) {
+          mergedMap.set(e.id, e);
+        }
+      });
+    } else {
+      // Keep any local exam created very recently (within 15 mins) that is waiting to sync
+      const recentThreshold = Date.now() - 15 * 60 * 1000;
+      localExams.forEach(e => {
+        const createdMs = new Date(e.createdAt || 0).getTime();
+        if (!mergedMap.has(e.id) && !deletedIds.includes(e.id) && createdMs > recentThreshold) {
+          mergedMap.set(e.id, e);
+        }
+      });
+    }
+
     const list = Array.from(mergedMap.values())
       .filter(e => !deletedIds.includes(e.id))
       .map(e => {
         if (!e.classIds || e.classIds.length === 0) return { ...e, classIds: [] };
-        const filteredClasses = e.classIds.filter(c => !dummyClasses.includes(c));
+        const filteredClasses = e.classIds.filter(c => !excludedClasses.includes(c));
         return {
           ...e,
           classIds: filteredClasses
@@ -845,12 +870,11 @@ export async function getExams(): Promise<Exam[]> {
     });
   } catch (err) {
     console.warn('Lấy danh sách đề thi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
-    const dummyClasses = ['6A1', '7A1', '8A1', 'c_6a', 'c_7a', 'c_8a'];
     return localExams
       .filter(e => !deletedIds.includes(e.id))
       .map(e => ({
         ...e,
-        classIds: (e.classIds || []).filter(c => !dummyClasses.includes(c))
+        classIds: (e.classIds || []).filter(c => !excludedClasses.includes(c))
       }))
       .sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
@@ -985,12 +1009,7 @@ export async function updateExamWithQuestions(
 }
 
 export async function getExamQuestions(examId: string): Promise<Question[]> {
-  // Check local questions cache first
   const localMap = getLocalQuestionsMap();
-  if (localMap[examId] && localMap[examId].length > 0) {
-    return localMap[examId];
-  }
-
   const path = `exams/${examId}/questions`;
   try {
     const snap = await getDocs(collection(db, path));
@@ -998,12 +1017,13 @@ export async function getExamQuestions(examId: string): Promise<Question[]> {
     const sorted = list.sort((a, b) => a.questionNumber - b.questionNumber);
     if (sorted.length > 0) {
       saveLocalQuestions(examId, sorted);
+      return sorted;
     }
-    return sorted;
   } catch (err) {
-    console.warn('Lấy câu hỏi từ Firestore thất bại:', err);
-    return localMap[examId] || [];
+    console.warn('Lấy câu hỏi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
   }
+
+  return localMap[examId] || [];
 }
 
 export async function toggleExamPublish(examId: string, isPublished: boolean): Promise<void> {

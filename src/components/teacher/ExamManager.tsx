@@ -67,10 +67,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 }) => {
   const { user } = useAuth();
   
-  // Teacher teaching scope
+  // Teacher teaching scope (defaults to false so all teacher exams are visible by default)
   const [teacherScope, setTeacherScope] = useState<TeacherScopeConfig>(getTeacherScope());
   const [showScopeModal, setShowScopeModal] = useState<boolean>(false);
-  const [onlyTeachingScope, setOnlyTeachingScope] = useState<boolean>(teacherScope.enabled);
+  const [onlyTeachingScope, setOnlyTeachingScope] = useState<boolean>(false);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
