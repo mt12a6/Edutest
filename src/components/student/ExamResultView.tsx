@@ -350,8 +350,17 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
                             }`}>
                               {key}
                             </span>
-                            <div>
+                            <div className="space-y-1">
                               <MathRenderer content={text} inline />
+                              {q.optionImages?.[key] && (
+                                <div>
+                                  <img 
+                                    src={q.optionImages[key]} 
+                                    alt={`Hình phương án ${key}`} 
+                                    className="max-h-24 max-w-xs rounded border border-slate-200 object-contain bg-white mt-1"
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
 

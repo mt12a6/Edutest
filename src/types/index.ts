@@ -174,6 +174,8 @@ export interface ExamResult {
   // Essay grading fields
   status?: 'completed' | 'pending_essay_grading';
   hasEssay?: boolean;
+  objectiveScore?: number;
+  hasEssayGraded?: boolean;
   essayScore?: number;
   essayFeedback?: string;
   isAiGraded?: boolean;

@@ -467,6 +467,25 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
     reader.readAsDataURL(imgFile);
   };
 
+  // Handle uploading option image (A, B, C, D)
+  const handleOptionImageUpload = (qIndex: number, optKey: 'A' | 'B' | 'C' | 'D', e: React.ChangeEvent<HTMLInputElement>) => {
+    const imgFile = e.target.files?.[0];
+    if (!imgFile) return;
+
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      const currentQ = parsedQuestions[qIndex];
+      const optImgs = { ...(currentQ.optionImages || {}) };
+      optImgs[optKey] = dataUrl;
+      handleUpdateQuestion(qIndex, {
+        ...currentQ,
+        optionImages: optImgs
+      });
+    };
+    reader.readAsDataURL(imgFile);
+  };
+
   // Final submit to database (supports draft vs publish override)
   const handleSaveExam = async (publishOverride?: boolean) => {
     setValidationError(null);
@@ -557,19 +576,35 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         createdByName: initialExam?.createdByName || profile?.displayName || user?.email || 'Giáo viên'
       };
 
-      const questionsToSave = sanitizedQuestions.map(q => ({
-        questionNumber: q.questionNumber,
-        type: q.type || 'multiple_choice',
-        prompt: q.prompt,
-        imageUrl: q.imageUrl || undefined,
-        options: q.options || undefined,
-        correctOption: q.correctOption,
-        subQuestions: q.subQuestions || undefined,
-        acceptableAnswers: q.acceptableAnswers || undefined,
-        sampleAnswer: q.sampleAnswer,
-        explanation: q.explanation || '',
-        points: q.points || 1
-      }));
+      const questionsToSave = sanitizedQuestions.map(q => {
+        const item: any = {
+          questionNumber: q.questionNumber,
+          type: q.type || 'multiple_choice',
+          prompt: q.prompt,
+          correctOption: q.correctOption,
+          explanation: q.explanation || '',
+          points: q.points || 1
+        };
+        if (q.imageUrl && q.imageUrl.trim()) {
+          item.imageUrl = q.imageUrl.trim();
+        }
+        if (q.options) {
+          item.options = q.options;
+        }
+        if (q.optionImages && Object.values(q.optionImages).some(img => !!img)) {
+          item.optionImages = q.optionImages;
+        }
+        if (q.subQuestions) {
+          item.subQuestions = q.subQuestions;
+        }
+        if (q.acceptableAnswers) {
+          item.acceptableAnswers = q.acceptableAnswers;
+        }
+        if (q.sampleAnswer) {
+          item.sampleAnswer = q.sampleAnswer;
+        }
+        return item;
+      });
 
       let savedExamId = initialExam?.id;
 
@@ -1050,22 +1085,39 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                           {q.imageUrl && (
                             <button
                               type="button"
-                              onClick={() => handleUpdateQuestion(index, { ...q, imageUrl: undefined })}
-                              className="text-[10px] text-rose-600 hover:underline cursor-pointer"
+                              onClick={() => {
+                                const copy = { ...q };
+                                delete copy.imageUrl;
+                                handleUpdateQuestion(index, copy);
+                              }}
+                              className="text-[10px] text-rose-600 font-semibold hover:underline cursor-pointer"
                             >
-                              Xóa ảnh
+                              ✕ Xóa ảnh này
                             </button>
                           )}
                         </div>
 
                         {q.imageUrl ? (
-                          <div className="p-2 border border-slate-200 rounded-xl bg-slate-50 flex items-center gap-4">
-                            <img 
-                              src={q.imageUrl} 
-                              alt="Minh họa" 
-                              className="max-h-24 max-w-xs rounded-lg border object-contain bg-white" 
-                            />
-                            <span className="text-[11px] text-slate-500">Đã gắn hình ảnh minh họa cho câu hỏi</span>
+                          <div className="p-2 border border-slate-200 rounded-xl bg-slate-50 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <img 
+                                src={q.imageUrl} 
+                                alt="Minh họa" 
+                                className="max-h-24 max-w-xs rounded-lg border object-contain bg-white" 
+                              />
+                              <span className="text-[11px] text-slate-500">Đã gắn hình ảnh minh họa cho câu hỏi</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copy = { ...q };
+                                delete copy.imageUrl;
+                                handleUpdateQuestion(index, copy);
+                              }}
+                              className="px-2.5 py-1 text-xs bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg font-medium cursor-pointer"
+                            >
+                              Xóa ảnh
+                            </button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-3">
@@ -1100,43 +1152,95 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                       {qType === 'multiple_choice' && (
                         <div className="space-y-2">
                           <label className="block text-[11px] font-semibold text-slate-500">
-                            Các phương án lựa chọn (Click vào chữ cái để chọn đáp án đúng):
+                            Các phương án lựa chọn (Click vào chữ cái để chọn đáp án đúng; hỗ trợ nhập LaTeX và đính kèm ảnh cho từng phương án):
                           </label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {(['A', 'B', 'C', 'D'] as const).map((optKey) => {
                               const isCorrect = q.correctOption === optKey;
                               const currentOptions = q.options || { A: '', B: '', C: '', D: '' };
+                              const currentOptImages = q.optionImages || {};
+                              const hasOptImg = !!currentOptImages[optKey];
+                              const optVal = currentOptions[optKey] || '';
+
                               return (
                                 <div 
                                   key={optKey}
-                                  className={`flex items-center gap-2 p-2.5 rounded-xl border transition-all ${
+                                  className={`p-2.5 rounded-xl border transition-all space-y-2 ${
                                     isCorrect 
-                                      ? 'bg-emerald-50 border-emerald-400 ring-1 ring-emerald-400' 
-                                      : 'bg-slate-50 border-slate-200'
+                                      ? 'bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-400' 
+                                      : 'bg-slate-50/70 border-slate-200'
                                   }`}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateQuestion(index, { ...q, correctOption: optKey })}
-                                    className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer transition-all ${
-                                      isCorrect 
-                                        ? 'bg-emerald-600 text-white shadow-xs' 
-                                        : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-500'
-                                    }`}
-                                    title={`Chọn ${optKey} làm đáp án đúng`}
-                                  >
-                                    {optKey}
-                                  </button>
-                                  <input
-                                    type="text"
-                                    value={currentOptions[optKey] || ''}
-                                    onChange={(e) => handleUpdateQuestion(index, {
-                                      ...q,
-                                      options: { ...currentOptions, [optKey]: e.target.value }
-                                    })}
-                                    placeholder={`Phương án ${optKey}...`}
-                                    className="w-full text-xs text-slate-800 bg-transparent border-none focus:outline-hidden"
-                                  />
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateQuestion(index, { ...q, correctOption: optKey })}
+                                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 cursor-pointer transition-all ${
+                                        isCorrect 
+                                          ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300' 
+                                          : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-500'
+                                      }`}
+                                      title={`Chọn ${optKey} làm đáp án đúng`}
+                                    >
+                                      {optKey}
+                                    </button>
+                                    <input
+                                      type="text"
+                                      value={optVal}
+                                      onChange={(e) => handleUpdateQuestion(index, {
+                                        ...q,
+                                        options: { ...currentOptions, [optKey]: e.target.value }
+                                      })}
+                                      placeholder={`Nhập phương án ${optKey}... (hỗ trợ $công thức$)`}
+                                      className="w-full text-xs text-slate-800 bg-transparent border-none focus:outline-hidden font-mono"
+                                    />
+                                    {/* Option image upload button */}
+                                    <label 
+                                      title={`Thêm hình ảnh cho phương án ${optKey}`}
+                                      className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-white cursor-pointer transition-colors shrink-0"
+                                    >
+                                      <ImageIcon className="w-3.5 h-3.5" />
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => handleOptionImageUpload(index, optKey, e)}
+                                        className="hidden"
+                                      />
+                                    </label>
+                                  </div>
+
+                                  {/* Live KaTeX Preview for Option if contains formula or text */}
+                                  {optVal.trim() && (
+                                    <div className="px-2 py-1 bg-white rounded-lg border border-slate-200/80 text-[11px] text-slate-700 flex items-center gap-1.5 overflow-x-auto">
+                                      <span className="text-[9px] font-bold text-slate-400 shrink-0">Hiển thị:</span>
+                                      <MathRenderer content={optVal} />
+                                    </div>
+                                  )}
+
+                                  {/* Attached image preview for this option */}
+                                  {hasOptImg && (
+                                    <div className="p-1.5 bg-white rounded-lg border border-slate-200 flex items-center justify-between gap-2">
+                                      <img 
+                                        src={currentOptImages[optKey]} 
+                                        alt={`Hình phương án ${optKey}`} 
+                                        className="max-h-16 max-w-full rounded object-contain"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nextOptImgs = { ...currentOptImages };
+                                          delete nextOptImgs[optKey];
+                                          handleUpdateQuestion(index, {
+                                            ...q,
+                                            optionImages: nextOptImgs
+                                          });
+                                        }}
+                                        className="text-[10px] text-rose-600 hover:bg-rose-50 px-2 py-1 rounded cursor-pointer shrink-0 font-medium"
+                                      >
+                                        Gỡ ảnh
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}

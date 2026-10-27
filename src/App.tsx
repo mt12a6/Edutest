@@ -18,6 +18,7 @@ import { ExamResultView } from './components/student/ExamResultView';
 import { UserManager } from './components/admin/UserManager';
 import { ClassSubjectManager } from './components/admin/ClassSubjectManager';
 import { SystemAuditLogs } from './components/admin/SystemAuditLogs';
+import { BackupRestoreManager } from './components/admin/BackupRestoreManager';
 import { 
   Exam, 
   SchoolClass, 
@@ -319,6 +320,8 @@ function MainApp() {
             />
           ) : currentTab === 'admin-logs' ? (
             <SystemAuditLogs />
+          ) : currentTab === 'admin-backup' ? (
+            <BackupRestoreManager />
           ) : (
             <HomeLanding
               exams={exams}
@@ -332,11 +335,15 @@ function MainApp() {
               onSelectExamToTake={(exam, questions) => {
                 setLobbyExam({ exam, questions });
               }}
+              onDirectStartExam={(exam, questions, attempt) => {
+                setActiveTakingSession({ exam, questions, attempt });
+              }}
               onEditExam={handleStartEditExam}
               onDeleteExam={async (exam) => {
                 await deleteExam(exam.id);
                 reloadData();
               }}
+              onRefreshExams={reloadData}
             />
 
           )}

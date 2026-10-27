@@ -999,7 +999,7 @@ export async function updateExamWithQuestions(
       const batch = writeBatch(db);
       fullQuestions.forEach(fq => {
         const qRef = doc(db, `exams/${examId}/questions`, fq.id);
-        batch.set(qRef, sanitizeForFirestore(fq), { merge: true });
+        batch.set(qRef, sanitizeForFirestore(fq));
       });
       await batch.commit();
     }
@@ -1453,38 +1453,22 @@ export async function gradeEssaySubmission(
   const maxScale = targetResult.maxScore || 10;
   const answers = targetResult.answers || {};
 
-  let totalPoints = 0;
-  let objectiveEarnedPoints = 0;
+  // Base objective score preservation
+  const baseObjectiveScore = targetResult.objectiveScore !== undefined 
+    ? targetResult.objectiveScore 
+    : (targetResult.hasEssayGraded 
+        ? Math.max(0, Number(((targetResult.score || 0) - (targetResult.essayScore || 0)).toFixed(2)))
+        : (targetResult.score || 0));
 
-  questions.forEach(q => {
-    const qWeight = q.points || 1;
-    totalPoints += qWeight;
-    const qType = q.type || 'multiple_choice';
-    const studentAns = answers[q.id];
-
-    if (qType === 'multiple_choice') {
-      if (isMultipleChoiceCorrect(studentAns, q.correctOption, q.options)) {
-        objectiveEarnedPoints += qWeight;
-      }
-    } else if (qType === 'true_false') {
-      const { earnedPoints: tfEarned } = evaluateTrueFalseQuestion(studentAns, q.subQuestions, qWeight);
-      objectiveEarnedPoints += tfEarned;
-    } else if (qType === 'fill_blank') {
-      if (isFillBlankCorrect(studentAns, q.acceptableAnswers, q.correctOption, q.sampleAnswer)) {
-        objectiveEarnedPoints += qWeight;
-      }
-    }
-  });
-
-  const totalEarnedPoints = objectiveEarnedPoints + essayScore;
-  const updatedScore = totalPoints > 0 
-    ? Math.min(maxScale, Number(((totalEarnedPoints / totalPoints) * maxScale).toFixed(2)))
-    : Number(essayScore.toFixed(2));
+  // Cumulative score: objective score + teacher's essay points
+  const updatedScore = Math.min(maxScale, Number((baseObjectiveScore + essayScore).toFixed(2)));
   const percentage = Math.min(100, Math.round((updatedScore / maxScale) * 100));
 
   const updated: ExamResult = {
     ...targetResult,
     score: updatedScore,
+    objectiveScore: baseObjectiveScore,
+    hasEssayGraded: true,
     percentage,
     status: 'completed',
     hasEssay: true,
@@ -1521,8 +1505,23 @@ export async function getAllResults(): Promise<ExamResult[]> {
     const snap = await getDocs(collection(db, 'results'));
     const firestoreResults = snap.docs.map(d => ({ ...d.data(), id: d.id } as ExamResult));
     const mergedMap = new Map<string, ExamResult>();
+    
+    // Seed with local results
     local.forEach(r => mergedMap.set(r.id, r));
-    firestoreResults.forEach(r => mergedMap.set(r.id, r));
+
+    // Merge firestore results carefully: keep local version if it has fresher grading info
+    firestoreResults.forEach(r => {
+      const existing = mergedMap.get(r.id);
+      if (!existing) {
+        mergedMap.set(r.id, r);
+      } else {
+        const localGradeTime = new Date(existing.essayGradedAt || existing.submittedAt || 0).getTime();
+        const firestoreGradeTime = new Date(r.essayGradedAt || r.submittedAt || 0).getTime();
+        if (firestoreGradeTime >= localGradeTime) {
+          mergedMap.set(r.id, r);
+        }
+      }
+    });
     return Array.from(mergedMap.values());
   } catch {
     return local;
@@ -2876,4 +2875,199 @@ function seedSampleResults() {
   } catch (e) {
     console.warn('Seed results local note:', e);
   }
+}
+
+// ==================== BACKUP & RESTORE DATA ====================
+
+export interface EduTestBackupPayload {
+  version: string;
+  exportedAt: string;
+  source: string;
+  data: {
+    exams: Exam[];
+    questions: Record<string, Question[]>;
+    results: ExamResult[];
+    classes: SchoolClass[];
+    subjects: Subject[];
+    users: UserProfile[];
+  };
+}
+
+export async function exportBackupData(): Promise<EduTestBackupPayload> {
+  const exams = await getExams();
+  const classes = await getClasses();
+  const subjects = await getSubjects();
+  const results = await getAllResults();
+  const users = await getAllUsers();
+
+  const questionsMap: Record<string, Question[]> = {};
+  for (const ex of exams) {
+    try {
+      const qList = await getExamQuestions(ex.id);
+      if (qList && qList.length > 0) {
+        questionsMap[ex.id] = qList;
+      }
+    } catch {
+      // skip individual error
+    }
+  }
+
+  return {
+    version: '2.0.0',
+    exportedAt: new Date().toISOString(),
+    source: 'EduTest Online Examination System',
+    data: {
+      exams,
+      questions: questionsMap,
+      results,
+      classes,
+      subjects,
+      users
+    }
+  };
+}
+
+export async function restoreBackupData(payload: EduTestBackupPayload): Promise<{
+  success: boolean;
+  message: string;
+  stats: {
+    examsCount: number;
+    questionsCount: number;
+    resultsCount: number;
+    classesCount: number;
+    subjectsCount: number;
+    usersCount: number;
+  };
+}> {
+  if (!payload || !payload.data) {
+    throw new Error('Định dạng tệp sao lưu không hợp lệ. Thiếu trường "data".');
+  }
+
+  const { exams = [], questions = {}, results = [], classes = [], subjects = [], users = [] } = payload.data;
+
+  // 1. Restore Classes
+  if (classes.length > 0) {
+    const currentClasses = getLocalClasses();
+    const classMap = new Map<string, SchoolClass>();
+    currentClasses.forEach(c => classMap.set(c.id, c));
+    classes.forEach(c => classMap.set(c.id, c));
+    saveLocalClasses(Array.from(classMap.values()));
+
+    for (const c of classes) {
+      try {
+        await setDoc(doc(db, 'classes', c.id), sanitizeForFirestore(c), { merge: true });
+      } catch (e) {
+        // ignore individual
+      }
+    }
+  }
+
+  // 2. Restore Subjects
+  if (subjects.length > 0) {
+    const currentSubs = getLocalSubjects();
+    const subMap = new Map<string, Subject>();
+    currentSubs.forEach(s => subMap.set(s.id, s));
+    subjects.forEach(s => subMap.set(s.id, s));
+    saveLocalSubjects(Array.from(subMap.values()));
+
+    for (const s of subjects) {
+      try {
+        await setDoc(doc(db, 'subjects', s.id), sanitizeForFirestore(s), { merge: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  // 3. Restore Users
+  if (users.length > 0) {
+    const currentUsers = getLocalUsers();
+    const uMap = new Map<string, UserProfile>();
+    currentUsers.forEach(u => uMap.set(u.id, u));
+    users.forEach(u => uMap.set(u.id, u));
+    saveLocalUsers(Array.from(uMap.values()));
+
+    for (const u of users) {
+      try {
+        await setDoc(doc(db, 'users', u.id), sanitizeForFirestore(u), { merge: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  // 4. Restore Exams & Questions
+  let totalQuestionsCount = 0;
+  if (exams.length > 0) {
+    const currentExams = getLocalExams();
+    const examMap = new Map<string, Exam>();
+    currentExams.forEach(e => examMap.set(e.id, e));
+    exams.forEach(e => examMap.set(e.id, e));
+    saveLocalExams(Array.from(examMap.values()));
+
+    for (const ex of exams) {
+      try {
+        await setDoc(doc(db, 'exams', ex.id), sanitizeForFirestore(ex), { merge: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Questions
+    const questionsObj = questions || {};
+    const localQMap = getLocalQuestionsMap();
+    for (const [examId, qList] of Object.entries(questionsObj)) {
+      if (Array.isArray(qList) && qList.length > 0) {
+        localQMap[examId] = qList;
+        totalQuestionsCount += qList.length;
+
+        try {
+          const batch = writeBatch(db);
+          qList.forEach(q => {
+            const qRef = doc(db, `exams/${examId}/questions`, q.id);
+            batch.set(qRef, sanitizeForFirestore(q));
+          });
+          await batch.commit();
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    saveLocalQuestionsMap(localQMap);
+  }
+
+  // 5. Restore Results
+  if (results.length > 0) {
+    const currentResults = getLocalResults();
+    const resMap = new Map<string, ExamResult>();
+    currentResults.forEach(r => resMap.set(r.id, r));
+    results.forEach(r => resMap.set(r.id, r));
+    const mergedResults = Array.from(resMap.values());
+    try {
+      localStorage.setItem(STORAGE_RESULTS_KEY, JSON.stringify(mergedResults));
+    } catch {
+      // ignore
+    }
+
+    for (const r of results) {
+      try {
+        await setDoc(doc(db, 'results', r.id), sanitizeForFirestore(r), { merge: true });
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Khôi phục toàn bộ cơ sở dữ liệu thành công!',
+    stats: {
+      examsCount: exams.length,
+      questionsCount: totalQuestionsCount,
+      resultsCount: results.length,
+      classesCount: classes.length,
+      subjectsCount: subjects.length,
+      usersCount: users.length
+    }
+  };
 }

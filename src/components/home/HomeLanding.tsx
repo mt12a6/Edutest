@@ -2,35 +2,31 @@ import React, { useState } from 'react';
 import { 
   BookOpen, 
   CheckCircle2, 
-  FileUp, 
   Clock, 
   BarChart3, 
   ShieldCheck, 
   Users, 
-  Award, 
   Sparkles, 
-  ArrowRight,
-  GraduationCap,
-  Play,
-  Lock,
-  Search,
-  KeyRound,
-  Calendar,
-  AlertCircle,
-  Shuffle,
-  Plus,
-  Edit3,
+  GraduationCap, 
+  Play, 
+  Lock, 
+  Search, 
+  KeyRound, 
+  Pin, 
+  QrCode, 
+  Share2, 
+  Edit3, 
   Trash2,
-  Pin,
-  QrCode,
-  Share2
+  School,
+  AlertCircle
 } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
-import { getExamQuestions, togglePinExam } from '../../services/db';
+import { getExamQuestions, togglePinExam, startOrCreateAttempt } from '../../services/db';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { ShareExamModal } from '../common/ShareExamModal';
+import { SecureExamStudentSelectModal } from '../common/SecureExamStudentSelectModal';
 
 interface HomeLandingProps {
   exams: Exam[];
@@ -42,6 +38,7 @@ interface HomeLandingProps {
   onEditExam?: (exam: Exam) => void;
   onDeleteExam?: (exam: Exam) => void;
   onRefreshExams?: () => void;
+  onDirectStartExam?: (exam: Exam, questions: Question[], attempt: any) => void;
 }
 
 export const HomeLanding: React.FC<HomeLandingProps> = ({
@@ -53,72 +50,73 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   onSelectExamToTake,
   onEditExam,
   onDeleteExam,
-  onRefreshExams
+  onRefreshExams,
+  onDirectStartExam
 }) => {
+  const { user, profile, isTeacher, isAdmin } = useAuth();
 
-  const { user, profile, activeRole, isTeacher, isAdmin, loginWithGoogle, loginAsDemoRole } = useAuth();
-
-  // Helper to determine if current user can pin this exam
-  const canPin = (exam: Exam) => Boolean(
-    isAdmin || 
-    isTeacher || 
-    (user && (exam.createdBy === user.uid || exam.createdBy === profile?.id)) ||
-    (profile && exam.createdByName === profile.displayName) ||
-    (profile?.role === 'teacher' || profile?.role === 'admin')
-  );
-
-  // Free trial code search state
-  const [trialCodeInput, setTrialCodeInput] = useState<string>('');
+  // Free trial / exam code input state
+  const [examCodeInput, setExamCodeInput] = useState<string>('');
   const [codeError, setCodeError] = useState<string | null>(null);
   const [loadingExamId, setLoadingExamId] = useState<string | null>(null);
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
   const [shareExamTarget, setShareExamTarget] = useState<Exam | null>(null);
+  const [pinActionSuccess, setPinActionSuccess] = useState<string | null>(null);
 
-  // Statistics
+  // Secure Semester Exam Student Roster Selector Modal
+  const [secureExamForRoster, setSecureExamForRoster] = useState<Exam | null>(null);
+
+  // Check if current user is an authorized teacher or admin
+  const isPrivilegedStaff = Boolean(
+    isAdmin || 
+    isTeacher || 
+    profile?.role === 'admin' || 
+    profile?.role === 'teacher'
+  );
+
+  // Determine if user can edit or delete a specific exam (Strictly prohibited for guests)
+  const canManageExam = (exam: Exam) => {
+    if (!user) return false; // Guest NEVER has permission to delete or edit
+    if (isPrivilegedStaff) return true;
+    if (exam.createdBy === user.uid || (profile && exam.createdByName === profile.displayName)) return true;
+    return false;
+  };
+
+  // Determine if user can pin an exam
+  const canPin = (exam: Exam) => {
+    return isPrivilegedStaff || (user && exam.createdBy === user.uid);
+  };
+
+  // Quick Stats
   const totalExams = exams.length;
   const activeExams = exams.filter(e => e.isPublished).length;
   const totalClasses = classes.length;
   const estimatedStudents = classes.reduce((sum, c) => sum + (c.studentCount || 35), 0);
 
-  // Helper to check if current user is staff or creator of exam
-  const isStaffOrAuthor = (e: Exam) => {
-    if (isAdmin || isTeacher) return true;
-    if (user && (user.uid === e.createdBy || profile?.displayName === e.createdByName)) return true;
-    return false;
-  };
-
-  // Filter public trial exams vs secure confidential exams:
+  // Filter exams for display:
   // - Published exams are visible to all
-  // - Draft exams are visible to teachers, admins, and the creator so they never "disappear" after saving
-  const trialExams = exams.filter(e => {
-    if (!e.isPublished && !isStaffOrAuthor(e)) return false;
+  // - Draft exams are visible only to teachers, admins, or authors
+  const visibleExams = exams.filter(e => {
+    if (!e.isPublished && !canManageExam(e)) return false;
     if (selectedGradeFilter !== 'all' && e.grade !== selectedGradeFilter) return false;
     return true;
   });
 
-  // Upcoming exams (Scheduled start time in the future or currently active)
-  const upcomingExams = exams.filter(e => {
-    if (!e.isPublished && !isStaffOrAuthor(e)) return false;
-    return true;
-  }).slice(0, 4);
+  // Pinned required exams
+  const pinnedExams = visibleExams.filter(e => Boolean(e.isPinned));
 
-  // Pinned required exams for students:
-  const pinnedExams = exams.filter(e => {
-    if (!e.isPinned) return false;
-    if (!e.isPublished && !isStaffOrAuthor(e)) return false;
-    return true;
-  });
+  // Regular practice/trial exams (not pinned)
+  const unpinnedExams = visibleExams.filter(e => !e.isPinned);
 
-  const [pinActionSuccess, setPinActionSuccess] = useState<string | null>(null);
-
+  // Handle pin toggle
   const handleTogglePin = async (exam: Exam, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     try {
       const nextPin = !exam.isPinned;
       await togglePinExam(exam.id, nextPin);
       exam.isPinned = nextPin;
-      setPinActionSuccess(`Đã ${nextPin ? 'ghim đề thi lên đầu Trang chủ' : 'bỏ ghim đề thi'}: "${exam.title}"`);
+      setPinActionSuccess(`Đã ${nextPin ? 'ghim đề thi lên đầu' : 'bỏ ghim đề thi'}: "${exam.title}"`);
       if (onRefreshExams) onRefreshExams();
       setTimeout(() => setPinActionSuccess(null), 3000);
     } catch (err) {
@@ -126,17 +124,16 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
     }
   };
 
-  // Handle entering trial code
-  const handleEnterTrialCode = async (e: React.FormEvent) => {
+  // Handle entering exam code or trial code
+  const handleEnterExamCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setCodeError(null);
-    const code = trialCodeInput.trim().toUpperCase();
+    const code = examCodeInput.trim().toUpperCase();
     if (!code) {
-      setCodeError('Vui lòng nhập mã đề thi thử.');
+      setCodeError('Vui lòng nhập mã đề thi.');
       return;
     }
 
-    // Match by trialCode or title or ID or subject code
     const matched = exams.find(ex => {
       const exCode = (ex.trialCode || '').toUpperCase();
       const exId = ex.id.toUpperCase();
@@ -145,33 +142,25 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
     });
 
     if (!matched) {
-      setCodeError(`Không tìm thấy đề thi với mã "${code}". Vui lòng thử các mã mẫu như TOAN6, THITHU-01, MATH12 hoặc chọn đề bên dưới.`);
+      setCodeError(`Không tìm thấy đề thi với mã "${code}". Vui lòng thử các mã như TOAN6, THITHU-01, MATH12 hoặc chọn từ danh sách bên dưới.`);
       return;
     }
 
+    // If it's a secure semester exam and user is guest -> Open Student Roster Picker
     if (matched.isSecure && !user) {
-      setCodeError(`Đề thi "${matched.title}" là đề thi bảo mật chính thức. Vui lòng đăng nhập để vào thi.`);
+      setSecureExamForRoster(matched);
       return;
     }
 
-    if (onSelectExamToTake) {
-      setLoadingExamId(matched.id);
-      try {
-        const qList = await getExamQuestions(matched.id);
-        onSelectExamToTake(matched, qList);
-      } catch (err) {
-        console.error('Lỗi tải câu hỏi thi thử:', err);
-        setCodeError('Không thể tải dữ liệu đề thi thử. Vui lòng thử lại.');
-      } finally {
-        setLoadingExamId(null);
-      }
-    }
+    handleTakeExam(matched);
   };
 
-  // Launch trial exam directly
-  const handleTakeTrialExam = async (exam: Exam) => {
+  // Launch exam taking
+  const handleTakeExam = async (exam: Exam) => {
+    // If it's a secure exam and student is not logged in:
+    // Open student selector modal allowing student to pick their name & class without needing login/password!
     if (exam.isSecure && !user) {
-      setCodeError(`Đề thi "${exam.title}" là đề thi bảo mật chính thức. Vui lòng đăng nhập tài khoản học sinh để vào thi.`);
+      setSecureExamForRoster(exam);
       return;
     }
 
@@ -188,200 +177,227 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
     }
   };
 
+  // Handle student selected from secure roster modal
+  const handleStudentSelectedFromRoster = async (studentInfo: {
+    id: string;
+    displayName: string;
+    email: string;
+    classId: string;
+    className: string;
+  }) => {
+    if (!secureExamForRoster) return;
+    const targetExam = secureExamForRoster;
+    setSecureExamForRoster(null);
+    setLoadingExamId(targetExam.id);
+
+    try {
+      const qList = await getExamQuestions(targetExam.id);
+      const studentProfile = {
+        id: studentInfo.id,
+        displayName: studentInfo.displayName,
+        email: studentInfo.email,
+        role: 'student' as const,
+        status: 'active' as const,
+        className: studentInfo.className,
+        classIds: [studentInfo.classId],
+        createdAt: new Date().toISOString()
+      };
+
+      const attempt = await startOrCreateAttempt(targetExam.id, studentProfile);
+      if (onDirectStartExam) {
+        onDirectStartExam(targetExam, qList, attempt);
+      } else if (onSelectExamToTake) {
+        onSelectExamToTake(targetExam, qList);
+      }
+    } catch (err) {
+      console.error('Lỗi khi vào phòng thi bảo mật:', err);
+    } finally {
+      setLoadingExamId(null);
+    }
+  };
+
   return (
-    <div className="space-y-10 pb-12 animate-in fade-in duration-300">
+    <div className="space-y-6 pb-8 animate-in fade-in duration-200">
       
-      {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white p-8 sm:p-12 shadow-xl border border-slate-800">
-        <div className="relative z-10 max-w-3xl space-y-5">
+      {/* Compact Clean Hero Section */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white p-6 sm:p-8 shadow-lg border border-slate-800">
+        <div className="relative z-10 max-w-4xl space-y-4">
           
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>EduTest v2.5 • Nền tảng quản lý & khảo thí trực tuyến thông minh</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>EduTest PRO • Hệ thống Khảo thí Trực tuyến THPT & Các Cấp</span>
+            </span>
+            {isPrivilegedStaff && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Quyền Giáo viên / Quản trị</span>
+              </span>
+            )}
           </div>
 
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight leading-tight">
-            EDUTEST – NỀN TẢNG THI TRỰC TUYẾN THÔNG MINH
-          </h1>
+          <div className="space-y-1.5">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+              HỆ THỐNG THI TRỰC TUYẾN THÔNG MINH
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed max-w-2xl">
+              Làm bài thi tự do không cần tài khoản – Tham gia thi học kỳ bảo mật chọn tên theo danh sách lớp – Chấm điểm và xem phổ điểm tức thì.
+            </p>
+          </div>
 
-          <p className="text-base sm:text-lg text-slate-300 font-medium leading-relaxed">
-            Tạo đề thi dễ dàng – Thi thử tự do không cần tài khoản – Tổ chức thi bảo mật an toàn – Báo cáo phổ điểm tức thì.
-          </p>
-
-          {/* Quick Trial Code Box on Hero */}
-          <div className="pt-2">
-            <form onSubmit={handleEnterTrialCode} className="max-w-xl">
-              <div className="flex flex-col sm:flex-row items-stretch gap-2 bg-white/10 backdrop-blur-md p-2 rounded-2xl border border-white/20">
+          {/* Code Entry Input Box */}
+          <div className="pt-1">
+            <form onSubmit={handleEnterExamCode} className="max-w-xl">
+              <div className="flex flex-col sm:flex-row items-stretch gap-2 bg-white/10 dark:bg-slate-800/40 backdrop-blur-md p-1.5 rounded-2xl border border-white/20">
                 <div className="relative flex-1 flex items-center">
                   <KeyRound className="w-4 h-4 text-emerald-400 absolute left-3" />
                   <input
                     type="text"
-                    value={trialCodeInput}
+                    value={examCodeInput}
                     onChange={(e) => {
-                      setTrialCodeInput(e.target.value);
+                      setExamCodeInput(e.target.value);
                       if (codeError) setCodeError(null);
                     }}
-                    placeholder="Nhập mã đề thi thử (VD: TOAN6, THITHU-01, MATH12...)"
-                    className="w-full pl-9 pr-3 py-2.5 bg-transparent text-white placeholder-slate-400 text-xs sm:text-sm font-semibold focus:outline-hidden"
+                    placeholder="Nhập mã đề thi (ví dụ: TOAN6, THITHU-01, HK2-TOAN12)..."
+                    className="w-full pl-9 pr-3 py-2 text-xs font-semibold text-white placeholder-slate-400 bg-transparent border-none focus:outline-hidden uppercase"
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={loadingExamId !== null}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                 >
-                  <Play className="w-4 h-4 fill-slate-950" />
-                  <span>{loadingExamId ? 'Đang mở đề...' : 'Vào thi thử ngay'}</span>
+                  <Play className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>Vào thi ngay</span>
                 </button>
               </div>
-
-              {codeError && (
-                <div className="mt-2.5 px-3 py-2 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-200 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                  <span>{codeError}</span>
-                </div>
-              )}
             </form>
-          </div>
 
-          {/* Call to action buttons */}
-          <div className="pt-2 flex flex-wrap items-center gap-3.5">
-            <button
-              onClick={() => {
-                if (onOpenWordUpload) onOpenWordUpload();
-              }}
-              className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <FileUp className="w-4 h-4" />
-              <span>Tải đề Word .docx tự động</span>
-            </button>
-
-            {isAdmin && (
-              <button
-                onClick={() => {
-                  onNavigateTab('teacher-live');
-                }}
-                className="px-5 py-3 rounded-xl bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 font-bold text-xs sm:text-sm border border-rose-500/40 transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <Play className="w-4 h-4 fill-rose-300" />
-                <span>Phòng Giám sát LIVE (Admin)</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+            {codeError && (
+              <div className="mt-2.5 p-2.5 bg-rose-500/20 border border-rose-400/40 rounded-xl text-xs text-rose-200 flex items-center gap-2 max-w-xl">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{codeError}</span>
+              </div>
             )}
-
-            <button
-              onClick={() => {
-                onNavigateTab('student-exams');
-              }}
-              className="px-5 py-3 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 font-bold text-xs sm:text-sm border border-teal-400/30 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <GraduationCap className="w-4 h-4 text-emerald-400" />
-              <span>Kỳ thi & Luyện tập</span>
-            </button>
           </div>
-        </div>
 
-        {/* Decorative background grid elements */}
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 pointer-events-none hidden lg:flex items-center justify-center">
-          <BookOpen className="w-96 h-96 text-white" />
+          {/* Quick Staff Creation Action (Only shown for Teachers & Admins) */}
+          {isPrivilegedStaff && (
+            <div className="pt-1 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onOpenWordUpload}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>+ Soạn đề thi mới</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigateTab('teacher-exams')}
+                className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Quản lý ngân hàng đề
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
-            <Users className="w-5 h-5" />
+      {/* 4 Compact Overview Stats Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Đề thi</span>
+            <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900">{estimatedStudents}+</p>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Học sinh theo dõi</p>
+          <p className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100">{totalExams}</p>
+          <p className="text-[10px] text-slate-400">Trong ngân hàng</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3">
-            <GraduationCap className="w-5 h-5" />
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Lớp học</span>
+            <GraduationCap className="w-3.5 h-3.5 text-emerald-500" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900">{totalClasses}</p>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Lớp học trực thuộc</p>
+          <p className="text-xl sm:text-2xl font-black text-emerald-600">{totalClasses}</p>
+          <p className="text-[10px] text-slate-400">Tiểu học - THPT</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
-            <BookOpen className="w-5 h-5" />
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Kỳ thi</span>
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900">{totalExams}</p>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Đề thi trong ngân hàng</p>
+          <p className="text-xl sm:text-2xl font-black text-amber-600">{activeExams}</p>
+          <p className="text-[10px] text-slate-400">Đang mở trực tuyến</p>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mb-3">
-            <Clock className="w-5 h-5" />
+        <div className="bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-400 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider">Thí sinh</span>
+            <Users className="w-3.5 h-3.5 text-teal-500" />
           </div>
-          <p className="text-2xl sm:text-3xl font-black text-slate-900">{activeExams}</p>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Kỳ thi đang diễn ra</p>
+          <p className="text-xl sm:text-2xl font-black text-teal-600">~{estimatedStudents}</p>
+          <p className="text-[10px] text-slate-400">Quy mô phục vụ</p>
         </div>
       </div>
 
-      {/* Pin Success Notification */}
+      {/* Pin Action Toast Notification */}
       {pinActionSuccess && (
-        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs flex items-center gap-2 animate-in fade-in">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-2xl text-xs flex items-center gap-2 animate-in fade-in">
           <Pin className="w-4 h-4 text-amber-600 shrink-0 fill-amber-500" />
-          <span className="font-semibold">{pinActionSuccess}</span>
+          <span className="font-bold">{pinActionSuccess}</span>
         </div>
       )}
 
-      {/* SECTION 0: ĐỀ THI ĐƯỢC GHIM (CẦN THI - BẮT BUỘC) */}
+      {/* SECTION 1: PINNED EXAMS (ĐỀ THI ĐƯỢC GHIM - BẮT BUỘC / CẦN THI) */}
       {pinnedExams.length > 0 && (
-        <div className="space-y-4 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/30 p-5 sm:p-6 rounded-3xl border-2 border-amber-300 shadow-md animate-in fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="space-y-3.5 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 p-5 rounded-3xl border-2 border-amber-300 dark:border-amber-700/60 shadow-xs">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs">
-                <Pin className="w-5 h-5 fill-slate-950" />
+              <div className="w-9 h-9 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-xs shrink-0">
+                <Pin className="w-4 h-4 fill-slate-950" />
               </div>
               <div>
-                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <h2 className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <span>Đề thi được ghim (Cần thi)</span>
-                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 shadow-2xs animate-pulse">
-                    Ưu tiên • Bắt buộc
+                  <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                    Ưu tiên làm bài
                   </span>
                 </h2>
-                <p className="text-xs text-slate-600 font-medium">
-                  Học sinh ưu tiên hoàn thành các bài thi được ghim này trước khi thời gian kết thúc.
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Học sinh ưu tiên hoàn thành các bài thi được ghim này trước khi hết hạn.
                 </p>
               </div>
             </div>
-
-            <span className="text-xs font-bold text-amber-800 bg-amber-100/80 px-3 py-1.5 rounded-xl border border-amber-300 self-start sm:self-center">
-              {pinnedExams.length} đề thi cần thi
+            <span className="text-[11px] font-bold text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/60 px-2.5 py-1 rounded-xl border border-amber-300 dark:border-amber-800">
+              {pinnedExams.length} đề thi
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
             {pinnedExams.map((exam) => {
               const isLoadingThis = loadingExamId === exam.id;
+              const hasManagePerm = canManageExam(exam);
+
               return (
                 <div 
                   key={`pinned-${exam.id}`}
-                  className="bg-white rounded-2xl border-2 border-amber-300 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                  className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-amber-300 dark:border-amber-700 p-4 shadow-xs flex flex-col justify-between space-y-3"
                 >
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
-                          <Pin className="w-3 h-3 fill-slate-950" />
+                        <span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                          <Pin className="w-2.5 h-2.5 fill-slate-950" />
                           ĐÃ GHIM
                         </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                           Khối {exam.grade} • {exam.subjectName}
                         </span>
-                        {!exam.isPublished && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                            📝 Bản nháp
-                          </span>
-                        )}
                         {exam.isSecure && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            🔒 Đề chính thức
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            🔒 Đề bảo mật
                           </span>
                         )}
                       </div>
@@ -390,55 +406,81 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleTogglePin(exam, e)}
-                          className="p-1 rounded-lg text-amber-600 hover:bg-amber-100 transition-colors cursor-pointer text-[11px] font-semibold flex items-center gap-1"
-                          title="Bỏ ghim đề thi này"
+                          className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
                         >
-                          <Pin className="w-3.5 h-3.5 fill-amber-500" />
-                          <span>Bỏ ghim</span>
+                          Bỏ ghim
                         </button>
                       )}
                     </div>
 
-                    <h3 className="font-black text-sm text-slate-900 line-clamp-2 leading-snug">
+                    <h3 className="font-black text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug">
                       {exam.title}
                     </h3>
 
-                    <div className="grid grid-cols-2 gap-2 py-2 text-xs text-slate-700 bg-amber-50/60 rounded-xl p-2.5 border border-amber-200/60">
-                      <div className="flex items-center gap-1.5 font-bold">
+                    <div className="flex items-center gap-4 text-xs font-bold text-slate-600 dark:text-slate-300 py-1">
+                      <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{exam.durationMinutes} phút</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 font-bold">
+                        {exam.durationMinutes} phút
+                      </span>
+                      <span className="flex items-center gap-1">
                         <BookOpen className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{exam.questionCount || 4} câu hỏi</span>
-                      </div>
+                        {exam.questionCount || 4} câu
+                      </span>
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-amber-100 mt-4 flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-amber-900 font-bold">
-                      {exam.classIds && exam.classIds.length > 0 ? `Lớp: ${exam.classIds.join(', ')}` : 'Tất cả các lớp'}
+                  <div className="pt-3 border-t border-amber-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-amber-900 dark:text-amber-300 font-bold truncate max-w-[130px]">
+                      {exam.classIds?.length ? `Lớp: ${exam.classIds.join(', ')}` : 'Tất cả lớp'}
                     </span>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => setShareExamTarget(exam)}
-                        className="p-2 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
-                        title="Quét mã QR và chia sẻ đề thi"
+                        className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 cursor-pointer"
+                        title="Chia sẻ & Quét mã QR"
                       >
                         <QrCode className="w-3.5 h-3.5 text-emerald-600" />
                       </button>
+
                       <button
-                        onClick={() => handleTakeTrialExam(exam)}
+                        type="button"
+                        onClick={() => handleTakeExam(exam)}
                         disabled={isLoadingThis}
-                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
-                        <Play className="w-3.5 h-3.5 fill-slate-950" />
-                        <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi ngay'}</span>
+                        <Play className="w-3 h-3 fill-slate-950" />
+                        <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi'}</span>
                       </button>
                     </div>
                   </div>
+
+                  {/* Staff Only Actions (Sửa đề / Xóa đề) */}
+                  {hasManagePerm && (
+                    <div className="flex items-center justify-end gap-1 pt-2 border-t border-dashed border-amber-100 dark:border-slate-800">
+                      {onEditExam && (
+                        <button
+                          type="button"
+                          onClick={() => onEditExam(exam)}
+                          className="px-2 py-1 rounded text-[11px] font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 cursor-pointer flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Sửa</span>
+                        </button>
+                      )}
+                      {onDeleteExam && (
+                        <button
+                          type="button"
+                          onClick={() => setExamToDelete(exam)}
+                          className="px-2 py-1 rounded text-[11px] font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Xóa</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -446,295 +488,158 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
         </div>
       )}
 
-      {/* SECTION 1: CÁC KỲ THI SẮP DIỄN RA */}
+      {/* SECTION 2: DANH SÁCH ĐỀ THI TỰ DO & KỲ THI CHÍNH THỨC */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-lg font-bold text-slate-900">
-              Các kỳ thi sắp diễn ra & Đang mở phòng
-            </h2>
-          </div>
-          <span className="text-xs text-slate-500 font-semibold hidden sm:inline">
-            Cập nhật theo thời gian thực
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {upcomingExams.map((exam) => {
-            const isLoadingThis = loadingExamId === exam.id;
-            return (
-              <div 
-                key={exam.id}
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      Khối {exam.grade} • {exam.subjectName}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      {canPin(exam) && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleTogglePin(exam, e)}
-                          className={`p-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
-                            exam.isPinned 
-                              ? 'text-amber-700 bg-amber-100 hover:bg-amber-200' 
-                              : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
-                          }`}
-                          title={exam.isPinned ? "Bỏ ghim đề thi" : "Ghim đề thi lên đầu Trang chủ"}
-                        >
-                          <Pin className={`w-3.5 h-3.5 ${exam.isPinned ? 'fill-amber-500 text-amber-500' : ''}`} />
-                          <span className="text-[10px]">{exam.isPinned ? 'Đã ghim' : 'Ghim'}</span>
-                        </button>
-                      )}
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                        Đang mở thi
-                      </span>
-                    </div>
-                  </div>
-
-                  <h3 className="font-bold text-sm text-slate-900 line-clamp-2 leading-snug">
-                    {exam.title}
-                  </h3>
-
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      {exam.durationMinutes} phút
-                    </span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                      {exam.questionCount || 4} câu
-                    </span>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 mt-3 flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 italic">
-                    {exam.classIds && exam.classIds.length > 0 ? `Lớp ${exam.classIds.join(', ')}` : 'Tất cả các lớp'}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShareExamTarget(exam)}
-                      className="p-1.5 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
-                      title="Quét mã QR và chia sẻ đề thi"
-                    >
-                      <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-                    </button>
-                    <button
-                      onClick={() => handleTakeTrialExam(exam)}
-                      disabled={isLoadingThis}
-                      className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                    >
-                      <Play className="w-3 h-3 fill-white" />
-                      <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* SECTION 2: THI THỬ TỰ DO (KHÔNG CẦN ĐĂNG NHẬP) */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        
+        {/* Filter bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
           <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-emerald-600" />
-              Thi thử tự do miễn phí (Không cần đăng nhập)
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span>Danh mục Đề thi & Khảo thí</span>
+              <span className="text-xs font-bold text-slate-400">({visibleExams.length} đề)</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Học sinh và phụ huynh có thể luyện tập đề kiểm tra tự do từ Lớp 1 đến Lớp 12 với hệ thống chấm điểm tự động.
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Khách vãng lai và học sinh có thể bấm &quot;Vào thi ngay&quot; để thi thử tự do hoặc chọn tên trong danh sách lớp đối với đề thi học kỳ.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            {/* Grade filter buttons */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs text-slate-400 font-semibold mr-1">Khối:</span>
-              {['all', '6', '7', '8', '9', '10', '11', '12'].map((g) => (
-                <button
-                  key={g}
-                  onClick={() => setSelectedGradeFilter(g)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                    selectedGradeFilter === g
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {g === 'all' ? 'Tất cả' : `K${g}`}
-                </button>
-              ))}
-            </div>
-
-            {/* Quick teacher/admin actions for free practice exams */}
-            {(isTeacher || isAdmin) && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onOpenWordUpload}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
-                  title="Tạo thêm đề thi thử tự do mới cho học sinh"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Thêm đề thi thử</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab('teacher-exams')}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
-                  title="Chuyển đến trang Ngân hàng đề thi để sửa, xóa, hoặc xuất mã đề"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Quản lý / Xóa / Sửa đề</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {selectedGradeFilter !== 'all' && (
-          <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs flex items-center justify-between animate-in fade-in">
-            <span>Đang lọc hiển thị đề thi của <strong>Khối {selectedGradeFilter}</strong> ({trialExams.length} đề thi phù hợp)</span>
+          {/* Grade Filter Pill Selectors */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             <button
               type="button"
               onClick={() => setSelectedGradeFilter('all')}
-              className="font-bold text-emerald-700 hover:underline cursor-pointer"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                selectedGradeFilter === 'all'
+                  ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
+                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+              }`}
             >
-              ✕ Bỏ lọc / Xem tất cả các khối
+              Tất cả
             </button>
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map(g => (
+              <button
+                key={`grade-${g}`}
+                type="button"
+                onClick={() => setSelectedGradeFilter(g)}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  selectedGradeFilter === g
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                Khối {g}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
 
-        {/* Trial Exams Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {trialExams.map((exam) => {
+        {/* Exam Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {unpinnedExams.map((exam) => {
             const isLoadingThis = loadingExamId === exam.id;
+            const hasManagePerm = canManageExam(exam);
+
             return (
               <div 
                 key={exam.id}
-                className={`bg-white rounded-2xl border p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between ${
-                  exam.isPinned 
-                    ? 'border-amber-300 ring-1 ring-amber-200' 
-                    : 'border-slate-200 hover:border-emerald-300'
-                }`}
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-700 transition-all flex flex-col justify-between space-y-3"
               >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                         Khối {exam.grade} • {exam.subjectName}
                       </span>
+                      {exam.isSecure ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                          🔒 Đề bảo mật (DS lớp)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          ✨ Thi tự do
+                        </span>
+                      )}
                       {!exam.isPublished && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                          📝 Bản nháp
-                        </span>
-                      )}
-                      {exam.isSecure && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          🔒 Đề chính thức
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                          Bản nháp
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                      Mã: {exam.trialCode || `EDUTEST-${exam.grade}`}
-                    </span>
-                  </div>
 
-                  <h3 className="font-bold text-sm text-slate-900 line-clamp-2 leading-relaxed">
-                    {exam.title}
-                  </h3>
-
-                  <div className="grid grid-cols-2 gap-2 py-2 text-xs text-slate-600 bg-slate-50 rounded-xl p-2.5 border border-slate-100">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{exam.durationMinutes} phút</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{exam.questionCount || 4} câu hỏi</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Award className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Thang {exam.maxScore || 10}đ</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-emerald-600 font-semibold">
-                      <Shuffle className="w-3.5 h-3.5" />
-                      <span>Đảo câu từng phần</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 mt-4 flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    {exam.isSecure && !user ? (
-                      <span className="text-[11px] font-bold text-indigo-700 flex items-center gap-1">
-                        🔒 Đề bảo mật (Cần đăng nhập)
-                      </span>
-                    ) : !exam.isPublished ? (
-                      <span className="text-[11px] font-bold text-amber-700 flex items-center gap-1">
-                        📝 Bản nháp (Chưa mở thi)
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Miễn phí / Tự do
-                      </span>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setShareExamTarget(exam)}
-                        className="p-2 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
-                        title="Quét mã QR và chia sẻ đề thi"
-                      >
-                        <QrCode className="w-3.5 h-3.5 text-emerald-600" />
-                      </button>
-                      <button
-                        onClick={() => handleTakeTrialExam(exam)}
-                        disabled={isLoadingThis}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-white" />
-                        <span>{isLoadingThis ? 'Đang mở đề...' : (exam.isSecure && !user ? 'Đăng nhập để thi' : 'Vào thi ngay')}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Edit, Delete, Pin action buttons for free practice exams */}
-                  <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-dashed border-slate-100">
                     {canPin(exam) && (
                       <button
                         type="button"
                         onClick={(e) => handleTogglePin(exam, e)}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
-                          exam.isPinned 
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300' 
-                            : 'bg-slate-100 hover:bg-amber-50 text-slate-700 hover:text-amber-700'
-                        }`}
-                        title={exam.isPinned ? "Bỏ ghim đề thi (không còn ưu tiên lên đầu)" : "Ghim đề thi lên đầu để học sinh thấy ngay"}
+                        className="p-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 cursor-pointer"
+                        title="Ghim đề thi này lên đầu trang"
                       >
-                        <Pin className={`w-3.5 h-3.5 ${exam.isPinned ? 'fill-amber-600 text-amber-600' : ''}`} />
-                        <span>{exam.isPinned ? 'Đã ghim' : 'Ghim đề'}</span>
+                        <Pin className="w-3.5 h-3.5" />
                       </button>
                     )}
+                  </div>
+
+                  <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-snug">
+                    {exam.title}
+                  </h3>
+
+                  <div className="flex items-center gap-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                      {exam.durationMinutes} phút
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                      {exam.questionCount || 4} câu
+                    </span>
+                    {exam.trialCode && (
+                      <span className="text-[10px] font-mono text-slate-400">
+                        Mã: {exam.trialCode}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                    {exam.classIds?.length ? `Lớp: ${exam.classIds.join(', ')}` : 'Công khai'}
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShareExamTarget(exam)}
+                      className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 cursor-pointer"
+                      title="Chia sẻ & Mã QR"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleTakeExam(exam)}
+                      disabled={isLoadingThis}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                        exam.isSecure && !user
+                          ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                      }`}
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>{isLoadingThis ? 'Đang mở...' : (exam.isSecure && !user ? 'Chọn tên thi' : 'Vào thi ngay')}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Staff Only Actions (Sửa đề / Xóa đề - KHÁCH KHÔNG CÓ CÁC NÚT NÀY) */}
+                {hasManagePerm && (
+                  <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-dashed border-slate-100 dark:border-slate-800">
                     {onEditExam && (
                       <button
                         type="button"
                         onClick={() => onEditExam(exam)}
-                        className="px-2.5 py-1.5 rounded-lg text-slate-700 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Chỉnh sửa câu hỏi, đáp án, thời gian làm bài của đề thi này"
+                        className="px-2 py-1 rounded text-[11px] font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 cursor-pointer flex items-center gap-1"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-slate-500 hover:text-indigo-600" />
+                        <Edit3 className="w-3 h-3" />
                         <span>Sửa đề</span>
                       </button>
                     )}
@@ -742,151 +647,42 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                       <button
                         type="button"
                         onClick={() => setExamToDelete(exam)}
-                        className="px-2.5 py-1.5 rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Xóa vĩnh viễn đề thi này khỏi hệ thống"
+                        className="px-2 py-1 rounded text-[11px] font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer flex items-center gap-1"
                       >
-                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                        <span>Xoá đề</span>
+                        <Trash2 className="w-3 h-3" />
+                        <span>Xóa đề</span>
                       </button>
                     )}
                   </div>
-                </div>
+                )}
               </div>
-
             );
           })}
 
-          {trialExams.length === 0 && (
-            <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-slate-200">
-              <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-bold text-slate-700">Chưa có đề thi thử phù hợp khối lớp đã chọn</p>
+          {unpinnedExams.length === 0 && (
+            <div className="col-span-full py-10 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400">
+              <BookOpen className="w-9 h-9 mx-auto mb-2 text-slate-300" />
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Không tìm thấy đề thi cho khối lớp đã chọn
+              </p>
               <button
+                type="button"
                 onClick={() => setSelectedGradeFilter('all')}
-                className="mt-3 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                className="mt-2 text-xs text-indigo-600 font-bold hover:underline cursor-pointer"
               >
-                Hiển thị tất cả khối lớp
+                Xem tất cả khối lớp
               </button>
             </div>
           )}
         </div>
+
       </div>
 
-      {/* Core Feature Pillars */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
-            Hệ sinh thái tính năng chính của EduTest
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Module 1: Quản lý đề thi */}
-          <div 
-            onClick={() => {
-              if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
-              onNavigateTab('teacher-exams');
-            }}
-            className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <FileUp className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-sm text-slate-900 group-hover:text-emerald-700 transition-colors">
-                1. Nhập đề Word thông minh
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Tự động bóc tách câu hỏi, trích xuất hình vẽ và công thức LaTeX. Hỗ trợ 3 phần chuẩn thi mới và AI rà soát đề thi.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-emerald-700 gap-1">
-              <span>Xem ngân hàng đề</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* Module 2: Tổ chức thi an toàn */}
-          <div 
-            onClick={() => {
-              if (!user && loginAsDemoRole) loginAsDemoRole('student');
-              onNavigateTab('student-exams');
-            }}
-            className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Clock className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-sm text-slate-900 group-hover:text-indigo-700 transition-colors">
-                2. Phòng thi trực tuyến
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Đồng hồ đếm ngược nổi bật, chia 3 phần rõ ràng, chỉ đảo câu trong từng phần, tự lưu bài và chống gian lận tab.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-indigo-700 gap-1">
-              <span>Vào thi trực tuyến</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* Module 3: Chấm điểm & Báo cáo */}
-          <div 
-            onClick={() => {
-              if (!user && loginAsDemoRole) loginAsDemoRole('teacher');
-              onNavigateTab('teacher-results');
-            }}
-            className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-teal-300 transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <BarChart3 className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-sm text-slate-900 group-hover:text-teal-700 transition-colors">
-                3. AI Chấm tự luận & Phổ điểm
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Tự động chấm trắc nghiệm, AI hỗ trợ chấm tự luận có đánh dấu minh bạch, xuất báo cáo phổ điểm Excel/CSV tức thì.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-teal-700 gap-1">
-              <span>Xem phân tích phổ điểm</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-
-          {/* Module 4: Quản trị & Phân quyền */}
-          <div 
-            onClick={() => {
-              if (!user && loginAsDemoRole) loginAsDemoRole('admin');
-              onNavigateTab('admin-users');
-            }}
-            className="p-6 bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-md hover:border-rose-300 transition-all cursor-pointer group flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-sm text-slate-900 group-hover:text-rose-700 transition-colors">
-                4. Phân quyền & Đề bảo mật
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Đề thi bảo mật chỉ hiện khi đăng nhập, quản lý quyền Admin, Giáo viên và Học sinh, nhật ký kiểm toán an ninh.
-              </p>
-            </div>
-            <div className="pt-4 flex items-center text-xs font-bold text-rose-700 gap-1">
-              <span>Bảo mật hệ thống</span>
-              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Confirmation Modal for Free / Trial Exam Deletion */}
+      {/* Confirmation Modal for Exam Deletion (Teacher / Admin Only) */}
       <ConfirmModal
         isOpen={examToDelete !== null}
         title={`Xác nhận xóa đề thi "${examToDelete?.title}"?`}
-        message={`Đề thi tự do "${examToDelete?.title}" và toàn bộ câu hỏi liên quan sẽ bị xóa khỏi hệ thống. Thao tác này không thể hoàn tác.`}
+        message={`Đề thi "${examToDelete?.title}" và toàn bộ câu hỏi liên quan sẽ bị xóa khỏi hệ thống. Thao tác này không thể hoàn tác.`}
         confirmText="Xóa đề thi này"
         onConfirm={async () => {
           if (examToDelete && onDeleteExam) {
@@ -906,6 +702,17 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
           onClose={() => setShareExamTarget(null)}
         />
       )}
+
+      {/* Secure Exam Student Roster Selector Modal */}
+      {secureExamForRoster && (
+        <SecureExamStudentSelectModal
+          isOpen={Boolean(secureExamForRoster)}
+          onClose={() => setSecureExamForRoster(null)}
+          exam={secureExamForRoster}
+          onSelectStudent={handleStudentSelectedFromRoster}
+        />
+      )}
+
     </div>
   );
 };

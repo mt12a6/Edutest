@@ -653,8 +653,19 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                                   <td className="py-2 px-3 font-semibold text-slate-900">
                                     {st.studentName}
                                   </td>
-                                  <td className="py-2 px-3 text-center font-bold text-emerald-600">
-                                    {st.score}
+                                  <td className="py-2 px-3 text-center font-bold">
+                                    {st.hasEssayGraded || (st.essayScore !== undefined && st.essayScore > 0) ? (
+                                      <div className="flex flex-col items-center">
+                                        <span className="text-purple-700 font-black text-sm bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200 shadow-2xs">
+                                          {st.score}
+                                        </span>
+                                        <span className="text-[9px] font-bold text-purple-600 mt-0.5">
+                                          +{st.essayScore}đ TL
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-emerald-600 font-bold">{st.score}</span>
+                                    )}
                                     {st.isAiGraded && (
                                       <span className="block text-[8px] font-bold text-purple-700 bg-purple-50 px-1 py-0.2 rounded-full border border-purple-200 mt-0.5 mx-auto w-max">
                                         🤖 AI Chấm

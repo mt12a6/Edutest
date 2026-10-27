@@ -263,9 +263,20 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
           <div className="flex items-center gap-4">
             <div>
               <span className="text-slate-400 font-semibold block text-[10px] uppercase">Tổng điểm bài thi</span>
-              <span className="text-xl font-black text-slate-900">
-                {result.score} <span className="text-xs font-normal text-slate-400">/ {result.maxScore || 10}</span>
-              </span>
+              {result.hasEssayGraded || (result.essayScore !== undefined && result.essayScore > 0) ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-xl border border-purple-200">
+                    {result.score} <span className="text-xs font-normal text-purple-500">/ {result.maxScore || 10}</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-purple-600 hidden sm:inline">
+                    (Trắc nghiệm: {result.objectiveScore ?? Math.max(0, Number(((result.score || 0) - (result.essayScore || 0)).toFixed(2)))}đ + Tự luận: +{result.essayScore}đ)
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xl font-black text-slate-900">
+                  {result.score} <span className="text-xs font-normal text-slate-400">/ {result.maxScore || 10}</span>
+                </span>
+              )}
             </div>
             <div className="h-7 w-px bg-slate-200" />
             <div>

@@ -645,8 +645,17 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
                           {visualLabel}
                         </div>
 
-                        <div className="pt-1 text-sm font-medium text-slate-800 leading-normal flex-1">
+                        <div className="pt-1 text-sm font-medium text-slate-800 leading-normal flex-1 space-y-2">
                           <MathRenderer content={optionText} />
+                          {currentQ.optionImages?.[originalKey] && (
+                            <div className="mt-2">
+                              <img 
+                                src={currentQ.optionImages[originalKey]} 
+                                alt={`Minh họa phương án ${visualLabel}`} 
+                                className="max-h-36 max-w-sm rounded-lg border border-slate-200 object-contain bg-white p-1 shadow-2xs"
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
