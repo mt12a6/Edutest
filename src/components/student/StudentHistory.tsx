@@ -125,6 +125,7 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ exams, onViewRes
                 results.map((res) => {
                   const exam = exams.find(e => e.id === res.examId);
                   const isPassed = res.score >= 5;
+                  const canShowScore = exam?.showScoreAfterExam !== false;
                   return (
                     <tr key={res.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-4 font-semibold text-slate-900">
@@ -134,26 +135,46 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ exams, onViewRes
                         </p>
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <span className="text-sm font-black text-slate-900">{res.score}</span>
-                        <span className="text-[10px] text-slate-400">/{res.maxScore || 10}</span>
+                        {canShowScore ? (
+                          <>
+                            <span className="text-sm font-black text-slate-900">{res.score}</span>
+                            <span className="text-[10px] text-slate-400">/{res.maxScore || 10}</span>
+                          </>
+                        ) : (
+                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                            Bảo mật
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-center text-slate-600">
-                        <span className="text-emerald-700 font-bold">{res.correctCount}</span>
-                        <span className="text-slate-400"> / </span>
-                        <span className="text-rose-700">{res.wrongCount}</span>
+                        {canShowScore ? (
+                          <>
+                            <span className="text-emerald-700 font-bold">{res.correctCount}</span>
+                            <span className="text-slate-400"> / </span>
+                            <span className="text-rose-700">{res.wrongCount}</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">Đã nộp</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-center font-bold text-slate-700">
-                        {res.percentage}%
+                        {canShowScore ? `${res.percentage}%` : '-'}
                       </td>
                       <td className="py-3.5 px-4 text-slate-500">
                         {new Date(res.submittedAt).toLocaleDateString('vi-VN')} {new Date(res.submittedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          isPassed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {isPassed ? 'Đạt' : 'Chưa đạt'}
-                        </span>
+                        {canShowScore ? (
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            isPassed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {isPassed ? 'Đạt' : 'Chưa đạt'}
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                            Đã nộp bài
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <button

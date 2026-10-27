@@ -211,11 +211,14 @@ export function evaluateTrueFalseQuestion(
     });
   }
 
+  // Quy tắc chấm điểm câu hỏi Đúng/Sai: Số ý đúng × 0.25
+  // 0 ý = 0 điểm | 1 ý = 0.25 điểm | 2 ý = 0.50 điểm | 3 ý = 0.75 điểm | 4 ý = 1.00 điểm
   let ratio = 0;
   if (subMatches === 4) ratio = 1.0;
-  else if (subMatches === 3) ratio = 0.5;
-  else if (subMatches === 2) ratio = 0.25;
-  else if (subMatches === 1) ratio = 0.1;
+  else if (subMatches === 3) ratio = 0.75;
+  else if (subMatches === 2) ratio = 0.50;
+  else if (subMatches === 1) ratio = 0.25;
+  else ratio = 0.0;
 
   const earnedPoints = Number((questionPoints * ratio).toFixed(2));
   const isFullMatch = subMatches === totalSubs && totalSubs > 0;

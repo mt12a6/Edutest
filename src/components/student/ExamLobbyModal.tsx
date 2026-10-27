@@ -63,7 +63,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
       onClose();
     } catch (err) {
       console.error('Không thể bắt đầu kỳ thi:', err);
-      alert('Không thể khởi tạo lượt thi. Vui lòng kiểm tra lại kết nối.');
+      setNameError('Không thể khởi tạo lượt thi. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại.');
     } finally {
       setIsStarting(false);
     }

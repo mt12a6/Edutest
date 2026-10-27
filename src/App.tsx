@@ -105,6 +105,21 @@ function MainApp() {
     reloadData();
   }, []);
 
+  // Listen for direct exam links or scanned QR codes (?examId=...)
+  useEffect(() => {
+    if (exams.length === 0) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetExamId = urlParams.get('examId');
+    if (targetExamId && !activeTakingSession && !lobbyExam) {
+      const foundExam = exams.find(e => e.id === targetExamId);
+      if (foundExam) {
+        getExamQuestions(targetExamId).then(qList => {
+          setLobbyExam({ exam: foundExam, questions: qList });
+        }).catch(e => console.warn('Lỗi khi mở đề thi từ QR link:', e));
+      }
+    }
+  }, [exams, activeTakingSession, lobbyExam]);
+
   // Account disabled barrier
   if (profile?.status === 'disabled') {
     return (

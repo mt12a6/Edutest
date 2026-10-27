@@ -14,6 +14,8 @@ import {
   Check
 } from 'lucide-react';
 
+import { MathFormulaModal } from './MathFormulaModal';
+
 interface RichTextEditorToolbarProps {
   onInsert: (snippet: string) => void;
   className?: string;
@@ -27,6 +29,7 @@ export const RichTextEditorToolbar: React.FC<RichTextEditorToolbarProps> = ({
 }) => {
   const [showColorDropdown, setShowColorDropdown] = useState(false);
   const [showMathCategory, setShowMathCategory] = useState<'algebra' | 'symbols' | 'geometry' | 'calculus' | null>(null);
+  const [showAdvancedMathModal, setShowAdvancedMathModal] = useState<boolean>(false);
 
   const colors = [
     { name: 'Đỏ', hex: '#dc2626', bg: 'bg-red-500' },
@@ -288,7 +291,30 @@ export const RichTextEditorToolbar: React.FC<RichTextEditorToolbarProps> = ({
             </div>
           )}
         </div>
+
+        {/* 3. Full Advanced Math Modal Button */}
+        <button
+          type="button"
+          onClick={() => setShowAdvancedMathModal(true)}
+          className="px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1 border border-indigo-200 transition-colors shadow-2xs"
+          title="Mở trình soạn thảo toán học & hình vẽ đầy đủ"
+        >
+          <Sparkles className="w-3 h-3 text-indigo-600" />
+          <span className="hidden sm:inline">Toán & Hình vẽ nâng cao</span>
+          <span className="sm:hidden">Toán+</span>
+        </button>
       </div>
+
+      {showAdvancedMathModal && (
+        <MathFormulaModal
+          isOpen={showAdvancedMathModal}
+          onClose={() => setShowAdvancedMathModal(false)}
+          onInsert={(snippet) => {
+            onInsert(snippet);
+            setShowAdvancedMathModal(false);
+          }}
+        />
+      )}
 
     </div>
   );

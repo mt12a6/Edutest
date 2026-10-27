@@ -1433,7 +1433,15 @@ export async function gradeEssaySubmission(
   essayScore: number,
   essayFeedback: string,
   isAiGraded: boolean = false,
-  graderName: string = 'Giáo viên'
+  graderName: string = 'Giáo viên',
+  essayGrades?: Record<string, {
+    score: number;
+    feedback: string;
+    questionNumber?: number;
+    maxPoints?: number;
+    gradedBy?: string;
+    gradedAt?: string;
+  }>
 ): Promise<ExamResult | null> {
   const allResults = getLocalResults();
   const targetResult = allResults.find(r => r.attemptId === attemptId || r.id === attemptId);
@@ -1443,13 +1451,35 @@ export async function gradeEssaySubmission(
   const questions = await getExamQuestions(targetResult.examId);
 
   const maxScale = targetResult.maxScore || 10;
+  const answers = targetResult.answers || {};
+
   let totalPoints = 0;
+  let objectiveEarnedPoints = 0;
+
   questions.forEach(q => {
-    totalPoints += (q.points || 1);
+    const qWeight = q.points || 1;
+    totalPoints += qWeight;
+    const qType = q.type || 'multiple_choice';
+    const studentAns = answers[q.id];
+
+    if (qType === 'multiple_choice') {
+      if (isMultipleChoiceCorrect(studentAns, q.correctOption, q.options)) {
+        objectiveEarnedPoints += qWeight;
+      }
+    } else if (qType === 'true_false') {
+      const { earnedPoints: tfEarned } = evaluateTrueFalseQuestion(studentAns, q.subQuestions, qWeight);
+      objectiveEarnedPoints += tfEarned;
+    } else if (qType === 'fill_blank') {
+      if (isFillBlankCorrect(studentAns, q.acceptableAnswers, q.correctOption, q.sampleAnswer)) {
+        objectiveEarnedPoints += qWeight;
+      }
+    }
   });
 
-  const essayScaledPoints = totalPoints > 0 ? (essayScore / totalPoints) * maxScale : essayScore;
-  const updatedScore = Math.min(maxScale, Number((targetResult.score + essayScaledPoints).toFixed(2)));
+  const totalEarnedPoints = objectiveEarnedPoints + essayScore;
+  const updatedScore = totalPoints > 0 
+    ? Math.min(maxScale, Number(((totalEarnedPoints / totalPoints) * maxScale).toFixed(2)))
+    : Number(essayScore.toFixed(2));
   const percentage = Math.min(100, Math.round((updatedScore / maxScale) * 100));
 
   const updated: ExamResult = {
@@ -1463,6 +1493,7 @@ export async function gradeEssaySubmission(
     isAiGraded,
     essayGradedBy: graderName,
     essayGradedAt: new Date().toISOString(),
+    essayGrades: essayGrades || targetResult.essayGrades,
     feedback: updatedScore >= (exam?.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'
   };
 
@@ -1474,7 +1505,8 @@ export async function gradeEssaySubmission(
       score: updatedScore,
       essayScore,
       essayFeedback,
-      isAiGraded
+      isAiGraded,
+      essayGrades: essayGrades || targetResult.essayGrades
     }));
   } catch (err) {
     console.warn('gradeEssaySubmission Firestore warning:', err);

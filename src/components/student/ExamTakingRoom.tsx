@@ -20,6 +20,7 @@ import { Exam, Question, ExamAttempt, ExamResult } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { saveAttemptProgress, submitExamAttempt, logSystemAction } from '../../services/db';
 import { MathRenderer } from '../common/MathRenderer';
+import { RichTextEditorToolbar } from '../common/RichTextEditorToolbar';
 
 interface ExamTakingRoomProps {
   exam: Exam;
@@ -754,18 +755,47 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
             {/* 4. ESSAY (Tự luận) */}
             {qType === 'essay' && (
               <div className="space-y-3 max-w-3xl">
-                <label className="block text-xs font-bold text-slate-700">
-                  Nhập bài làm tự luận hoặc lời giải của bạn:
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Nhập bài làm tự luận hoặc lời giải của bạn:
+                  </label>
+                  <span className="text-[11px] text-indigo-700 font-semibold bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                    Hỗ trợ công thức Toán học & Hình vẽ
+                  </span>
+                </div>
+
+                {/* Math & Rich Text Toolbar for Student */}
+                <RichTextEditorToolbar
+                  onInsert={(snippet) => {
+                    const currentVal = answers[currentQ.id] || '';
+                    const updatedVal = currentVal ? `${currentVal} ${snippet}` : snippet;
+                    handleEssayChange(currentQ.id, updatedVal);
+                  }}
+                  className="mb-1"
+                />
+
                 <textarea
                   value={answers[currentQ.id] || ''}
                   onChange={(e) => handleEssayChange(currentQ.id, e.target.value)}
-                  placeholder="Trình bày chi tiết các bước giải, lập luận hoặc giải thích tại đây..."
+                  placeholder="Trình bày chi tiết các bước giải, lập luận hoặc giải thích tại đây... (Bạn có thể dùng thanh công cụ ở trên để chèn phân số, căn thức, hệ phương trình, ký hiệu hoặc ảnh)"
                   rows={6}
-                  className="w-full text-sm font-medium text-slate-800 border-2 border-slate-300 rounded-2xl p-4 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 bg-white"
+                  className="w-full text-sm font-medium text-slate-800 border-2 border-slate-300 rounded-2xl p-4 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 bg-white leading-relaxed"
                 />
+
+                {/* Live Preview if formulas or markdown exist */}
+                {answers[currentQ.id] && (
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Xem trước bài làm hiển thị (Live Preview):
+                    </span>
+                    <div className="text-xs text-slate-900 leading-relaxed font-medium">
+                      <MathRenderer content={answers[currentQ.id]} />
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-between text-[11px] text-slate-400">
-                  <span>Hỗ trợ xuống dòng và định dạng văn bản</span>
+                  <span>Hỗ trợ xuống dòng và công thức LaTeX $...$</span>
                   <span>Đã nhập: {String(answers[currentQ.id] || '').length} ký tự</span>
                 </div>
               </div>

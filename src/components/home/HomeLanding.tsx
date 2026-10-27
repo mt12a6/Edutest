@@ -21,13 +21,16 @@ import {
   Plus,
   Edit3,
   Trash2,
-  Pin
+  Pin,
+  QrCode,
+  Share2
 } from 'lucide-react';
 
 import { useAuth } from '../../context/AuthContext';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { getExamQuestions, togglePinExam } from '../../services/db';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { ShareExamModal } from '../common/ShareExamModal';
 
 interface HomeLandingProps {
   exams: Exam[];
@@ -70,6 +73,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   const [loadingExamId, setLoadingExamId] = useState<string | null>(null);
   const [selectedGradeFilter, setSelectedGradeFilter] = useState<string>('all');
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
+  const [shareExamTarget, setShareExamTarget] = useState<Exam | null>(null);
 
   // Statistics
   const totalExams = exams.length;
@@ -416,14 +420,24 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                       {exam.classIds && exam.classIds.length > 0 ? `Lớp: ${exam.classIds.join(', ')}` : 'Tất cả các lớp'}
                     </span>
 
-                    <button
-                      onClick={() => handleTakeTrialExam(exam)}
-                      disabled={isLoadingThis}
-                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-slate-950" />
-                      <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi ngay'}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShareExamTarget(exam)}
+                        className="p-2 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
+                        title="Quét mã QR và chia sẻ đề thi"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                      </button>
+                      <button
+                        onClick={() => handleTakeTrialExam(exam)}
+                        disabled={isLoadingThis}
+                        className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-slate-950" />
+                        <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi ngay'}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -503,14 +517,24 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                   <span className="text-[11px] text-slate-400 italic">
                     {exam.classIds && exam.classIds.length > 0 ? `Lớp ${exam.classIds.join(', ')}` : 'Tất cả các lớp'}
                   </span>
-                  <button
-                    onClick={() => handleTakeTrialExam(exam)}
-                    disabled={isLoadingThis}
-                    className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-3 h-3 fill-white" />
-                    <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShareExamTarget(exam)}
+                      className="p-1.5 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
+                      title="Quét mã QR và chia sẻ đề thi"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                    </button>
+                    <button
+                      onClick={() => handleTakeTrialExam(exam)}
+                      disabled={isLoadingThis}
+                      className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-indigo-600 text-white font-bold text-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Play className="w-3 h-3 fill-white" />
+                      <span>{isLoadingThis ? 'Đang mở...' : 'Vào thi'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -666,14 +690,24 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                       </span>
                     )}
 
-                    <button
-                      onClick={() => handleTakeTrialExam(exam)}
-                      disabled={isLoadingThis}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-white" />
-                      <span>{isLoadingThis ? 'Đang mở đề...' : (exam.isSecure && !user ? 'Đăng nhập để thi' : 'Vào thi ngay')}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShareExamTarget(exam)}
+                        className="p-2 rounded-xl text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs"
+                        title="Quét mã QR và chia sẻ đề thi"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                      </button>
+                      <button
+                        onClick={() => handleTakeTrialExam(exam)}
+                        disabled={isLoadingThis}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>{isLoadingThis ? 'Đang mở đề...' : (exam.isSecure && !user ? 'Đăng nhập để thi' : 'Vào thi ngay')}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Edit, Delete, Pin action buttons for free practice exams */}
@@ -863,6 +897,15 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
         }}
         onCancel={() => setExamToDelete(null)}
       />
+
+      {/* QR Code & Share Exam Modal */}
+      {shareExamTarget && (
+        <ShareExamModal
+          isOpen={Boolean(shareExamTarget)}
+          exam={shareExamTarget}
+          onClose={() => setShareExamTarget(null)}
+        />
+      )}
     </div>
   );
 };

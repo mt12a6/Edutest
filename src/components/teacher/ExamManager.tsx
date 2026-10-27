@@ -23,7 +23,8 @@ import {
   Edit3,
   Star,
   Printer,
-  Pin
+  Pin,
+  QrCode
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
@@ -45,6 +46,7 @@ import { ConfirmModal } from '../common/ConfirmModal';
 import { TeacherScopeModal } from '../common/TeacherScopeModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
 import { ShuffledExamExportModal } from './ShuffledExamExportModal';
+import { ShareExamModal } from '../common/ShareExamModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -85,6 +87,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
   // Exam preview modal
   const [previewExam, setPreviewExam] = useState<Exam | null>(null);
+  const [shareExamTarget, setShareExamTarget] = useState<Exam | null>(null);
 
   // Confirmation & Feedback State
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
@@ -591,6 +594,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   </button>
 
                   <button
+                    onClick={() => setShareExamTarget(exam)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1"
+                    title="Mã QR và liên kết chia sẻ đề thi cho học sinh"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Mã QR & Link</span>
+                  </button>
+
+                  <button
                     onClick={() => handleToggleTrial(exam)}
                     className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1 ${
                       exam.isTrial
@@ -720,6 +732,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           onClose={() => setShuffledModalExam(null)}
           exam={shuffledModalExam}
           questions={shuffledModalQuestions}
+        />
+      )}
+
+      {/* Share & QR Code Modal */}
+      {shareExamTarget && (
+        <ShareExamModal
+          isOpen={Boolean(shareExamTarget)}
+          exam={shareExamTarget}
+          onClose={() => setShareExamTarget(null)}
         />
       )}
     </div>

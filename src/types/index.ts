@@ -179,6 +179,14 @@ export interface ExamResult {
   isAiGraded?: boolean;
   essayGradedBy?: string;
   essayGradedAt?: string;
+  essayGrades?: Record<string, {
+    score: number;
+    feedback: string;
+    questionNumber?: number;
+    maxPoints?: number;
+    gradedBy?: string;
+    gradedAt?: string;
+  }>;
 }
 
 export interface SystemLog {
