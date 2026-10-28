@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   LogIn, 
@@ -11,6 +11,8 @@ import {
   UserPlus
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { getClasses } from '../../services/db';
+import { SchoolClass } from '../../types';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
   const { loginWithGoogle, loginWithCredentials, registerStudent, isLoading, error, clearError } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'login' | 'register' | 'google'>(defaultMode);
+  const [systemClasses, setSystemClasses] = useState<SchoolClass[]>([]);
   
   // Login form state
   const [identifier, setIdentifier] = useState('');
@@ -36,6 +39,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
   
   const [localError, setLocalError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    getClasses().then(list => {
+      setSystemClasses(list);
+      if (list.length > 0 && (!regClass || regClass === '10A1')) {
+        setRegClass(list[0].name);
+      }
+    }).catch(err => console.warn('Could not load classes for registration:', err));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -292,14 +305,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                     onChange={(e) => setRegClass(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
                   >
-                    <option value="6A2">Lớp 6A2</option>
-                    <option value="7A1">Lớp 7A1</option>
-                    <option value="8A1">Lớp 8A1</option>
-                    <option value="9A1">Lớp 9A1</option>
-                    <option value="10A1">Lớp 10A1</option>
-                    <option value="10A2">Lớp 10A2</option>
-                    <option value="11B1">Lớp 11B1</option>
-                    <option value="12A3">Lớp 12A3</option>
+                    {systemClasses.map(c => (
+                      <option key={c.id} value={c.name}>
+                        Lớp {c.name} {c.grade ? `(Khối ${c.grade})` : ''}
+                      </option>
+                    ))}
                     <option value="Tự do">Thí sinh tự do</option>
                   </select>
                 </div>

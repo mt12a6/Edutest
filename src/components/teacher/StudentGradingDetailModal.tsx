@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   CheckCircle2, 
@@ -19,7 +19,8 @@ import {
 } from 'lucide-react';
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
-import { gradeEssaySubmission } from '../../services/db';
+import { gradeEssaySubmission, getAllUsers } from '../../services/db';
+import { useAuth } from '../../context/AuthContext';
 import { 
   isMultipleChoiceCorrect as checkMCCorrect, 
   isFillBlankCorrect as checkFBCorrect, 
@@ -162,6 +163,25 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
     }
   };
 
+  const { profile } = useAuth();
+  const [systemTeachers, setSystemTeachers] = useState<string[]>([]);
+
+  useEffect(() => {
+    getAllUsers().then(users => {
+      const list = users
+        .filter(u => u.role === 'teacher' || u.role === 'admin')
+        .map(u => u.displayName || u.username)
+        .filter((x): x is string => Boolean(x));
+      // Remove duplicates
+      const uniqueList = Array.from(new Set(list));
+      setSystemTeachers(uniqueList);
+    }).catch(() => {});
+  }, []);
+
+  const [graderName, setGraderName] = useState<string>(
+    result.essayGradedBy || profile?.displayName || 'Giáo viên phụ trách'
+  );
+
   // Save manual essay grades for all essay questions
   const handleSaveTeacherGrade = async () => {
     setIsSaving(true);
@@ -177,13 +197,15 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
       }> = {};
 
       const now = new Date().toISOString();
+      const finalGraderName = graderName.trim() || 'Giáo viên phụ trách';
+
       essayQuestions.forEach(q => {
         gradesMap[q.id] = {
           score: essayScores[q.id] ?? 0,
           feedback: essayFeedbacks[q.id] || '',
           questionNumber: q.questionNumber,
           maxPoints: q.points || 1,
-          gradedBy: 'Giáo viên phụ trách',
+          gradedBy: finalGraderName,
           gradedAt: now
         };
       });
@@ -192,20 +214,29 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
         ? (essayFeedbacks[essayQuestions[0]?.id] || 'Đã được giáo viên chấm và ghi nhận điểm.')
         : essayQuestions.map(q => `Câu ${q.questionNumber}: ${essayFeedbacks[q.id] || 'Đạt ' + (essayScores[q.id] ?? 0) + 'đ'}`).join(' | ');
 
-      await gradeEssaySubmission(
+      const updatedResult = await gradeEssaySubmission(
         result.attemptId || result.id,
         totalEssayScore,
         combinedFeedback,
         false, // Marked as teacher graded
-        'Giáo viên phụ trách',
+        finalGraderName,
         gradesMap
       );
 
-      setSaveSuccessMsg(`Đã lưu thành công điểm tự luận cho tất cả ${essayQuestions.length} câu và cập nhật tổng điểm bài thi!`);
+      // Instant local reflection so UI updates immediately
+      if (updatedResult) {
+        result.score = updatedResult.score;
+        result.hasEssayGraded = true;
+        result.essayScore = totalEssayScore;
+        result.essayGradedBy = finalGraderName;
+        result.status = 'completed';
+      }
+
+      setSaveSuccessMsg(`Đã lưu thành công điểm tự luận (+${totalEssayScore}đ)! Tổng điểm mới: ${result.score} điểm.`);
       setTimeout(() => {
         onGradedSuccess();
         onClose();
-      }, 1300);
+      }, 1200);
     } catch (err: any) {
       console.error('Lỗi lưu điểm tự luận:', err);
     } finally {
@@ -479,6 +510,45 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Grader Name Customization */}
+              <div className="p-3.5 bg-white rounded-2xl border border-indigo-200 shadow-2xs space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Giáo viên chấm bài:</span>
+                  </label>
+                  <div className="flex items-center gap-2 flex-1 max-w-sm">
+                    <input
+                      type="text"
+                      value={graderName}
+                      onChange={(e) => setGraderName(e.target.value)}
+                      placeholder="Nhập tên giáo viên chấm..."
+                      className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+                    />
+                  </div>
+                </div>
+
+                {systemTeachers.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
+                    <span className="text-slate-400 font-semibold">Chọn nhanh:</span>
+                    {systemTeachers.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setGraderName(name)}
+                        className={`px-2 py-0.5 rounded-lg border text-[11px] font-bold transition-all cursor-pointer ${
+                          graderName === name
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                            : 'bg-slate-100 hover:bg-indigo-50 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Save All Essays Button */}

@@ -213,6 +213,12 @@ export interface ParsedDocxQuestion {
     C: string;
     D: string;
   };
+  optionImages?: {
+    A?: string;
+    B?: string;
+    C?: string;
+    D?: string;
+  };
   correctOption?: 'A' | 'B' | 'C' | 'D';
   subQuestions?: TrueFalseItem[];
   acceptableAnswers?: string[];

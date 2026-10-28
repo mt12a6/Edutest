@@ -24,7 +24,8 @@ import {
   Star,
   Printer,
   Pin,
-  QrCode
+  QrCode,
+  Camera
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
@@ -47,6 +48,8 @@ import { TeacherScopeModal } from '../common/TeacherScopeModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
 import { ShuffledExamExportModal } from './ShuffledExamExportModal';
 import { ShareExamModal } from '../common/ShareExamModal';
+import { ExamPrintModal } from '../common/ExamPrintModal';
+import { OMRScannerModal } from './OMRScannerModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -88,6 +91,8 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   // Exam preview modal
   const [previewExam, setPreviewExam] = useState<Exam | null>(null);
   const [shareExamTarget, setShareExamTarget] = useState<Exam | null>(null);
+  const [printTarget, setPrintTarget] = useState<{ exam: Exam; mode: 'exam' | 'answer_key' } | null>(null);
+  const [omrScannerExam, setOmrScannerExam] = useState<Exam | null>(null);
 
   // Confirmation & Feedback State
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
@@ -594,6 +599,33 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   </button>
 
                   <button
+                    onClick={() => setPrintTarget({ exam, mode: 'exam' })}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1"
+                    title="In đề thi chuẩn khổ A4 cho học sinh làm bài"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-slate-600" />
+                    <span>In đề (A4)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setPrintTarget({ exam, mode: 'answer_key' })}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-50 transition-colors cursor-pointer flex items-center gap-1"
+                    title="In đáp án và hướng dẫn chấm chi tiết khổ A4"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>In đáp án (A4)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setOmrScannerExam(exam)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1"
+                    title="Chấm bài offline bằng ảnh chụp phiếu trắc nghiệm A4 hoặc in mẫu phiếu"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Chấm phiếu OMR</span>
+                  </button>
+
+                  <button
                     onClick={() => setShareExamTarget(exam)}
                     className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1"
                     title="Mã QR và liên kết chia sẻ đề thi cho học sinh"
@@ -741,6 +773,30 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           isOpen={Boolean(shareExamTarget)}
           exam={shareExamTarget}
           onClose={() => setShareExamTarget(null)}
+        />
+      )}
+
+      {/* Exam Print Modal (A4 standard) */}
+      {printTarget && (
+        <ExamPrintModal
+          isOpen={Boolean(printTarget)}
+          onClose={() => setPrintTarget(null)}
+          exam={printTarget.exam}
+          mode={printTarget.mode}
+        />
+      )}
+
+      {/* OMR Offline Scanner & Sheet Generator Modal */}
+      {omrScannerExam && (
+        <OMRScannerModal
+          isOpen={Boolean(omrScannerExam)}
+          onClose={() => setOmrScannerExam(null)}
+          exam={omrScannerExam}
+          classes={classes}
+          onGradedSuccess={() => {
+            showSuccess('Đã lưu kết quả chấm OMR vào hệ thống thành công!');
+            onRefreshExams();
+          }}
         />
       )}
     </div>

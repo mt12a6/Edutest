@@ -331,18 +331,20 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     return true;
   };
 
-  // Group questions into 3 distinct parts and shuffle strictly within each part
-  const { displayQuestions, section1Count, section2Count, section3Count } = React.useMemo(() => {
+  // Group questions into 4 distinct parts and shuffle strictly within each part
+  const { displayQuestions, section1Count, section2Count, section3Count, section4Count } = React.useMemo(() => {
     const p1 = questions.filter(q => q.type === 'multiple_choice');
     const p2 = questions.filter(q => q.type === 'true_false');
-    const p3 = questions.filter(q => q.type === 'fill_blank' || q.type === 'essay');
+    const p3 = questions.filter(q => q.type === 'fill_blank');
+    const p4 = questions.filter(q => q.type === 'essay');
 
     if (!exam.shuffleQuestions) {
       return {
-        displayQuestions: [...p1, ...p2, ...p3],
+        displayQuestions: [...p1, ...p2, ...p3, ...p4],
         section1Count: p1.length,
         section2Count: p2.length,
-        section3Count: p3.length
+        section3Count: p3.length,
+        section4Count: p4.length
       };
     }
 
@@ -362,16 +364,18 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     };
 
     const baseSeed = (initialAttempt.id || 'shuffle').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-    // Shuffle strictly WITHIN each part (keeping Part 1 -> Part 2 -> Part 3 order fixed)
+    // Shuffle strictly WITHIN each part (keeping Part 1 -> Part 2 -> Part 3 -> Part 4 order fixed)
     const shuffledP1 = shuffleWithSeed(p1, baseSeed + 17);
     const shuffledP2 = shuffleWithSeed(p2, baseSeed + 53);
     const shuffledP3 = shuffleWithSeed(p3, baseSeed + 97);
+    const shuffledP4 = shuffleWithSeed(p4, baseSeed + 131);
 
     return {
-      displayQuestions: [...shuffledP1, ...shuffledP2, ...shuffledP3],
+      displayQuestions: [...shuffledP1, ...shuffledP2, ...shuffledP3, ...shuffledP4],
       section1Count: p1.length,
       section2Count: p2.length,
-      section3Count: p3.length
+      section3Count: p3.length,
+      section4Count: p4.length
     };
   }, [exam.shuffleQuestions, questions, initialAttempt.id]);
 
@@ -403,19 +407,30 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
         color: 'from-emerald-950 via-teal-950 to-slate-900',
         badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
       };
-    } else {
+    } else if (currentIndex < section1Count + section2Count + section3Count) {
       const start = section1Count + section2Count + 1;
-      const end = totalQuestions;
+      const end = section1Count + section2Count + section3Count;
       return {
         badge: 'PHẦN III',
-        title: 'CÂU TRẢ LỜI NGẮN HOẶC TỰ LUẬN',
-        introText: `Thí sinh trả lời từ câu ${start} đến câu ${end}. Thí sinh điền kết quả hoặc trình bày bài làm chi tiết.`,
+        title: 'CÂU HỎI TRẢ LỜI NGẮN',
+        introText: `Thí sinh trả lời từ câu ${start} đến câu ${end}. Điền câu trả lời ngắn hoặc kết quả tính toán vào ô trống.`,
+        rangeText: `Câu ${start} - ${end}`,
+        color: 'from-amber-950 via-slate-900 to-indigo-950',
+        badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+      };
+    } else {
+      const start = section1Count + section2Count + section3Count + 1;
+      const end = totalQuestions;
+      return {
+        badge: 'PHẦN IV',
+        title: 'CÂU HỎI TỰ LUẬN',
+        introText: `Thí sinh làm từ câu ${start} đến câu ${end}. Trình bày chi tiết lời giải và kết quả bài làm vào khung bên dưới.`,
         rangeText: `Câu ${start} - ${end}`,
         color: 'from-purple-950 via-slate-900 to-indigo-950',
         badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-400/30'
       };
     }
-  }, [currentIndex, section1Count, section2Count, totalQuestions]);
+  }, [currentIndex, section1Count, section2Count, section3Count, totalQuestions]);
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col select-none">
@@ -599,25 +614,9 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
 
             {/* RENDER DYNAMIC ANSWER INTERFACES ACCORDING TO QUESTION TYPE */}
 
-            {/* 1. MULTIPLE CHOICE (A, B, C, D) with optional shuffling */}
+            {/* 1. MULTIPLE CHOICE (A, B, C, D) standard ordered options */}
             {qType === 'multiple_choice' && currentQ.options && (() => {
-              const defaultKeys: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
-              let displayKeys = [...defaultKeys];
-
-              if (exam.shuffleOptions) {
-                // Deterministic shuffle per student attempt and question ID
-                const optSeed = (initialAttempt.id + '_' + currentQ.id)
-                  .split('')
-                  .reduce((acc, c) => acc + c.charCodeAt(0), 0);
-                let m = displayKeys.length, t, i, s = optSeed;
-                while (m) {
-                  s = (s * 9301 + 49297) % 233280;
-                  i = Math.floor((s / 233280) * m--);
-                  t = displayKeys[m];
-                  displayKeys[m] = displayKeys[i];
-                  displayKeys[i] = t;
-                }
-              }
+              const displayKeys: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
 
               return (
                 <div className="space-y-3.5 max-w-3xl">

@@ -203,7 +203,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
         createdAt: new Date().toISOString()
       };
 
-      const attempt = await startOrCreateAttempt(targetExam.id, studentProfile);
+      const attempt = await startOrCreateAttempt(targetExam, studentProfile, qList.length);
       if (onDirectStartExam) {
         onDirectStartExam(targetExam, qList, attempt);
       } else if (onSelectExamToTake) {

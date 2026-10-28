@@ -275,10 +275,13 @@ function getLocalResults(): ExamResult[] {
   }
 }
 
-function saveLocalResult(result: ExamResult) {
+export function saveLocalResult(result: ExamResult) {
   try {
     const current = getLocalResults();
-    const updated = [result, ...current.filter(r => r.id !== result.id)];
+    const updated = [
+      result, 
+      ...current.filter(r => r.id !== result.id && r.attemptId !== result.attemptId && r.id !== result.attemptId)
+    ];
     localStorage.setItem(STORAGE_RESULTS_KEY, JSON.stringify(updated));
   } catch (e) {
     console.warn('Could not save result to localStorage', e);
@@ -1484,14 +1487,20 @@ export async function gradeEssaySubmission(
   saveLocalResult(updated);
 
   try {
-    await updateDoc(doc(db, 'results', attemptId), sanitizeForFirestore(updated));
-    await updateDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore({
+    const cleanUpdated = sanitizeForFirestore(updated);
+    await setDoc(doc(db, 'results', targetResult.id), cleanUpdated, { merge: true });
+    if (targetResult.attemptId && targetResult.attemptId !== targetResult.id) {
+      await setDoc(doc(db, 'results', targetResult.attemptId), cleanUpdated, { merge: true });
+    }
+    await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore({
       score: updatedScore,
       essayScore,
       essayFeedback,
       isAiGraded,
+      essayGradedBy: graderName,
+      essayGradedAt: updated.essayGradedAt,
       essayGrades: essayGrades || targetResult.essayGrades
-    }));
+    }), { merge: true });
   } catch (err) {
     console.warn('gradeEssaySubmission Firestore warning:', err);
   }
@@ -3033,7 +3042,11 @@ export async function restoreBackupData(payload: EduTestBackupPayload): Promise<
         }
       }
     }
-    saveLocalQuestionsMap(localQMap);
+    try {
+      localStorage.setItem(STORAGE_QUESTIONS_KEY, JSON.stringify(localQMap));
+    } catch {
+      // ignore
+    }
   }
 
   // 5. Restore Results

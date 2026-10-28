@@ -26,7 +26,220 @@ export async function parseExamFile(file: File): Promise<ExamParseResult> {
     return parseJsonFile(file);
   }
 
+  if (fileNameLower.endsWith('.tex') || fileNameLower.endsWith('.latex')) {
+    return parseLatexFile(file);
+  }
+
   return parseDocxFile(file);
+}
+
+/**
+ * Parses LaTeX (.tex) exam files (ex_test, dethi, and standard Vietnamese LaTeX packages)
+ */
+export async function parseLatexFile(file: File): Promise<ExamParseResult> {
+  const text = await file.text();
+  
+  // Extract title if present
+  let detectedTitle = file.name.replace(/\.(tex|latex)$/i, '');
+  const titleMatch = text.match(/\\title\s*\{([^}]+)\}/i);
+  if (titleMatch) {
+    detectedTitle = titleMatch[1].trim();
+  }
+
+  // Detect grade and subject
+  let detectedGrade = '12';
+  if (/Lớp\s*10|10\s*THPT/i.test(text)) detectedGrade = '10';
+  else if (/Lớp\s*11|11\s*THPT/i.test(text)) detectedGrade = '11';
+  else if (/Lớp\s*12|12\s*THPT/i.test(text)) detectedGrade = '12';
+
+  let detectedSubject = 'Toán';
+  if (/Vật\s*l[ií]|Vật lý/i.test(text)) detectedSubject = 'Vật lí';
+  else if (/Hóa\s*học|Hóa/i.test(text)) detectedSubject = 'Hóa học';
+  else if (/Sinh\s*học|Sinh/i.test(text)) detectedSubject = 'Sinh học';
+  else if (/Lịch\s*sử|Sử/i.test(text)) detectedSubject = 'Lịch sử';
+  else if (/Địa\s*l[ií]|Địa lý/i.test(text)) detectedSubject = 'Địa lí';
+  else if (/Tiếng\s*Anh|English/i.test(text)) detectedSubject = 'Tiếng Anh';
+
+  // Helper to extract balanced curly braces { ... }
+  const extractBraceBlocks = (str: string, maxCount = 4): string[] => {
+    const blocks: string[] = [];
+    let i = 0;
+    while (i < str.length && blocks.length < maxCount) {
+      if (str[i] === '{') {
+        let depth = 1;
+        let start = i + 1;
+        let j = start;
+        while (j < str.length && depth > 0) {
+          if (str[j] === '{' && str[j - 1] !== '\\') depth++;
+          else if (str[j] === '}' && str[j - 1] !== '\\') depth--;
+          j++;
+        }
+        if (depth === 0) {
+          blocks.push(str.slice(start, j - 1).trim());
+          i = j;
+          continue;
+        }
+      }
+      i++;
+    }
+    return blocks;
+  };
+
+  // Helper to clean LaTeX formatting artifacts while keeping math formulas intact
+  const cleanLatexText = (raw: string): string => {
+    return raw
+      .replace(/\\textbf\{([^}]+)\}/g, '$1')
+      .replace(/\\textit\{([^}]+)\}/g, '$1')
+      .replace(/\\text\{([^}]+)\}/g, '$1')
+      .replace(/\\noindent\s*/g, '')
+      .replace(/\\centering\s*/g, '')
+      .replace(/\\\\/g, '\n')
+      .replace(/\\par\s*/g, '\n')
+      .trim();
+  };
+
+  const rawBlocks: string[] = [];
+
+  // Match \begin{ex}...\end{ex} or \begin{cau}...\end{cau}
+  const envRegex = /\\begin\{(?:ex|cau|question)\}([\s\S]*?)\\end\{(?:ex|cau|question)\}/gi;
+  let match;
+  while ((match = envRegex.exec(text)) !== null) {
+    rawBlocks.push(match[1]);
+  }
+
+  // Fallback: If no environments matched, split by \item or "Câu X:"
+  if (rawBlocks.length === 0) {
+    const lines = text.split('\n');
+    let currentBlock = '';
+    for (const line of lines) {
+      if (/^\\s*(\\item|Câu\s*\d+[:.]|Bài\s*\d+[:.])/i.test(line)) {
+        if (currentBlock.trim()) rawBlocks.push(currentBlock);
+        currentBlock = line + '\n';
+      } else {
+        currentBlock += line + '\n';
+      }
+    }
+    if (currentBlock.trim()) rawBlocks.push(currentBlock);
+  }
+
+  const questions: ParsedDocxQuestion[] = [];
+
+  rawBlocks.forEach((block, idx) => {
+    const qNum = idx + 1;
+    let explanation = '';
+    let workBlock = block;
+
+    // Extract \loigiai{...}
+    const loigiaiIdx = workBlock.indexOf('\\loigiai');
+    if (loigiaiIdx !== -1) {
+      const rest = workBlock.slice(loigiaiIdx + 8);
+      const extracted = extractBraceBlocks(rest, 1);
+      if (extracted.length > 0) {
+        explanation = cleanLatexText(extracted[0]);
+      }
+      workBlock = workBlock.slice(0, loigiaiIdx);
+    }
+
+    // 1. Check for True/False (\choiceTF)
+    const choiceTFIdx = workBlock.indexOf('\\choiceTF');
+    if (choiceTFIdx !== -1) {
+      const promptPart = cleanLatexText(workBlock.slice(0, choiceTFIdx));
+      const rest = workBlock.slice(choiceTFIdx + 9);
+      const subItems = extractBraceBlocks(rest, 4);
+      const keys: Array<'a' | 'b' | 'c' | 'd'> = ['a', 'b', 'c', 'd'];
+      const subQuestions: TrueFalseItem[] = subItems.map((rawSub, sIdx) => {
+        const isTrue = /\\True/i.test(rawSub);
+        const cleanedSub = cleanLatexText(rawSub.replace(/\\(?:True|False)\s*/gi, ''));
+        const optKey: 'a' | 'b' | 'c' | 'd' = keys[sIdx] || 'a';
+        return {
+          key: optKey,
+          text: normalizeMathFormulas(cleanedSub),
+          correct: isTrue
+        };
+      });
+
+      questions.push({
+        questionNumber: qNum,
+        type: 'true_false',
+        prompt: normalizeMathFormulas(promptPart || `Câu ${qNum}`),
+        subQuestions,
+        explanation: normalizeMathFormulas(explanation),
+        points: 1.0,
+        warnings: []
+      });
+      return;
+    }
+
+    // 2. Check for Short Answer (\shortans{...})
+    const shortansMatch = workBlock.match(/\\shortans\s*\{([^}]+)\}/i);
+    if (shortansMatch) {
+      const ansVal = cleanLatexText(shortansMatch[1]);
+      const promptPart = cleanLatexText(workBlock.replace(/\\shortans\s*\{[^}]+\}/i, ''));
+      questions.push({
+        questionNumber: qNum,
+        type: 'fill_blank',
+        prompt: normalizeMathFormulas(promptPart || `Câu ${qNum}`),
+        acceptableAnswers: [ansVal],
+        explanation: normalizeMathFormulas(explanation),
+        points: 0.5,
+        warnings: []
+      });
+      return;
+    }
+
+    // 3. Check for 4 Choices (\choice, \motcot, \haicot, \boncot)
+    const choiceMatch = workBlock.match(/\\(?:choice|motcot|haicot|boncot)/i);
+    if (choiceMatch && choiceMatch.index !== undefined) {
+      const promptPart = cleanLatexText(workBlock.slice(0, choiceMatch.index));
+      const rest = workBlock.slice(choiceMatch.index + choiceMatch[0].length);
+      const rawOptions = extractBraceBlocks(rest, 4);
+
+      let correctOpt: 'A' | 'B' | 'C' | 'D' | undefined = undefined;
+      const optKeys: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
+      const options: Record<'A' | 'B' | 'C' | 'D', string> = { A: '', B: '', C: '', D: '' };
+
+      rawOptions.forEach((optText, oIdx) => {
+        const k = optKeys[oIdx];
+        if (!k) return;
+        if (/\\True/i.test(optText)) {
+          correctOpt = k;
+        }
+        options[k] = normalizeMathFormulas(cleanLatexText(optText.replace(/\\(?:True|False)\s*/gi, '')));
+      });
+
+      questions.push({
+        questionNumber: qNum,
+        type: 'multiple_choice',
+        prompt: normalizeMathFormulas(promptPart || `Câu ${qNum}`),
+        options,
+        correctOption: correctOpt,
+        explanation: normalizeMathFormulas(explanation),
+        points: 0.25,
+        warnings: !correctOpt ? ['Chưa phát hiện đáp án \\True trong các phương án.'] : []
+      });
+      return;
+    }
+
+    // 4. Default to Essay or Plain Text
+    const promptClean = cleanLatexText(workBlock);
+    questions.push({
+      questionNumber: qNum,
+      type: 'essay',
+      prompt: normalizeMathFormulas(promptClean || `Câu ${qNum}: Bài tập tự luận`),
+      sampleAnswer: explanation ? normalizeMathFormulas(explanation) : undefined,
+      explanation: normalizeMathFormulas(explanation),
+      points: 2.0,
+      warnings: []
+    });
+  });
+
+  return {
+    questions,
+    rawText: text,
+    detectedTitle,
+    detectedGrade,
+    detectedSubject
+  };
 }
 
 /**

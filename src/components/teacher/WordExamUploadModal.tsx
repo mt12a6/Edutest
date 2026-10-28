@@ -25,6 +25,7 @@ import {
 import { parseExamFile } from '../../utils/docxParser';
 import { normalizeMathFormulas } from '../../utils/mathFormatter';
 import { ParsedDocxQuestion, SchoolClass, Subject, QuestionType, TrueFalseItem, Exam, Question } from '../../types';
+import { downloadSampleJsonExam, downloadSampleLatexExam } from '../../utils/sampleExamTemplates';
 import { 
   createExamWithQuestions, 
   updateExamWithQuestions, 
@@ -203,9 +204,10 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
     const isDocx = lowerName.endsWith('.docx');
     const isPdf = lowerName.endsWith('.pdf');
     const isJson = lowerName.endsWith('.json');
+    const isTex = lowerName.endsWith('.tex') || lowerName.endsWith('.latex');
 
-    if (!isDocx && !isPdf && !isJson) {
-      setParseError('Vui lòng chọn tệp định dạng Word (.docx), PDF (.pdf) hoặc JSON (.json - chuẩn Azota / EduTest)');
+    if (!isDocx && !isPdf && !isJson && !isTex) {
+      setParseError('Vui lòng chọn tệp định dạng Word (.docx), PDF (.pdf), JSON (.json) hoặc LaTeX (.tex / .latex)');
       return;
     }
 
@@ -741,7 +743,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                 <input
                   type="file"
                   id="docxInput"
-                  accept=".docx,.pdf"
+                  accept=".docx,.pdf,.json,.tex,.latex"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -754,16 +756,43 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                   </div>
                   <div>
                     <p className="text-base font-bold text-slate-800">
-                      Chọn tệp đề thi Word (.docx) hoặc PDF (.pdf)
+                      Chọn tệp Word (.docx), PDF (.pdf), JSON (.json) hoặc LaTeX (.tex)
                     </p>
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                      Tự động trích xuất toàn bộ hình vẽ minh họa, hình học, đồ thị và chuẩn hóa công thức toán sang mã KaTeX LaTeX ($...$)
+                      Tự động trích xuất toàn bộ hình vẽ minh họa, cấu trúc 4 phần, bảng đáp án và chuẩn hóa công thức toán sang mã KaTeX LaTeX ($...$)
                     </p>
                   </div>
                   <span className="mt-2 inline-flex items-center px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs">
-                    Tải tệp Word / PDF lên
+                    Tải tệp đề thi lên
                   </span>
                 </label>
+
+                {/* Sample Download Action Bar */}
+                <div className="mt-5 pt-4 border-t border-slate-200/80 flex flex-wrap items-center justify-center gap-2 text-xs">
+                  <span className="text-slate-400 font-semibold text-[11px]">Tải tệp mẫu chuẩn:</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      downloadSampleJsonExam();
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:border-indigo-400 text-indigo-700 font-bold text-[11px] shadow-2xs hover:bg-indigo-50 transition-colors cursor-pointer"
+                    title="Tải tệp JSON chuẩn 4 phần của hệ thống EduTest"
+                  >
+                    📄 Tệp mẫu JSON (.json)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      downloadSampleLatexExam();
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:border-emerald-400 text-emerald-700 font-bold text-[11px] shadow-2xs hover:bg-emerald-50 transition-colors cursor-pointer"
+                    title="Tải tệp LaTeX (.tex) gói ex_test chuẩn câu hỏi & công thức toán"
+                  >
+                    📐 Tệp mẫu LaTeX (.tex)
+                  </button>
+                </div>
               </div>
 
               {isParsing && (

@@ -18,12 +18,17 @@ import {
   ShieldAlert,
   ChevronDown,
   PenTool,
-  Eye
+  Eye,
+  Printer,
+  Camera,
+  FileText
 } from 'lucide-react';
 import { Exam, ExamResult, Question, SchoolClass, ExamAttempt } from '../../types';
 import { getExamResults, getExamQuestions, getAttemptsForExam, gradeEssaySubmission } from '../../services/db';
 import { exportResultsToCsv } from '../../utils/exportUtils';
 import { StudentGradingDetailModal } from './StudentGradingDetailModal';
+import { ExamPrintModal } from '../common/ExamPrintModal';
+import { OMRScannerModal } from './OMRScannerModal';
 import * as XLSX from 'xlsx';
 
 interface ExamResultsViewerProps {
@@ -73,6 +78,10 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   // AI Essay Grading State
   const [isAiGradingAll, setIsAiGradingAll] = useState<boolean>(false);
   const [gradingProgress, setGradingProgress] = useState<string>('');
+
+  // Print & OMR states
+  const [printModeTarget, setPrintModeTarget] = useState<'exam' | 'answer_key' | null>(null);
+  const [showOMRScanner, setShowOMRScanner] = useState<boolean>(false);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -287,14 +296,43 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={() => exportResultsToCsv(exam, results)}
-          disabled={results.length === 0}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-40"
-        >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>Xuất tất cả dữ liệu (Excel/CSV)</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setPrintModeTarget('exam')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="In đề thi chuẩn khổ A4"
+          >
+            <Printer className="w-3.5 h-3.5 text-slate-600" />
+            <span>In đề (A4)</span>
+          </button>
+
+          <button
+            onClick={() => setPrintModeTarget('answer_key')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-indigo-50 text-indigo-700 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="In đáp án và hướng dẫn chấm chi tiết khổ A4"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>In đáp án (A4)</span>
+          </button>
+
+          <button
+            onClick={() => setShowOMRScanner(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="Chấm offline phiếu trắc nghiệm A4"
+          >
+            <Camera className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Chấm phiếu OMR</span>
+          </button>
+
+          <button
+            onClick={() => exportResultsToCsv(exam, results)}
+            disabled={results.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-40"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Xuất Excel/CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Global Metrics Row */}
@@ -908,6 +946,27 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
           questions={questions}
           result={selectedGradingResult}
           attempt={attempts.find(a => a.id === selectedGradingResult.attemptId || a.id === selectedGradingResult.id)}
+          onGradedSuccess={fetchData}
+        />
+      )}
+
+      {/* Exam Print Modal (A4 standard) */}
+      {printModeTarget && (
+        <ExamPrintModal
+          isOpen={Boolean(printModeTarget)}
+          onClose={() => setPrintModeTarget(null)}
+          exam={exam}
+          mode={printModeTarget}
+        />
+      )}
+
+      {/* OMR Offline Scanner & Sheet Generator Modal */}
+      {showOMRScanner && (
+        <OMRScannerModal
+          isOpen={showOMRScanner}
+          onClose={() => setShowOMRScanner(false)}
+          exam={exam}
+          classes={classes}
           onGradedSuccess={fetchData}
         />
       )}
