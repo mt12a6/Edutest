@@ -35,11 +35,21 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
 }) => {
   if (!content) return null;
 
-  // Split text into normal text parts and LaTeX parts ($...$ or $$...$$)
+  // Split text into normal text parts and LaTeX parts
   const renderMathContent = (rawText: string) => {
+    // Convert \[...\] to $$...$$ and \(...\) to $...$ first for standard processing
+    let normalized = rawText
+      .replace(/\\\[([\s\S]+?)\\\]/g, '$$$$$1$$$$')
+      .replace(/\\\(([\s\S]+?)\\\)/g, '$$$1$$');
+
+    // Auto-wrap top-level LaTeX environments if not wrapped: \begin{aligned|cases|matrix|pmatrix|bmatrix}...
+    normalized = normalized.replace(/(?<!\$)\\begin\{(aligned|cases|matrix|pmatrix|bmatrix|vmatrix|gathered)\}([\s\S]*?)\\end\{\1\}(?!\$)/g, (full) => {
+      return `$$${full}$$`;
+    });
+
     // Regex matches $$...$$ (display mode) or $...$ (inline mode)
     const mathRegex = /(\$\$[\s\S]+?\$\$|\$[^\$\n]+?\$)/g;
-    const parts = rawText.split(mathRegex);
+    const parts = normalized.split(mathRegex);
 
     return parts.map((part, index) => {
       if (!part) return null;
@@ -50,17 +60,18 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         try {
           const html = katex.renderToString(mathCode, {
             displayMode: true,
-            throwOnError: false
+            throwOnError: false,
+            strict: false
           });
           return (
             <span
               key={index}
-              className="my-2 block overflow-x-auto py-1"
+              className="my-2 block overflow-x-auto py-1 text-center"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
         } catch {
-          return <span key={index} className="font-mono text-xs">{part}</span>;
+          return <span key={index} className="font-mono text-xs text-rose-600">{part}</span>;
         }
       }
 
@@ -70,17 +81,18 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
         try {
           const html = katex.renderToString(mathCode, {
             displayMode: false,
-            throwOnError: false
+            throwOnError: false,
+            strict: false
           });
           return (
             <span
               key={index}
-              className="inline-block px-0.5"
+              className="inline-block px-0.5 align-middle"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
         } catch {
-          return <span key={index} className="font-mono text-xs">{part}</span>;
+          return <span key={index} className="font-mono text-xs text-rose-600">{part}</span>;
         }
       }
 

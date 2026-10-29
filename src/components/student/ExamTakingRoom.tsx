@@ -128,11 +128,20 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     };
   }, []);
 
-  // Timer countdown
+  // Timer countdown: respects both attempt duration and official exam closeTime
   useEffect(() => {
     const timer = setInterval(() => {
-      const deadlineMs = new Date(initialAttempt.deadline).getTime();
-      const diff = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
+      const attemptDeadlineMs = new Date(initialAttempt.deadline).getTime();
+      let effectiveDeadlineMs = attemptDeadlineMs;
+
+      if (exam.closeTime) {
+        const closeMs = new Date(exam.closeTime).getTime();
+        if (!isNaN(closeMs)) {
+          effectiveDeadlineMs = Math.min(attemptDeadlineMs, closeMs);
+        }
+      }
+
+      const diff = Math.max(0, Math.floor((effectiveDeadlineMs - Date.now()) / 1000));
       setSecondsRemaining(diff);
 
       if (diff <= 0 && !hasAutoSubmitted.current) {
@@ -143,7 +152,8 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [initialAttempt.deadline]);
+  }, [initialAttempt.deadline, exam.closeTime]);
+
 
   // Auto-save debounced sync
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);

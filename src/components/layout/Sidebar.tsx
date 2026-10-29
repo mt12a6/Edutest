@@ -54,8 +54,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
           </button>
         </div>
 
-        {/* Teacher Navigation (Visible for guests, teachers, and admins) */}
-        {profile?.role !== 'student' && (
+        {/* Teacher Navigation (Strictly visible only for Teachers and Admins) */}
+        {isTeacher && (
           <div className="space-y-1 pt-2 border-t border-slate-200">
             <div className="px-3.5 mb-2 text-[11px] font-bold text-indigo-600 uppercase tracking-wider flex items-center justify-between">
               <span>Khu vực Giáo viên</span>
@@ -98,10 +98,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
           </div>
         )}
 
-        {/* Student Navigation */}
+        {/* Student / Candidate Navigation */}
         <div className="space-y-1 pt-2 border-t border-slate-200">
           <div className="px-3.5 mb-2 text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
-            Khu vực Học sinh
+            {isTeacher ? 'Góc nhìn Thí sinh' : 'Các lớp đang thi & Lịch sử'}
           </div>
 
           <button 
@@ -109,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             className={navItemClass('student-exams')}
           >
             <Clock className="w-4 h-4 text-emerald-500" />
-            <span>Kỳ thi của tôi</span>
+            <span>Các lớp đang thi</span>
           </button>
 
           <button 
@@ -117,9 +117,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             className={navItemClass('student-history')}
           >
             <Award className="w-4 h-4 text-emerald-500" />
-            <span>Kết quả & Lịch sử</span>
+            <span>Kết quả & Lịch sử làm bài</span>
           </button>
         </div>
+
 
         {/* Admin Navigation (Only visible for admin) */}
         {isAdmin && (
@@ -169,18 +170,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
           </div>
         )}
 
-        {/* Quick Help Card */}
-        <div className="pt-2">
-          <div className="bg-gradient-to-br from-slate-900 to-teal-950 text-white p-4 rounded-2xl shadow-sm text-xs space-y-2">
-            <div className="flex items-center gap-2 font-bold text-emerald-300">
-              <Sparkles className="w-4 h-4 text-emerald-400" />
-              <span>Hỗ trợ chuyển đổi Word</span>
+        {/* Quick Help Card (Only for teachers/admins) */}
+        {isTeacher && (
+          <div className="pt-2">
+            <div className="bg-gradient-to-br from-slate-900 to-teal-950 text-white p-4 rounded-2xl shadow-sm text-xs space-y-2">
+              <div className="flex items-center gap-2 font-bold text-emerald-300">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>Hỗ trợ chuyển đổi Word</span>
+              </div>
+              <p className="text-slate-300 text-[11px] leading-relaxed">
+                Tải tệp .docx chuẩn định dạng "Câu 1: ... A. ... B. ... C. ... D." để hệ thống nhận diện tức thì.
+              </p>
             </div>
-            <p className="text-slate-300 text-[11px] leading-relaxed">
-              Tải tệp .docx chuẩn định dạng "Câu 1: ... A. ... B. ... C. ... D." để hệ thống nhận diện tức thì.
-            </p>
           </div>
-        </div>
+        )}
       </div>
     </aside>
   );

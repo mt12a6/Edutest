@@ -25,7 +25,10 @@ import {
   Printer,
   Pin,
   QrCode,
-  Camera
+  Camera,
+  Key,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
@@ -36,6 +39,7 @@ import {
   toggleExamTabWarning,
   deleteExam, 
   getExamQuestions,
+  updateExamWithQuestions,
   logSystemAction,
   getTeacherScope,
   isExamInTeacherScope,
@@ -43,6 +47,7 @@ import {
   togglePinExam
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
+import { createBackupGoogleForm } from '../../services/googleFormsService';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { TeacherScopeModal } from '../common/TeacherScopeModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
@@ -70,8 +75,9 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   onViewResults,
   onRefreshExams
 }) => {
-  const { user } = useAuth();
-  
+  const { user, getGoogleAccessToken, requestGoogleScopes } = useAuth();
+  const [generatingGfExamId, setGeneratingGfExamId] = useState<string | null>(null);
+
   // Teacher teaching scope (defaults to false so all teacher exams are visible by default)
   const [teacherScope, setTeacherScope] = useState<TeacherScopeConfig>(getTeacherScope());
   const [showScopeModal, setShowScopeModal] = useState<boolean>(false);
@@ -98,6 +104,46 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleGenerateGoogleForm = async (exam: Exam) => {
+    setGeneratingGfExamId(exam.id);
+    try {
+      showSuccess(`Đang kết nối Google Forms API để tạo bản dự phòng cho "${exam.title}"...`);
+      let token = await getGoogleAccessToken();
+      if (!token) {
+        token = await requestGoogleScopes([
+          'https://www.googleapis.com/auth/forms.body',
+          'https://www.googleapis.com/auth/drive.file'
+        ]);
+      }
+      if (!token) {
+        showError('Chưa được cấp quyền Google Forms. Vui lòng thử lại và cấp quyền truy cập.');
+        setGeneratingGfExamId(null);
+        return;
+      }
+
+      const qList = await getExamQuestions(exam.id);
+      const res = await createBackupGoogleForm(exam, qList, token);
+      if (res.success && res.formId) {
+        await updateExamWithQuestions(exam.id, {
+          googleFormId: res.formId,
+          googleFormUrl: res.formUrl,
+          googleFormStatus: 'created'
+        }, qList);
+        exam.googleFormId = res.formId;
+        exam.googleFormUrl = res.formUrl;
+        exam.googleFormStatus = 'created';
+        showSuccess(`Đã tạo thành công Google Form dự phòng cho "${exam.title}"!`);
+        onRefreshExams();
+      } else {
+        showError(res.error || 'Không thể tạo Google Form.');
+      }
+    } catch (err: any) {
+      showError(`Lỗi khi tạo Google Form: ${err?.message || 'Lỗi không xác định'}`);
+    } finally {
+      setGeneratingGfExamId(null);
+    }
+  };
 
   const showSuccess = (msg: string) => {
     setActionSuccess(msg);
@@ -560,8 +606,92 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {/* Schedule time display */}
+                  {(exam.openTime || exam.closeTime) && (
+                    <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-medium text-slate-600 bg-indigo-50/50 p-1.5 rounded-lg border border-indigo-100">
+                      <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Lịch thi:</span>
+                      {exam.openTime && (
+                        <span>Mở: <strong>{new Date(exam.openTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</strong></span>
+                      )}
+                      {exam.closeTime && (
+                        <span>— Đóng: <strong>{new Date(exam.closeTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</strong></span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Secret Token & Exam Code row */}
+                  {(exam.secretToken || exam.examCode) && (
+                    <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-amber-50/70 border border-amber-200 text-[10px]">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Key className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        {exam.examCode && <span className="font-bold text-amber-900">Mã đề: {exam.examCode}</span>}
+                        {exam.secretToken && (
+                          <span className="text-amber-800 font-mono truncate">Token: {exam.secretToken}</span>
+                        )}
+                      </div>
+                      {exam.secretToken && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/?secretToken=${encodeURIComponent(exam.secretToken!)}`);
+                            showSuccess(`Đã sao chép đường link bí mật của đề thi "${exam.title}"!`);
+                          }}
+                          className="px-2 py-0.5 rounded bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold shrink-0 transition-colors cursor-pointer"
+                        >
+                          Chép link
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Google Forms backup badge & action */}
+                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[10px]">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="font-bold text-emerald-950">📑 Google Form:</span>
+                      {exam.googleFormUrl ? (
+                        <span className="text-emerald-700 font-semibold truncate">Đã đồng bộ Drive</span>
+                      ) : (
+                        <span className="text-slate-500">Chưa tạo bản sao lưu</span>
+                      )}
+                    </div>
+                    {exam.googleFormUrl ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(exam.googleFormUrl!);
+                            showSuccess('Đã sao chép link Google Form vào bộ nhớ tạm!');
+                          }}
+                          className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-semibold cursor-pointer"
+                        >
+                          Chép link
+                        </button>
+                        <a
+                          href={exam.googleFormUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1"
+                        >
+                          <span>Mở</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={generatingGfExamId === exam.id}
+                        onClick={() => handleGenerateGoogleForm(exam)}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {generatingGfExamId === exam.id ? 'Đang tạo...' : '+ Tạo Google Form'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
+
 
 
               {/* Footer Actions */}

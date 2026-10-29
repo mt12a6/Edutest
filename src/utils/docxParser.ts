@@ -243,14 +243,32 @@ export async function parseLatexFile(file: File): Promise<ExamParseResult> {
 }
 
 /**
- * Parses a .json File object (Azota / EduTest JSON export standard)
+ * Parses a .json File object (Azota / EduTest JSON export standard) with strict JSON parser
+ * and robust LaTeX formula preservation without destructive double-unescaping
  */
 export async function parseJsonFile(file: File): Promise<ExamParseResult> {
   const text = await file.text();
   try {
-    const json = JSON.parse(text);
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch (parseErr: any) {
+      // Find line and column of error if available
+      const msg = parseErr.message || '';
+      let lineColInfo = '';
+      const posMatch = msg.match(/position\s+(\d+)/i);
+      if (posMatch) {
+        const charIdx = parseInt(posMatch[1], 10);
+        const linesBefore = text.slice(0, charIdx).split('\n');
+        const lineNum = linesBefore.length;
+        const colNum = linesBefore[linesBefore.length - 1].length + 1;
+        lineColInfo = ` (Lỗi tại Dòng ${lineNum}, Cột ${colNum})`;
+      }
+      throw new Error(`Cú pháp JSON không hợp lệ${lineColInfo}: ${msg}`);
+    }
+
     const title = json.title || file.name.replace(/\.json$/i, '');
-    const grade = String(json.grade || '6');
+    const grade = String(json.grade || '12');
     const subject = json.subject || 'Toán';
     let rawList: any[] = [];
 
@@ -260,27 +278,34 @@ export async function parseJsonFile(file: File): Promise<ExamParseResult> {
       rawList = json.questions;
     } else if (json.data && Array.isArray(json.data.questions)) {
       rawList = json.data.questions;
+    } else {
+      throw new Error('Tệp JSON không chứa danh sách mảng câu hỏi (thiếu trường "questions").');
     }
 
     const questions: ParsedDocxQuestion[] = rawList.map((q, idx) => ({
       questionNumber: q.questionNumber || idx + 1,
       type: q.type || 'multiple_choice',
-      prompt: normalizeMathFormulas(q.prompt || `Câu hỏi ${idx + 1}`),
+      prompt: q.prompt ? normalizeMathFormulas(q.prompt) : `Câu hỏi ${idx + 1}`,
       imageUrl: q.imageUrl,
       options: q.options ? {
-        A: normalizeMathFormulas(q.options.A || ''),
-        B: normalizeMathFormulas(q.options.B || ''),
-        C: normalizeMathFormulas(q.options.C || ''),
-        D: normalizeMathFormulas(q.options.D || '')
+        A: q.options.A !== undefined ? normalizeMathFormulas(String(q.options.A)) : '',
+        B: q.options.B !== undefined ? normalizeMathFormulas(String(q.options.B)) : '',
+        C: q.options.C !== undefined ? normalizeMathFormulas(String(q.options.C)) : '',
+        D: q.options.D !== undefined ? normalizeMathFormulas(String(q.options.D)) : ''
       } : undefined,
+      optionImages: q.optionImages,
       correctOption: q.correctOption,
       subQuestions: q.subQuestions ? q.subQuestions.map((s: any) => ({
-        ...s,
-        text: normalizeMathFormulas(s.text || '')
+        key: s.key || 'a',
+        text: s.text ? normalizeMathFormulas(String(s.text)) : '',
+        correct: Boolean(s.correct),
+        points: s.points
       })) : undefined,
-      acceptableAnswers: q.acceptableAnswers,
-      explanation: normalizeMathFormulas(q.explanation || ''),
-      points: q.points || 1,
+      acceptableAnswers: Array.isArray(q.acceptableAnswers) ? q.acceptableAnswers.map(String) : (q.acceptableAnswer ? [String(q.acceptableAnswer)] : undefined),
+      sampleAnswer: q.sampleAnswer ? normalizeMathFormulas(String(q.sampleAnswer)) : undefined,
+      rubric: q.rubric ? String(q.rubric) : undefined,
+      explanation: q.explanation ? normalizeMathFormulas(String(q.explanation)) : '',
+      points: Number(q.points) || 1,
       warnings: []
     }));
 
@@ -292,7 +317,7 @@ export async function parseJsonFile(file: File): Promise<ExamParseResult> {
       detectedSubject: subject
     };
   } catch (err: any) {
-    throw new Error('Tệp JSON không đúng định dạng đề thi chuẩn: ' + (err?.message || 'Lỗi cú pháp'));
+    throw new Error(err?.message || 'Không thể đọc tệp đề thi JSON.');
   }
 }
 

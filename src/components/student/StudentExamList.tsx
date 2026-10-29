@@ -74,6 +74,38 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
   // Extract unique subjects
   const availableSubjects = Array.from(new Set(exams.map(e => e.subjectName))).filter(Boolean);
 
+  // Helper to determine schedule status (Sắp mở, Đang diễn ra, Đã kết thúc)
+  const getExamScheduleStatus = (exam: Exam) => {
+    const now = Date.now();
+    if (exam.openTime) {
+      const openMs = new Date(exam.openTime).getTime();
+      if (!isNaN(openMs) && now < openMs) {
+        const diffMs = openMs - now;
+        const minsLeft = Math.ceil(diffMs / 60000);
+        return {
+          schedule: 'upcoming' as const,
+          label: '🟡 Sắp mở',
+          desc: `Mở lúc ${new Date(exam.openTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })} (còn ${minsLeft}p)`
+        };
+      }
+    }
+    if (exam.closeTime) {
+      const closeMs = new Date(exam.closeTime).getTime();
+      if (!isNaN(closeMs) && now > closeMs) {
+        return {
+          schedule: 'closed' as const,
+          label: '🔴 Đã kết thúc',
+          desc: `Đã đóng lúc ${new Date(exam.closeTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}`
+        };
+      }
+    }
+    return {
+      schedule: 'ongoing' as const,
+      label: '🟢 Đang diễn ra',
+      desc: exam.closeTime ? `Hạn nộp: ${new Date(exam.closeTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Đang mở'
+    };
+  };
+
   // Helper to determine status for an exam
   const getExamStatus = (examId: string) => {
     const existingResult = results.find(r => r.examId === examId);
@@ -92,6 +124,7 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
 
     return { type: 'not_started' as const };
   };
+
 
   const handleActionClick = async (exam: Exam) => {
     setLoadingExamId(exam.id);
@@ -200,6 +233,7 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
           {publishedExams.length > 0 ? (
             publishedExams.map((exam) => {
               const status = getExamStatus(exam.id);
+              const scheduleStatus = getExamScheduleStatus(exam);
               const isLoadingThis = loadingExamId === exam.id;
 
               return (
@@ -223,6 +257,17 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                           {exam.subjectName} • K{exam.grade}
                         </span>
+
+                        {/* Real-time Schedule status badge */}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          scheduleStatus.schedule === 'upcoming'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : scheduleStatus.schedule === 'closed'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        }`}>
+                          {scheduleStatus.label}
+                        </span>
                       </div>
 
                       {status.type === 'completed' && (
@@ -240,8 +285,8 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
                       )}
 
                       {status.type === 'not_started' && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                          Chưa thi
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {scheduleStatus.desc}
                         </span>
                       )}
                     </div>
@@ -281,6 +326,21 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
                       >
                         <Clock className="w-3.5 h-3.5" />
                         <span>{isLoadingThis ? 'Đang khôi phục...' : 'Tiếp tục làm bài thi'}</span>
+                      </button>
+                    ) : scheduleStatus.schedule === 'upcoming' ? (
+                      <button
+                        disabled
+                        className="w-full py-2 px-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold flex items-center justify-center gap-1.5 cursor-not-allowed opacity-80"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Chưa mở (Mở lúc {new Date(exam.openTime!).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})</span>
+                      </button>
+                    ) : scheduleStatus.schedule === 'closed' ? (
+                      <button
+                        disabled
+                        className="w-full py-2 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-xs font-bold flex items-center justify-center gap-1.5 cursor-not-allowed"
+                      >
+                        <span>Kỳ thi đã kết thúc</span>
                       </button>
                     ) : (
                       <button

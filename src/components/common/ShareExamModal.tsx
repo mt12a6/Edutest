@@ -140,6 +140,91 @@ export const ShareExamModal: React.FC<ShareExamModalProps> = ({
             )}
           </div>
 
+          {/* Secret Access Link Card (if exam has secretToken) */}
+          {exam.secretToken && (
+            <div className="p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200 text-left space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <span className="p-1 rounded-md bg-amber-200 text-amber-900 font-mono text-[10px]">KEY</span>
+                  Đường link bí mật của Giáo viên:
+                </span>
+                {exam.examCode && (
+                  <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-200 text-amber-950">
+                    Mã đề: {exam.examCode}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Học sinh truy cập qua link này sẽ chọn danh sách Lớp, Họ và tên và nhập mã đề thi:
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${origin}/?secretToken=${encodeURIComponent(exam.secretToken)}`}
+                  className="w-full text-xs font-mono text-amber-900 bg-white border border-amber-300 rounded-xl px-3 py-2"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${origin}/?secretToken=${encodeURIComponent(exam.secretToken!)}`);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2200);
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shrink-0 cursor-pointer shadow-xs"
+                >
+                  Sao chép
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Google Form Backup Link (if exam has Google Form) */}
+          {exam.googleFormUrl && (
+            <div className="p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-200 text-left space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  📑 Google Form dự phòng (Google Drive):
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-200 text-emerald-900">
+                  Quiz Mode
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Biểu mẫu Google Form đồng bộ đầy đủ các câu hỏi và bảng đáp án đề thi:
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={exam.googleFormUrl}
+                  className="w-full text-xs font-mono text-emerald-900 bg-white border border-emerald-300 rounded-xl px-3 py-2"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(exam.googleFormUrl!);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2200);
+                  }}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 cursor-pointer shadow-xs"
+                >
+                  Sao chép
+                </button>
+                <a
+                  href={exam.googleFormUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 shrink-0 border border-emerald-300 flex items-center gap-1"
+                >
+                  <span>Mở</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+
+
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center justify-center gap-2 pt-2 border-t border-slate-100">
             <button

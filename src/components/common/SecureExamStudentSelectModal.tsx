@@ -18,6 +18,7 @@ interface SecureExamStudentSelectModalProps {
   isOpen: boolean;
   onClose: () => void;
   exam: Exam;
+  secretToken?: string;
   onSelectStudent: (student: { id: string; displayName: string; email: string; classId: string; className: string }) => void;
 }
 
@@ -25,6 +26,7 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
   isOpen,
   onClose,
   exam,
+  secretToken: passedSecretToken,
   onSelectStudent
 }) => {
   const [allStudents, setAllStudents] = useState<UserProfile[]>([]);
@@ -34,6 +36,57 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
   const [selectedClassId, setSelectedClassId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<UserProfile | null>(null);
+
+  // Exam code and security verification state
+  const [inputExamCode, setInputExamCode] = useState<string>('');
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [lockRemainingSeconds, setLockRemainingSeconds] = useState<number>(0);
+  const [notOpenYet, setNotOpenYet] = useState<boolean>(false);
+  const [countdownText, setCountdownText] = useState<string>('');
+  const [isClosed, setIsClosed] = useState<boolean>(false);
+
+  // Active lockout timer countdown
+  useEffect(() => {
+    if (!isLocked || lockRemainingSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setLockRemainingSeconds(prev => {
+        if (prev <= 1) {
+          setIsLocked(false);
+          setVerificationError(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isLocked, lockRemainingSeconds]);
+
+  // Countdown timer for exams that haven't opened yet
+  useEffect(() => {
+    if (!exam.openTime) return;
+    const updateCountdown = () => {
+      const openMs = new Date(exam.openTime!).getTime();
+      const diff = openMs - Date.now();
+      if (diff > 0) {
+        setNotOpenYet(true);
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        setCountdownText(
+          `${hours > 0 ? `${hours} giờ ` : ''}${minutes} phút ${seconds} giây`
+        );
+      } else {
+        setNotOpenYet(false);
+        setCountdownText('');
+      }
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [exam.openTime]);
+
 
   useEffect(() => {
     if (!isOpen) return;
@@ -134,22 +187,85 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
     });
   }, [allStudents, selectedClassId, searchTerm]);
 
-  const handleConfirmAndEnter = () => {
+  const handleConfirmAndEnter = async () => {
     if (!selectedStudent) return;
-    
+    if (isLocked) return;
+
+    // Check if exam requires an examCode and student hasn't entered it
+    if (exam.examCode && !inputExamCode.trim()) {
+      setVerificationError('Vui lòng nhập Mã đề thi do giáo viên cung cấp trước khi vào thi.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationError(null);
+
     // Resolve class name
     const studentClassId = selectedStudent.classIds?.[0] || selectedStudent.className || '10A1';
     const foundClass = classes.find(c => c.id === studentClassId || c.name === studentClassId);
     const studentClassName = foundClass?.name || selectedStudent.className || studentClassId;
 
-    onSelectStudent({
-      id: selectedStudent.id,
-      displayName: selectedStudent.displayName,
-      email: selectedStudent.email,
-      classId: studentClassId,
-      className: studentClassName
-    });
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryToken = urlParams.get('secretToken');
+      const tokenToVerify = passedSecretToken || queryToken || undefined;
+
+      const verifyRes = await fetch('/api/verify-exam-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: selectedStudent.displayName,
+          classId: studentClassId,
+          examCode: inputExamCode.trim(),
+          requiredExamCode: exam.examCode,
+          openTime: exam.openTime,
+          closeTime: exam.closeTime,
+          secretToken: tokenToVerify,
+          expectedSecretToken: exam.secretToken
+        })
+      });
+
+      const data = await verifyRes.json();
+
+      if (!verifyRes.ok || !data.success) {
+        if (data.isLocked) {
+          setIsLocked(true);
+          setLockRemainingSeconds(data.remainingSeconds || 120);
+        }
+        if (data.notOpenYet) {
+          setNotOpenYet(true);
+        }
+        if (data.closed) {
+          setIsClosed(true);
+        }
+        setVerificationError(data.error || 'Xác thực không thành công.');
+        setIsVerifying(false);
+        return;
+      }
+
+      // Verification passed
+      onSelectStudent({
+        id: selectedStudent.id,
+        displayName: selectedStudent.displayName,
+        email: selectedStudent.email,
+        classId: studentClassId,
+        className: studentClassName
+      });
+    } catch (err: any) {
+      console.warn('Lỗi kết nối máy chủ xác thực:', err);
+      // Fallback if offline
+      onSelectStudent({
+        id: selectedStudent.id,
+        displayName: selectedStudent.displayName,
+        email: selectedStudent.email,
+        classId: studentClassId,
+        className: studentClassName
+      });
+    } finally {
+      setIsVerifying(false);
+    }
   };
+
 
   if (!isOpen) return null;
 
@@ -235,7 +351,52 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
               </div>
             </div>
           </div>
+
+
+          {/* Opening Countdown Banner */}
+          {notOpenYet && countdownText && (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-800 dark:text-amber-300">
+              <Clock className="w-5 h-5 text-amber-500 shrink-0 animate-pulse" />
+              <div className="text-xs">
+                <span className="font-bold block">Chưa đến giờ mở đề thi!</span>
+                <span>Thời gian đếm ngược còn lại: <strong className="font-mono text-amber-600 dark:text-amber-400 text-sm">{countdownText}</strong></span>
+              </div>
+            </div>
+          )}
+
+          {/* Exam Code Input Field (if required by teacher) */}
+          <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-1.5">
+            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+              <span>Mã đề thi (do giáo viên cung cấp):</span>
+              {exam.examCode && (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">Bắt buộc nhập</span>
+              )}
+            </label>
+            <input
+              type="text"
+              value={inputExamCode}
+              onChange={(e) => {
+                setInputExamCode(e.target.value.toUpperCase());
+                if (verificationError) setVerificationError(null);
+              }}
+              placeholder={exam.examCode ? "Nhập mã đề (ví dụ: 101, 201)..." : "Mã đề (không bắt buộc nếu thi tự do)..."}
+              className="w-full text-xs font-mono font-bold tracking-wider px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+            />
+          </div>
+
+          {/* Error / Rate Limit Warning */}
+          {verificationError && (
+            <div className={`p-3 rounded-2xl text-xs font-semibold flex items-center gap-2 ${
+              isLocked
+                ? 'bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-200 border border-rose-300 dark:border-rose-800'
+                : 'bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800'
+            }`}>
+              <Clock className="w-4 h-4 shrink-0" />
+              <span>{verificationError}</span>
+            </div>
+          )}
         </div>
+
 
         {/* Student List Section */}
         <div className="flex-1 overflow-y-auto p-5 space-y-2">

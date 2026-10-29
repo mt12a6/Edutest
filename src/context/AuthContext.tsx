@@ -3,7 +3,8 @@ import {
   User as FirebaseUser, 
   signInWithPopup, 
   signOut as firebaseSignOut, 
-  onAuthStateChanged 
+  onAuthStateChanged,
+  GoogleAuthProvider
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
@@ -33,6 +34,9 @@ interface AuthContextType {
   isStudent: boolean;
   error: string | null;
   clearError: () => void;
+  getGoogleAccessToken: () => Promise<string | null>;
+  requestGoogleScopes: (scopes?: string[]) => Promise<string | null>;
+  hasGoogleWorkspaceAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,10 +51,14 @@ const isSuperAdminEmail = (email?: string | null) => {
 
 const STORAGE_CREDENTIAL_SESSION = 'edutest_active_user_session';
 
+// In-memory token storage (Do NOT persist to localStorage per workspace security rules)
+let inMemoryAccessToken: string | null = null;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [activeRole, setActiveRole] = useState<UserRole>('student');
+  const [hasGoogleWorkspaceAccess, setHasGoogleWorkspaceAccess] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [kickedModal, setKickedModal] = useState<boolean>(false);
@@ -176,6 +184,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
     try {
       const cred = await signInWithPopup(auth, googleProvider);
+      const googleCredential = GoogleAuthProvider.credentialFromResult(cred);
+      if (googleCredential?.accessToken) {
+        inMemoryAccessToken = googleCredential.accessToken;
+        setHasGoogleWorkspaceAccess(true);
+      }
       if (cred.user) {
         const sessionToken = 'sess_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
         localStorage.setItem(STORAGE_SESSION_TOKEN_KEY, sessionToken);
@@ -197,6 +210,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(false);
     }
   };
+
+  const getGoogleAccessToken = async (): Promise<string | null> => {
+    return inMemoryAccessToken;
+  };
+
+  const requestGoogleScopes = async (scopes?: string[]): Promise<string | null> => {
+    try {
+      if (scopes && scopes.length > 0) {
+        scopes.forEach(s => googleProvider.addScope(s));
+      }
+      const cred = await signInWithPopup(auth, googleProvider);
+      const googleCredential = GoogleAuthProvider.credentialFromResult(cred);
+      if (googleCredential?.accessToken) {
+        inMemoryAccessToken = googleCredential.accessToken;
+        setHasGoogleWorkspaceAccess(true);
+        return inMemoryAccessToken;
+      }
+    } catch (err) {
+      console.error('Lỗi khi cấp quyền Google Workspace:', err);
+    }
+    return null;
+  };
+
 
   const loginWithCredentials = async (identifier: string, password: string): Promise<boolean> => {
     setIsLoading(true);
@@ -339,6 +375,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       localStorage.removeItem(STORAGE_CREDENTIAL_SESSION);
       localStorage.removeItem(STORAGE_SESSION_TOKEN_KEY);
+      inMemoryAccessToken = null;
+      setHasGoogleWorkspaceAccess(false);
       await firebaseSignOut(auth);
       setProfile(null);
       setUser(null);
@@ -370,7 +408,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isTeacher,
         isStudent,
         error,
-        clearError: () => setError(null)
+        clearError: () => setError(null),
+        getGoogleAccessToken,
+        requestGoogleScopes,
+        hasGoogleWorkspaceAccess
       }}
     >
       {children}

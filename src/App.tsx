@@ -34,10 +34,13 @@ import {
   checkAndSeedInitialData, 
   getExamById,
   getExamQuestions,
-  deleteExam
+  deleteExam,
+  startOrCreateAttempt
 } from './services/db';
+import { SecureExamStudentSelectModal } from './components/common/SecureExamStudentSelectModal';
 
 import { AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
+
 
 function MainApp() {
   const { user, profile, activeRole, isAdmin, isLoading: authLoading } = useAuth();
@@ -68,6 +71,7 @@ function MainApp() {
 
   // Student Exam Taking Workflow
   const [lobbyExam, setLobbyExam] = useState<{ exam: Exam; questions: Question[] } | null>(null);
+  const [secretExamTarget, setSecretExamTarget] = useState<Exam | null>(null);
   const [activeTakingSession, setActiveTakingSession] = useState<{
     exam: Exam;
     questions: Question[];
@@ -106,12 +110,19 @@ function MainApp() {
     reloadData();
   }, []);
 
-  // Listen for direct exam links or scanned QR codes (?examId=...)
+  // Listen for direct exam links, secret links, or scanned QR codes (?secretToken=... or ?examId=...)
   useEffect(() => {
     if (exams.length === 0) return;
     const urlParams = new URLSearchParams(window.location.search);
+    const targetSecretToken = urlParams.get('secretToken');
     const targetExamId = urlParams.get('examId');
-    if (targetExamId && !activeTakingSession && !lobbyExam) {
+
+    if (targetSecretToken && !activeTakingSession && !secretExamTarget && !lobbyExam) {
+      const foundExam = exams.find(e => e.secretToken === targetSecretToken);
+      if (foundExam) {
+        setSecretExamTarget(foundExam);
+      }
+    } else if (targetExamId && !activeTakingSession && !lobbyExam) {
       const foundExam = exams.find(e => e.id === targetExamId);
       if (foundExam) {
         getExamQuestions(targetExamId).then(qList => {
@@ -119,7 +130,8 @@ function MainApp() {
         }).catch(e => console.warn('Lỗi khi mở đề thi từ QR link:', e));
       }
     }
-  }, [exams, activeTakingSession, lobbyExam]);
+  }, [exams, activeTakingSession, lobbyExam, secretExamTarget]);
+
 
   // Account disabled barrier
   if (profile?.status === 'disabled') {
@@ -391,7 +403,43 @@ function MainApp() {
           }}
         />
       )}
+
+      {/* Secret Access Link Candidate Selection Modal */}
+      {secretExamTarget && (
+        <SecureExamStudentSelectModal
+          isOpen={!!secretExamTarget}
+          onClose={() => setSecretExamTarget(null)}
+          exam={secretExamTarget}
+          secretToken={new URLSearchParams(window.location.search).get('secretToken') || secretExamTarget.secretToken}
+          onSelectStudent={async (studentInfo) => {
+            const target = secretExamTarget;
+            setSecretExamTarget(null);
+            try {
+              const qList = await getExamQuestions(target.id);
+              const studentProfile = {
+                id: studentInfo.id,
+                displayName: studentInfo.displayName,
+                email: studentInfo.email,
+                role: 'student' as const,
+                status: 'active' as const,
+                className: studentInfo.className,
+                classIds: [studentInfo.classId],
+                createdAt: new Date().toISOString()
+              };
+              const attempt = await startOrCreateAttempt(target, studentProfile, qList.length);
+              setActiveTakingSession({
+                exam: target,
+                questions: qList,
+                attempt
+              });
+            } catch (err) {
+              console.error('Lỗi khi vào phòng thi bí mật:', err);
+            }
+          }}
+        />
+      )}
     </div>
+
   );
 }
 

@@ -220,7 +220,8 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
         combinedFeedback,
         false, // Marked as teacher graded
         finalGraderName,
-        gradesMap
+        gradesMap,
+        profile?.id || 'teacher'
       );
 
       // Instant local reflection so UI updates immediately
@@ -228,7 +229,14 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
         result.score = updatedResult.score;
         result.hasEssayGraded = true;
         result.essayScore = totalEssayScore;
-        result.essayGradedBy = finalGraderName;
+        result.objectiveScore = updatedResult.objectiveScore;
+        result.graderId = updatedResult.graderId;
+        result.essayGradedBy = updatedResult.essayGradedBy;
+        result.essayGradedAt = updatedResult.essayGradedAt;
+        result.lastUpdatedById = updatedResult.lastUpdatedById;
+        result.lastUpdatedBy = updatedResult.lastUpdatedBy;
+        result.lastUpdatedAt = updatedResult.lastUpdatedAt;
+        result.graderHistory = updatedResult.graderHistory;
         result.status = 'completed';
       }
 
@@ -858,13 +866,38 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
                   <strong className="text-slate-900">{result.classId || 'Tự do'}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px]">Thời gian nộp:</span>
+                  <span className="text-slate-400 block text-[10px]">Thời gian nộp bài:</span>
                   <strong className="text-slate-900">{new Date(result.submittedAt).toLocaleString('vi-VN')}</strong>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">Kết quả:</span>
                   <strong className={result.score >= (exam.passScore || 5) ? 'text-emerald-700' : 'text-rose-700'}>
                     {result.score >= (exam.passScore || 5) ? 'ĐẠT YÊU CẦU' : 'CHƯA ĐẠT'}
+                  </strong>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Điểm trắc nghiệm (TN):</span>
+                  <strong className="text-indigo-900">
+                    {result.objectiveScore ?? Math.max(0, Number(((result.score || 0) - (result.essayScore || 0)).toFixed(2)))} điểm
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Điểm tự luận (TL):</span>
+                  <strong className="text-purple-700">
+                    {result.hasEssayGraded ? `+${result.essayScore || 0} điểm` : 'Chưa chấm'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Giáo viên chấm thi:</span>
+                  <strong className="text-slate-900 font-bold">
+                    {result.lastUpdatedBy || result.essayGradedBy || profile?.displayName || 'Chưa xác định'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Thời điểm chấm / cập nhật:</span>
+                  <strong className="text-slate-700">
+                    {result.lastUpdatedAt ? new Date(result.lastUpdatedAt).toLocaleString('vi-VN') : result.essayGradedAt ? new Date(result.essayGradedAt).toLocaleString('vi-VN') : '---'}
                   </strong>
                 </div>
               </div>
@@ -985,16 +1018,37 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
             {/* Signature Box */}
             <div className="grid grid-cols-2 gap-8 pt-8 pb-4 text-center text-xs">
               <div>
-                <p className="font-bold">THÍ SINH</p>
+                <p className="font-bold uppercase tracking-wider">THÍ SINH DỰ THI</p>
                 <p className="text-[10px] text-slate-400 italic">(Ký và ghi rõ họ tên)</p>
-                <div className="h-16"></div>
-                <p className="font-bold text-slate-800">{result.studentName}</p>
+                <div className="h-16 flex items-end justify-center">
+                  <span className="text-[11px] font-medium text-slate-700 italic border-b border-dashed border-slate-300 pb-0.5">
+                    {result.studentName}
+                  </span>
+                </div>
+                <p className="font-bold text-slate-800 mt-1">{result.studentName}</p>
+                <p className="text-[10px] text-slate-400">Lớp: {result.classId || 'Tự do'}</p>
               </div>
               <div>
-                <p className="font-bold">GIÁO VIÊN CHẤM THI</p>
-                <p className="text-[10px] text-slate-400 italic">(Ký và ghi rõ họ tên)</p>
-                <div className="h-16"></div>
-                <p className="font-bold text-slate-800">Giáo viên phụ trách</p>
+                <p className="font-bold uppercase tracking-wider">GIÁO VIÊN CHẤM THI</p>
+                <p className="text-[10px] text-slate-400 italic">(Xác nhận từ tài khoản giáo viên)</p>
+                <div className="h-16 flex items-end justify-center">
+                  <span className="text-[11px] font-serif italic text-indigo-900 border-b border-dashed border-slate-300 pb-0.5">
+                    (Đã ký điện tử xác nhận điểm)
+                  </span>
+                </div>
+                <p className="font-extrabold text-slate-900 text-xs mt-1">
+                  {result.lastUpdatedBy || result.essayGradedBy || profile?.displayName || 'Giáo viên phụ trách'}
+                </p>
+                {(result.lastUpdatedAt || result.essayGradedAt) && (
+                  <p className="text-[10px] text-slate-500 italic">
+                    Thời điểm: {new Date(result.lastUpdatedAt || result.essayGradedAt || '').toLocaleString('vi-VN')}
+                  </p>
+                )}
+                {result.lastUpdatedBy && result.essayGradedBy && result.lastUpdatedBy !== result.essayGradedBy && (
+                  <p className="text-[9px] text-indigo-600 italic">
+                    (Chấm ban đầu bởi: {result.essayGradedBy})
+                  </p>
+                )}
               </div>
             </div>
 

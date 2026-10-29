@@ -15,11 +15,117 @@ const port = parseInt(process.env.PORT || '3000', 10);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// In-memory rate limiting map for wrong code attempts: key -> { count: number, lockedUntil: number }
+const accessAttemptsMap = new Map<string, { count: number; lockedUntil: number }>();
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     hasGeminiKey: Boolean(process.env.GEMINI_API_KEY)
+  });
+});
+
+// Server time endpoint (Asia/Ho_Chi_Minh)
+app.get('/api/time', (req, res) => {
+  const now = new Date();
+  const vnTimeStr = now.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  res.json({
+    serverTimeIso: now.toISOString(),
+    serverTimeMs: now.getTime(),
+    timezone: 'Asia/Ho_Chi_Minh',
+    localVnString: vnTimeStr
+  });
+});
+
+// Server-side secret exam access verification with rate limiting
+app.post('/api/verify-exam-access', (req, res) => {
+  const { studentName, classId, examCode, requiredExamCode, openTime, closeTime, secretToken, expectedSecretToken } = req.body;
+  const clientKey = `${req.ip || 'client'}_${studentName || ''}_${classId || ''}`;
+
+  const nowMs = Date.now();
+  const record = accessAttemptsMap.get(clientKey);
+
+  // Check lockout
+  if (record && record.lockedUntil > nowMs) {
+    const remainingSeconds = Math.ceil((record.lockedUntil - nowMs) / 1000);
+    return res.status(429).json({
+      success: false,
+      isLocked: true,
+      remainingSeconds,
+      error: `Bạn đã nhập sai mã đề quá 5 lần. Vui lòng thử lại sau ${remainingSeconds} giây.`
+    });
+  }
+
+  // Check Open Time
+  if (openTime) {
+    const openMs = new Date(openTime).getTime();
+    if (!isNaN(openMs) && nowMs < openMs) {
+      const diffMs = openMs - nowMs;
+      const minutesLeft = Math.ceil(diffMs / 60000);
+      return res.status(403).json({
+        success: false,
+        notOpenYet: true,
+        openTime,
+        error: `Đề thi chưa mở. Thời gian mở đề là: ${new Date(openTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} (còn khoảng ${minutesLeft} phút).`
+      });
+    }
+  }
+
+  // Check Close Time
+  if (closeTime) {
+    const closeMs = new Date(closeTime).getTime();
+    if (!isNaN(closeMs) && nowMs > closeMs) {
+      return res.status(403).json({
+        success: false,
+        closed: true,
+        closeTime,
+        error: `Kỳ thi đã kết thúc nhận bài vào lúc: ${new Date(closeTime).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`
+      });
+    }
+  }
+
+  // Check Secret Token if provided
+  if (expectedSecretToken && secretToken && expectedSecretToken.trim() !== secretToken.trim()) {
+    return res.status(403).json({
+      success: false,
+      invalidToken: true,
+      error: 'Đường link truy cập bí mật không hợp lệ hoặc đã hết hạn.'
+    });
+  }
+
+  // Check Exam Code
+  const normalizedInput = String(examCode || '').trim().toUpperCase();
+  const normalizedExpected = String(requiredExamCode || '').trim().toUpperCase();
+
+  if (normalizedExpected && normalizedInput !== normalizedExpected) {
+    const currentCount = (record?.count || 0) + 1;
+    if (currentCount >= 5) {
+      // Lock for 2 minutes
+      accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: nowMs + 2 * 60 * 1000 });
+      return res.status(429).json({
+        success: false,
+        isLocked: true,
+        remainingSeconds: 120,
+        error: 'Mã đề thi không chính xác! Bạn đã thử sai 5 lần và bị tạm khóa trong 2 phút để bảo mật.'
+      });
+    } else {
+      accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: 0 });
+      return res.status(400).json({
+        success: false,
+        remainingAttempts: 5 - currentCount,
+        error: `Mã đề thi không chính xác (Bạn còn ${5 - currentCount} lần thử).`
+      });
+    }
+  }
+
+  // Verification successful: reset rate limit record
+  accessAttemptsMap.delete(clientKey);
+
+  return res.json({
+    success: true,
+    serverVerifiedAt: new Date().toISOString(),
+    message: 'Xác thực thí sinh và mã đề thành công.'
   });
 });
 

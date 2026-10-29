@@ -1444,7 +1444,8 @@ export async function gradeEssaySubmission(
     maxPoints?: number;
     gradedBy?: string;
     gradedAt?: string;
-  }>
+  }>,
+  graderId?: string
 ): Promise<ExamResult | null> {
   const allResults = getLocalResults();
   const targetResult = allResults.find(r => r.attemptId === attemptId || r.id === attemptId);
@@ -1454,7 +1455,6 @@ export async function gradeEssaySubmission(
   const questions = await getExamQuestions(targetResult.examId);
 
   const maxScale = targetResult.maxScore || 10;
-  const answers = targetResult.answers || {};
 
   // Base objective score preservation
   const baseObjectiveScore = targetResult.objectiveScore !== undefined 
@@ -1467,6 +1467,17 @@ export async function gradeEssaySubmission(
   const updatedScore = Math.min(maxScale, Number((baseObjectiveScore + essayScore).toFixed(2)));
   const percentage = Math.min(100, Math.round((updatedScore / maxScale) * 100));
 
+  const now = new Date().toISOString();
+  const currentHistory = targetResult.graderHistory || [];
+  const newHistoryEntry = {
+    graderId: graderId || 'teacher',
+    graderName: graderName.trim() || 'Giáo viên phụ trách',
+    score: updatedScore,
+    timestamp: now,
+    action: targetResult.hasEssayGraded ? 'Cập nhật điểm' : 'Chấm điểm lần đầu'
+  };
+  const updatedHistory = [...currentHistory, newHistoryEntry];
+
   const updated: ExamResult = {
     ...targetResult,
     score: updatedScore,
@@ -1478,8 +1489,13 @@ export async function gradeEssaySubmission(
     essayScore,
     essayFeedback,
     isAiGraded,
-    essayGradedBy: graderName,
-    essayGradedAt: new Date().toISOString(),
+    graderId: targetResult.graderId || graderId || 'teacher',
+    essayGradedBy: targetResult.essayGradedBy || graderName,
+    essayGradedAt: targetResult.essayGradedAt || now,
+    lastUpdatedById: graderId || targetResult.lastUpdatedById,
+    lastUpdatedBy: graderName,
+    lastUpdatedAt: now,
+    graderHistory: updatedHistory,
     essayGrades: essayGrades || targetResult.essayGrades,
     feedback: updatedScore >= (exam?.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'
   };
@@ -1497,8 +1513,13 @@ export async function gradeEssaySubmission(
       essayScore,
       essayFeedback,
       isAiGraded,
-      essayGradedBy: graderName,
+      graderId: updated.graderId,
+      essayGradedBy: updated.essayGradedBy,
       essayGradedAt: updated.essayGradedAt,
+      lastUpdatedById: updated.lastUpdatedById,
+      lastUpdatedBy: updated.lastUpdatedBy,
+      lastUpdatedAt: updated.lastUpdatedAt,
+      graderHistory: updatedHistory,
       essayGrades: essayGrades || targetResult.essayGrades
     }), { merge: true });
   } catch (err) {

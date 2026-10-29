@@ -36,6 +36,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { MathRenderer } from '../common/MathRenderer';
 import { RichTextEditorToolbar } from '../common/RichTextEditorToolbar';
+import { createBackupGoogleForm } from '../../services/googleFormsService';
+import { Key, Globe, ExternalLink, Share2, Copy } from 'lucide-react';
 
 interface WordExamUploadModalProps {
   isOpen: boolean;
@@ -56,7 +58,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   initialExam = null,
   initialQuestions = []
 }) => {
-  const { user, profile } = useAuth();
+  const { user, profile, getGoogleAccessToken, requestGoogleScopes } = useAuth();
   const isEditing = Boolean(initialExam);
 
   // Wizard steps: 'upload' -> 'preview_edit' -> 'settings_save'
@@ -146,6 +148,46 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   const [shuffleQuestions, setShuffleQuestions] = useState<boolean>(initialExam?.shuffleQuestions ?? true);
   const [shuffleOptions, setShuffleOptions] = useState<boolean>(initialExam?.shuffleOptions ?? true);
   const [isPinned, setIsPinned] = useState<boolean>(initialExam?.isPinned ?? false);
+
+  // Exam Schedule (Asia/Ho_Chi_Minh ISO format or datetime-local)
+  const [openTime, setOpenTime] = useState<string>(() => {
+    if (!initialExam?.openTime) return '';
+    try {
+      const d = new Date(initialExam.openTime);
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    } catch {
+      return '';
+    }
+  });
+
+  const [closeTime, setCloseTime] = useState<string>(() => {
+    if (!initialExam?.closeTime) return '';
+    try {
+      const d = new Date(initialExam.closeTime);
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    } catch {
+      return '';
+    }
+  });
+
+  // Secret Token & Exam Code
+  const [secretToken, setSecretToken] = useState<string>(initialExam?.secretToken || '');
+  const [examCode, setExamCode] = useState<string>(initialExam?.examCode || '');
+
+  // Google Forms backup state
+  const [autoCreateGoogleForm, setAutoCreateGoogleForm] = useState<boolean>(Boolean(initialExam?.googleFormId));
+  const [googleFormId, setGoogleFormId] = useState<string>(initialExam?.googleFormId || '');
+  const [googleFormUrl, setGoogleFormUrl] = useState<string>(initialExam?.googleFormUrl || '');
+  const [googleFormSyncStatus, setGoogleFormSyncStatus] = useState<string | null>(null);
+
+  const generateSecretToken = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let res = 'SEC-';
+    for (let i = 0; i < 8; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setSecretToken(res);
+  };
 
 
   // AI Review State
@@ -547,7 +589,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
 
       const finalPublished = publishOverride !== undefined ? publishOverride : isPublished;
 
-      const examData = {
+      const examData: any = {
         title: title.trim(),
         subjectId: finalSubjectId,
         subjectName: finalSubjectName,
@@ -559,6 +601,13 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
         classIds: selectedClassIds,
         startTime: initialExam?.startTime || new Date().toISOString(),
         endTime: initialExam?.endTime || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+        openTime: openTime ? new Date(openTime).toISOString() : null,
+        closeTime: closeTime ? new Date(closeTime).toISOString() : null,
+        secretToken: secretToken.trim() || null,
+        examCode: examCode.trim() || null,
+        googleFormId: googleFormId || null,
+        googleFormUrl: googleFormUrl || null,
+        googleFormStatus: googleFormId ? 'created' : null,
         isPublished: finalPublished,
         isSecure,
         isTrial,
@@ -632,6 +681,40 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
           `Tạo đề thi "${title}" gồm ${parsedQuestions.length} câu (${finalPublished ? 'Đã xuất bản' : 'Bản nháp'})`
         );
         setSaveSuccess(`Đã lưu thành công đề thi "${title}" (${parsedQuestions.length} câu)!`);
+      }
+
+      // Automatically create or sync Google Forms backup if selected
+      if (autoCreateGoogleForm && savedExamId) {
+        try {
+          setGoogleFormSyncStatus('Đang khởi tạo bản sao lưu đề thi trên Google Forms & Drive...');
+          let token = await getGoogleAccessToken();
+          if (!token) {
+            token = await requestGoogleScopes([
+              'https://www.googleapis.com/auth/forms.body',
+              'https://www.googleapis.com/auth/drive.file'
+            ]);
+          }
+          if (token) {
+            const fullExamForForm: Exam = {
+              ...examData,
+              id: savedExamId,
+              questions: questionsToSave
+            };
+            const formRes = await createBackupGoogleForm(fullExamForForm, questionsToSave, token);
+            if (formRes.success && formRes.formId) {
+              await updateExamWithQuestions(savedExamId, {
+                googleFormId: formRes.formId,
+                googleFormUrl: formRes.formUrl,
+                googleFormStatus: 'created'
+              }, questionsToSave);
+              setGoogleFormId(formRes.formId);
+              if (formRes.formUrl) setGoogleFormUrl(formRes.formUrl);
+              setSaveSuccess(`Đã lưu đề thi và đồng bộ thành công Google Form dự phòng!`);
+            }
+          }
+        } catch (gfErr: any) {
+          console.warn('Lỗi đồng bộ Google Forms (không ảnh hưởng đề thi EduTest):', gfErr);
+        }
       }
 
       setIsSaving(false);
@@ -1406,18 +1489,55 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                         </div>
                       )}
 
-                      {/* Explanation */}
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                          Lời giải chi tiết / Hướng dẫn giải:
-                        </label>
-                        <input
-                          type="text"
+                      {/* Explanation with Math Formula Insertion and Live KaTeX Preview */}
+                      <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[11px] font-bold text-slate-700">
+                            📐 Lời giải chi tiết / Hướng dẫn giải (Hỗ trợ công thức LaTeX $...$):
+                          </label>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {[
+                              { label: 'x²', val: '$x^2$' },
+                              { label: 'a/b', val: '$\\frac{a}{b}$' },
+                              { label: '√x', val: '$\\sqrt{x}$' },
+                              { label: 'Δ', val: '$\\Delta$' },
+                              { label: 'π', val: '$\\pi$' },
+                              { label: '≤', val: '$\\le$' },
+                              { label: '≥', val: '$\\ge$' },
+                              { label: '⇒', val: '$\\Rightarrow$' },
+                            ].map((f) => (
+                              <button
+                                key={f.label}
+                                type="button"
+                                onClick={() => {
+                                  const cur = q.explanation || '';
+                                  handleUpdateQuestion(index, { ...q, explanation: cur ? `${cur} ${f.val}` : f.val });
+                                }}
+                                className="px-1.5 py-0.5 text-[10px] bg-white border border-slate-300 hover:border-emerald-500 hover:text-emerald-700 rounded font-mono font-bold transition-colors cursor-pointer"
+                                title={`Chèn ${f.val}`}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <textarea
+                          rows={2}
                           value={q.explanation || ''}
                           onChange={(e) => handleUpdateQuestion(index, { ...q, explanation: e.target.value })}
-                          placeholder="Nhập lời giải hoặc kiến thức cần ghi nhớ..."
-                          className="w-full text-xs text-slate-700 border border-slate-200 rounded-lg p-2 focus:ring-1 focus:ring-emerald-500"
+                          placeholder="Nhập lời giải hoặc kiến thức cần ghi nhớ (ví dụ: $x = \\frac{-b \\pm \\sqrt{\\Delta}}{2a}$)..."
+                          className="w-full text-xs text-slate-800 bg-white border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500 font-sans"
                         />
+
+                        {q.explanation && q.explanation.trim() && (
+                          <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-200 text-xs text-slate-800">
+                            <span className="text-[10px] font-bold text-emerald-800 block mb-1 uppercase tracking-wider">
+                              👁️ Xem trước công thức hiển thị (KaTeX Live):
+                            </span>
+                            <MathRenderer content={q.explanation} className="leading-relaxed" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1593,6 +1713,153 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* SCHEDULE: OPEN TIME & CLOSE TIME */}
+                <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-600" />
+                      Lịch thi: Giờ Mở đề & Đóng đề (Múi giờ Asia/Ho_Chi_Minh)
+                    </span>
+                    <span className="text-[10px] text-indigo-700 font-medium">
+                      Tự động khóa trước giờ mở & nộp bài khi hết giờ
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Thời gian mở đề (Bắt đầu thi):
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={openTime}
+                        onChange={(e) => setOpenTime(e.target.value)}
+                        className="w-full text-xs font-medium text-slate-800 bg-white border border-indigo-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">
+                        Để trống nếu muốn mở đề tự do bất cứ lúc nào
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Thời gian đóng đề (Hạn chót nộp bài):
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={closeTime}
+                        onChange={(e) => setCloseTime(e.target.value)}
+                        className="w-full text-xs font-medium text-slate-800 bg-white border border-indigo-200 rounded-lg p-2 focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">
+                        Đến giờ đóng đề, hệ thống tự động thu bài của thí sinh
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECRET ACCESS TOKEN & EXAM CODE */}
+                <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <Key className="w-4 h-4 text-amber-600" />
+                      Mã đề thi & Đường link bí mật của Giáo viên
+                    </span>
+                    <span className="text-[10px] text-amber-800 font-medium">
+                      Bảo vệ chống lộ đề & chống đoán mò
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Mã đề thi (Học sinh nhập khi vào thi):
+                      </label>
+                      <input
+                        type="text"
+                        value={examCode}
+                        onChange={(e) => setExamCode(e.target.value.toUpperCase())}
+                        placeholder="Ví dụ: 101, 201, TOAN12-HK2..."
+                        className="w-full text-xs font-mono font-bold text-slate-900 bg-white border border-amber-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-0.5 block">
+                        Nếu thiết lập, học sinh bắt buộc phải nhập đúng mã để vào làm bài
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Mã định danh đường link bí mật (Secret Token):
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={secretToken}
+                          onChange={(e) => setSecretToken(e.target.value)}
+                          placeholder="Ví dụ: SEC-K79H2A..."
+                          className="w-full text-xs font-mono font-bold text-slate-900 bg-white border border-amber-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={generateSecretToken}
+                          className="px-2.5 py-2 text-[10px] font-bold bg-amber-200 hover:bg-amber-300 text-amber-900 rounded-lg shrink-0 transition-colors cursor-pointer"
+                        >
+                          Tạo mã ngẫu nhiên
+                        </button>
+                      </div>
+                      {secretToken && (
+                        <p className="text-[10px] font-mono text-amber-800 mt-1 truncate">
+                          Link thí sinh: {window.location.origin}/?secretToken={secretToken}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* GOOGLE FORMS BACKUP INTEGRATION */}
+                <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoCreateGoogleForm}
+                        onChange={(e) => setAutoCreateGoogleForm(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500"
+                      />
+                      <div>
+                        <span className="font-bold text-xs text-emerald-950 block">
+                          📑 Tự động tạo Google Form dự phòng (Google Forms API v1 & Drive)
+                        </span>
+                        <span className="text-[11px] text-emerald-800">
+                          Đồng bộ toàn bộ câu hỏi trắc nghiệm, thang điểm và bảng đáp án lên biểu mẫu Google Form trong Drive của bạn
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {googleFormUrl && (
+                    <div className="flex items-center gap-2 pt-1 border-t border-emerald-200/80 text-xs text-emerald-900">
+                      <span className="font-semibold text-[11px]">Đã tạo Google Form:</span>
+                      <a
+                        href={googleFormUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1"
+                      >
+                        Mở Google Form
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
+
+                  {googleFormSyncStatus && (
+                    <p className="text-[11px] text-emerald-800 font-semibold animate-pulse">
+                      {googleFormSyncStatus}
+                    </p>
+                  )}
+                </div>
+
 
                 {/* Assigned Classes */}
                 <div>

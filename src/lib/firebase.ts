@@ -27,6 +27,8 @@ export const db = (targetDatabaseId && targetDatabaseId !== '(default)')
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/forms.body');
+googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });

@@ -49,6 +49,14 @@ export interface Exam {
   classIds: string[]; // classes assigned
   startTime?: string;
   endTime?: string;
+  openTime?: string; // Thời gian mở đề thi (học sinh không thể vào trước giờ này)
+  closeTime?: string; // Thời gian kết thúc nhận bài thi (sau giờ này không thể nộp bài hoặc vào thi)
+  secretToken?: string; // Token bí mật cho đường link riêng của giáo viên
+  examCode?: string; // Mã đề thi mà học sinh phải nhập để xác thực vào làm bài
+  googleFormId?: string; // ID Google Form dự phòng
+  googleFormUrl?: string; // Đường link Google Form dự phòng
+  googleFormStatus?: 'success' | 'failed' | 'pending' | 'none' | 'created'; // Trạng thái tạo Google Form dự phòng
+  googleFormError?: string; // Chi tiết lỗi nếu tạo Google Form thất bại
   isPublished: boolean;
   isHidden?: boolean; // Tạm ẩn đề thi / kỳ thi
   isTrial?: boolean; // Đề thi thử tự do cho người dùng chưa đăng nhập
@@ -179,8 +187,20 @@ export interface ExamResult {
   essayScore?: number;
   essayFeedback?: string;
   isAiGraded?: boolean;
-  essayGradedBy?: string;
-  essayGradedAt?: string;
+  graderId?: string; // ID tài khoản giáo viên chấm bài
+  essayGradedBy?: string; // Họ tên giáo viên chấm bài
+  essayGradedAt?: string; // Thời điểm chấm
+  lastUpdatedById?: string; // ID giáo viên cập nhật điểm gần nhất
+  lastUpdatedBy?: string; // Họ tên giáo viên cập nhật gần nhất
+  lastUpdatedAt?: string; // Thời điểm cập nhật gần nhất
+  graderHistory?: Array<{
+    graderId: string;
+    graderName: string;
+    score: number;
+    timestamp: string;
+    action?: string;
+  }>;
+  source?: 'system' | 'google_forms' | 'omr';
   essayGrades?: Record<string, {
     score: number;
     feedback: string;
