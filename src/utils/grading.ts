@@ -262,3 +262,327 @@ export function isQuestionCorrect(q: Question, studentAnswers: Record<string, an
 
   return false;
 }
+
+/**
+ * Determines which of the 4 standard exam sections a question belongs to:
+ * 1: Phần I - Trắc nghiệm nhiều phương án lựa chọn
+ * 2: Phần II - Trắc nghiệm Đúng / Sai
+ * 3: Phần III - Trả lời ngắn / Điền khuyết
+ * 4: Phần IV - Tự luận
+ */
+export function getQuestionFourSection(q: { type?: string; section?: number }): 1 | 2 | 3 | 4 {
+  if (q.type === 'essay' || q.section === 4) return 4;
+  if (q.type === 'fill_blank' || (q.section === 3 && q.type !== 'essay')) return 3;
+  if (q.type === 'true_false' || q.section === 2) return 2;
+  if (q.type === 'multiple_choice' || q.section === 1) return 1;
+  return 1;
+}
+
+export interface ExamPartScoreBreakdown {
+  partNumber: 1 | 2 | 3 | 4;
+  title: string;
+  shortTitle: string;
+  earnedPoints: number;
+  maxPoints: number;
+  questionCount: number;
+  correctCount: number;
+  wrongCount: number;
+  unattemptedCount: number;
+}
+
+export interface ExamSubmissionBreakdown {
+  part1: ExamPartScoreBreakdown;
+  part2: ExamPartScoreBreakdown;
+  part3: ExamPartScoreBreakdown;
+  part4: ExamPartScoreBreakdown;
+  totalEarnedPoints: number;
+  totalMaxPoints: number;
+  scaledScore: number;
+  percentage: number;
+  correctCount: number;
+  wrongCount: number;
+  unattemptedCount: number;
+  hasEssay: boolean;
+  hasPendingEssay: boolean;
+  questionScores: Record<string, {
+    earned: number;
+    max: number;
+    isCorrect: boolean;
+    isAnswered: boolean;
+    status: 'correct' | 'wrong' | 'partial' | 'unattempted' | 'pending';
+  }>;
+}
+
+/**
+ * Comprehensive calculator for all 4 exam components according to Vietnam MOET & School Exam standards.
+ * Dynamically adapts to newly updated question keys, question types, and points.
+ */
+export function calculateExamSubmissionBreakdown(
+  exam: Exam,
+  questions: Question[],
+  studentAnswers: Record<string, any> = {},
+  essayGrades?: Record<string, any>,
+  existingEssayScore?: number
+): ExamSubmissionBreakdown {
+  const parts: Record<1 | 2 | 3 | 4, ExamPartScoreBreakdown> = {
+    1: {
+      partNumber: 1,
+      title: 'Phần I: Câu hỏi trắc nghiệm nhiều phương án',
+      shortTitle: 'Phần I: Trắc nghiệm',
+      earnedPoints: 0,
+      maxPoints: 0,
+      questionCount: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      unattemptedCount: 0
+    },
+    2: {
+      partNumber: 2,
+      title: 'Phần II: Câu hỏi trắc nghiệm Đúng / Sai',
+      shortTitle: 'Phần II: Đúng / Sai',
+      earnedPoints: 0,
+      maxPoints: 0,
+      questionCount: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      unattemptedCount: 0
+    },
+    3: {
+      partNumber: 3,
+      title: 'Phần III: Câu hỏi trả lời ngắn & điền khuyết',
+      shortTitle: 'Phần III: Trả lời ngắn',
+      earnedPoints: 0,
+      maxPoints: 0,
+      questionCount: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      unattemptedCount: 0
+    },
+    4: {
+      partNumber: 4,
+      title: 'Phần IV: Câu hỏi tự luận',
+      shortTitle: 'Phần IV: Tự luận',
+      earnedPoints: 0,
+      maxPoints: 0,
+      questionCount: 0,
+      correctCount: 0,
+      wrongCount: 0,
+      unattemptedCount: 0
+    }
+  };
+
+  const questionScores: ExamSubmissionBreakdown['questionScores'] = {};
+  let totalCorrect = 0;
+  let totalWrong = 0;
+  let totalUnattempted = 0;
+  let hasPendingEssay = false;
+
+  const essayQuestions = questions.filter(q => q.type === 'essay' || q.section === 4);
+  const hasEssay = essayQuestions.length > 0;
+
+  questions.forEach(q => {
+    const sec = getQuestionFourSection(q);
+    const p = parts[sec];
+    const qWeight = typeof q.points === 'number' && q.points > 0 ? q.points : 1;
+    p.maxPoints += qWeight;
+    p.questionCount += 1;
+
+    const studentAns = studentAnswers[q.id];
+    const isAnswered = studentAns !== undefined && studentAns !== null && studentAns !== '';
+
+    if (!isAnswered) {
+      p.unattemptedCount += 1;
+      totalUnattempted += 1;
+      questionScores[q.id] = {
+        earned: 0,
+        max: qWeight,
+        isCorrect: false,
+        isAnswered: false,
+        status: 'unattempted'
+      };
+      return;
+    }
+
+    const qType = q.type || 'multiple_choice';
+
+    if (qType === 'multiple_choice') {
+      const isCorrect = isMultipleChoiceCorrect(studentAns, q.correctOption, q.options);
+      if (isCorrect) {
+        p.earnedPoints += qWeight;
+        p.correctCount += 1;
+        totalCorrect += 1;
+        questionScores[q.id] = {
+          earned: qWeight,
+          max: qWeight,
+          isCorrect: true,
+          isAnswered: true,
+          status: 'correct'
+        };
+      } else {
+        p.wrongCount += 1;
+        totalWrong += 1;
+        questionScores[q.id] = {
+          earned: 0,
+          max: qWeight,
+          isCorrect: false,
+          isAnswered: true,
+          status: 'wrong'
+        };
+      }
+    } else if (qType === 'true_false') {
+      const { subMatches, totalSubs, ratio, earnedPoints: tfEarned } = evaluateTrueFalseQuestion(
+        studentAns,
+        q.subQuestions,
+        qWeight
+      );
+      p.earnedPoints += tfEarned;
+
+      if (subMatches === totalSubs && totalSubs > 0) {
+        p.correctCount += 1;
+        totalCorrect += 1;
+        questionScores[q.id] = {
+          earned: tfEarned,
+          max: qWeight,
+          isCorrect: true,
+          isAnswered: true,
+          status: 'correct'
+        };
+      } else if (subMatches > 0) {
+        p.correctCount += ratio;
+        p.wrongCount += 1 - ratio;
+        totalCorrect += ratio;
+        totalWrong += 1 - ratio;
+        questionScores[q.id] = {
+          earned: tfEarned,
+          max: qWeight,
+          isCorrect: false,
+          isAnswered: true,
+          status: 'partial'
+        };
+      } else {
+        p.wrongCount += 1;
+        totalWrong += 1;
+        questionScores[q.id] = {
+          earned: 0,
+          max: qWeight,
+          isCorrect: false,
+          isAnswered: true,
+          status: 'wrong'
+        };
+      }
+    } else if (qType === 'fill_blank') {
+      const isCorrect = isFillBlankCorrect(
+        studentAns,
+        q.acceptableAnswers,
+        q.correctOption,
+        q.sampleAnswer
+      );
+      if (isCorrect) {
+        p.earnedPoints += qWeight;
+        p.correctCount += 1;
+        totalCorrect += 1;
+        questionScores[q.id] = {
+          earned: qWeight,
+          max: qWeight,
+          isCorrect: true,
+          isAnswered: true,
+          status: 'correct'
+        };
+      } else {
+        p.wrongCount += 1;
+        totalWrong += 1;
+        questionScores[q.id] = {
+          earned: 0,
+          max: qWeight,
+          isCorrect: false,
+          isAnswered: true,
+          status: 'wrong'
+        };
+      }
+    } else if (qType === 'essay') {
+      // Check if teacher had already assigned a score
+      let essayEarned = 0;
+      let isGraded = false;
+
+      if (essayGrades && essayGrades[q.id]?.score !== undefined) {
+        essayEarned = Math.min(qWeight, Math.max(0, Number(essayGrades[q.id].score)));
+        isGraded = true;
+      } else if (existingEssayScore !== undefined && essayQuestions.length === 1) {
+        essayEarned = Math.min(qWeight, Math.max(0, Number(existingEssayScore)));
+        isGraded = true;
+      }
+
+      p.earnedPoints += essayEarned;
+      if (isGraded) {
+        if (essayEarned >= qWeight * 0.5) {
+          p.correctCount += 1;
+          totalCorrect += 1;
+        } else {
+          p.wrongCount += 1;
+          totalWrong += 1;
+        }
+        questionScores[q.id] = {
+          earned: essayEarned,
+          max: qWeight,
+          isCorrect: essayEarned >= qWeight * 0.5,
+          isAnswered: true,
+          status: essayEarned === qWeight ? 'correct' : essayEarned > 0 ? 'partial' : 'wrong'
+        };
+      } else {
+        hasPendingEssay = true;
+        questionScores[q.id] = {
+          earned: 0,
+          max: qWeight,
+          isCorrect: false,
+          isAnswered: true,
+          status: 'pending'
+        };
+      }
+    }
+  });
+
+  // Round component points to 2 decimal places
+  ([1, 2, 3, 4] as const).forEach(sec => {
+    parts[sec].earnedPoints = Number(parts[sec].earnedPoints.toFixed(2));
+    parts[sec].maxPoints = Number(parts[sec].maxPoints.toFixed(2));
+  });
+
+  const totalEarnedPoints = Number(
+    (parts[1].earnedPoints + parts[2].earnedPoints + parts[3].earnedPoints + parts[4].earnedPoints).toFixed(2)
+  );
+  const totalMaxPoints = Number(
+    (parts[1].maxPoints + parts[2].maxPoints + parts[3].maxPoints + parts[4].maxPoints).toFixed(2)
+  );
+
+  const maxScale = exam.maxScore || 10;
+  // If exam has points configured directly on a 10 scale (or whatever maxScale is)
+  // or scaled proportionately:
+  let scaledScore = 0;
+  if (totalMaxPoints > 0) {
+    if (Math.abs(totalMaxPoints - maxScale) < 0.05) {
+      scaledScore = totalEarnedPoints;
+    } else {
+      scaledScore = Number(((totalEarnedPoints / totalMaxPoints) * maxScale).toFixed(2));
+    }
+  }
+  scaledScore = Math.max(0, Math.min(maxScale, scaledScore));
+  const percentage = maxScale > 0 ? Math.min(100, Math.round((scaledScore / maxScale) * 100)) : 0;
+
+  return {
+    part1: parts[1],
+    part2: parts[2],
+    part3: parts[3],
+    part4: parts[4],
+    totalEarnedPoints,
+    totalMaxPoints,
+    scaledScore,
+    percentage,
+    correctCount: Math.round(totalCorrect),
+    wrongCount: Math.round(totalWrong),
+    unattemptedCount: totalUnattempted,
+    hasEssay,
+    hasPendingEssay,
+    questionScores
+  };
+}
+

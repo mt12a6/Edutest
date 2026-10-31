@@ -30,7 +30,9 @@ import {
   ExternalLink,
   Copy,
   X,
-  Save
+  Save,
+  RefreshCw,
+  FileDown
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
@@ -46,10 +48,12 @@ import {
   getTeacherScope,
   isExamInTeacherScope,
   TeacherScopeConfig,
-  togglePinExam
+  togglePinExam,
+  recalculateExamResults
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { createBackupGoogleForm } from '../../services/googleFormsService';
+import { exportExamToWord } from '../../utils/docxExportUtils';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { TeacherScopeModal } from '../common/TeacherScopeModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
@@ -142,6 +146,46 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
       showError('Lỗi cập nhật mã bảo mật: ' + (e?.message || 'Thất bại'));
     } finally {
       setIsSavingSecurity(false);
+    }
+  };
+
+  const [recalculatingExamId, setRecalculatingExamId] = useState<string | null>(null);
+  const [exportingWordExamId, setExportingWordExamId] = useState<string | null>(null);
+
+  const handleRecalculateExam = async (exam: Exam) => {
+    const confirmed = window.confirm(
+      `Bạn có muốn chấm lại và cập nhật điểm cho tất cả học sinh đã nộp bài thi "${exam.title}" theo đúng đáp án và thang điểm mới của đề thi không?`
+    );
+    if (!confirmed) return;
+
+    setRecalculatingExamId(exam.id);
+    try {
+      const res = await recalculateExamResults(
+        exam.id,
+        user?.displayName || 'Giáo viên phụ trách',
+        user?.uid || 'teacher'
+      );
+      showSuccess(`Đã cập nhật lại điểm thành công cho ${res.count} bài thi của đề "${exam.title}"!`);
+      onRefreshExams();
+    } catch (e) {
+      console.error('Lỗi cập nhật lại điểm:', e);
+      showError('Không thể cập nhật lại điểm thi. Vui lòng thử lại.');
+    } finally {
+      setRecalculatingExamId(null);
+    }
+  };
+
+  const handleExportWordDirect = async (exam: Exam, mode: 'exam' | 'answers') => {
+    setExportingWordExamId(exam.id);
+    try {
+      const questions = await getExamQuestions(exam.id);
+      await exportExamToWord(exam, questions, mode);
+      showSuccess(`Đã tải file Word (${mode === 'exam' ? 'Đề thi' : 'Đáp án'}) thành công!`);
+    } catch (e) {
+      console.error('Lỗi xuất file Word:', e);
+      showError('Không thể xuất file Word. Vui lòng thử lại.');
+    } finally {
+      setExportingWordExamId(null);
     }
   };
 
@@ -843,6 +887,39 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   >
                     <AlertCircle className={`w-3.5 h-3.5 ${exam.enableTabWarning || exam.warnOnTabSwitch ? 'text-amber-600' : 'text-slate-400'}`} />
                     <span>{exam.enableTabWarning || exam.warnOnTabSwitch ? 'Cảnh báo tab: Bật' : 'Cảnh báo tab: Tắt'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={recalculatingExamId === exam.id}
+                    onClick={() => handleRecalculateExam(exam)}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-50 border border-amber-300 text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    title="Cập nhật lại điểm thi cho các thí sinh theo đáp án và thang điểm mới của đề thi"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-amber-700 ${recalculatingExamId === exam.id ? 'animate-spin' : ''}`} />
+                    <span>{recalculatingExamId === exam.id ? 'Đang tính...' : 'Cập nhật điểm'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={exportingWordExamId === exam.id}
+                    onClick={() => handleExportWordDirect(exam, 'exam')}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    title="Xuất file Word (.docx) đề thi"
+                  >
+                    <FileDown className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Xuất Đề (Word)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={exportingWordExamId === exam.id}
+                    onClick={() => handleExportWordDirect(exam, 'answers')}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    title="Xuất file Word (.docx) bảng đáp án và hướng dẫn chấm"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Xuất Đáp án (Word)</span>
                   </button>
 
                   {onEditExam && (

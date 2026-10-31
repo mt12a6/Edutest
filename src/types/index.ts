@@ -92,7 +92,7 @@ export interface Question {
   id: string;
   examId: string;
   questionNumber: number;
-  section?: 1 | 2 | 3; // 1: Trắc nghiệm 4 lựa chọn, 2: Đúng/Sai, 3: Trả lời ngắn / Tự luận
+  section?: 1 | 2 | 3 | 4; // 1: Trắc nghiệm 4 lựa chọn, 2: Đúng/Sai, 3: Trả lời ngắn, 4: Tự luận
   type: QuestionType; // 'multiple_choice' | 'true_false' | 'fill_blank' | 'essay'
   prompt: string;
   imageUrl?: string; // Formula diagram or question illustration image
@@ -209,6 +209,13 @@ export interface ExamResult {
     gradedBy?: string;
     gradedAt?: string;
   }>;
+  // 4 Exam Sections Breakdown scores (Phần I, II, III, IV)
+  partScores?: {
+    part1?: { earned: number; max: number; count: number; correctCount?: number };
+    part2?: { earned: number; max: number; count: number; correctCount?: number };
+    part3?: { earned: number; max: number; count: number; correctCount?: number };
+    part4?: { earned: number; max: number; count: number; correctCount?: number };
+  };
 }
 
 export interface SystemLog {

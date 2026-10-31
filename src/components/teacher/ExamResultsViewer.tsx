@@ -21,11 +21,21 @@ import {
   Eye,
   Printer,
   Camera,
-  FileText
+  FileText,
+  RefreshCw,
+  FileDown
 } from 'lucide-react';
 import { Exam, ExamResult, Question, SchoolClass, ExamAttempt } from '../../types';
-import { getExamResults, getExamQuestions, getAttemptsForExam, gradeEssaySubmission } from '../../services/db';
-import { exportResultsToCsv } from '../../utils/exportUtils';
+import { 
+  getExamResults, 
+  getExamQuestions, 
+  getAttemptsForExam, 
+  gradeEssaySubmission,
+  recalculateExamResults 
+} from '../../services/db';
+import { exportResultsToCsv, exportResultsToExcel, extractResultPartScores } from '../../utils/exportUtils';
+import { exportExamToWord } from '../../utils/docxExportUtils';
+import { useAuth } from '../../context/AuthContext';
 import { StudentGradingDetailModal } from './StudentGradingDetailModal';
 import { ExamPrintModal } from '../common/ExamPrintModal';
 import { OMRScannerModal } from './OMRScannerModal';
@@ -253,21 +263,74 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
     }));
   };
 
+  const { profile } = useAuth();
+  const [isRecalculating, setIsRecalculating] = useState<boolean>(false);
+  const [recalculateMessage, setRecalculateMessage] = useState<string | null>(null);
+  const [isExportingWord, setIsExportingWord] = useState<boolean>(false);
+
+  const handleRecalculateScores = async () => {
+    if (results.length === 0) {
+      alert('Chưa có bài thi nào được nộp cho đề này.');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Bạn có chắc chắn muốn cập nhật lại điểm thi cho tất cả ${results.length} bài thi của đề "${exam.title}" theo đúng đáp án và thang điểm mới của đề thi không?`
+    );
+    if (!confirmed) return;
+
+    setIsRecalculating(true);
+    setRecalculateMessage('Đang chấm lại toàn bộ bài thi theo đáp án và thang điểm mới của đề thi...');
+    try {
+      const res = await recalculateExamResults(
+        exam.id,
+        profile?.displayName || 'Giáo viên phụ trách',
+        profile?.id || 'teacher'
+      );
+      setResults(res.results);
+      setRecalculateMessage(`Đã cập nhật lại điểm thành công cho ${res.count} bài thi!`);
+      setTimeout(() => setRecalculateMessage(null), 6000);
+    } catch (err) {
+      console.error('Lỗi cập nhật lại điểm:', err);
+      setRecalculateMessage('Có lỗi xảy ra khi cập nhật lại điểm thi.');
+      setTimeout(() => setRecalculateMessage(null), 4000);
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
+  const handleExportWord = async (mode: 'exam' | 'answers' | 'full') => {
+    setIsExportingWord(true);
+    try {
+      await exportExamToWord(exam, questions, mode);
+    } catch (err) {
+      console.error('Lỗi xuất file Word:', err);
+    } finally {
+      setIsExportingWord(false);
+    }
+  };
+
   const exportSingleClassExcel = (stat: ClassStat) => {
-    const dataToExport = stat.students.map((r, i) => ({
-      'Xếp hạng': i + 1,
-      'Họ và tên': r.studentName,
-      'Email / Tên đăng nhập': r.studentEmail,
-      'Lớp': stat.className,
-      'Điểm số': r.score,
-      'Thang điểm': r.maxScore || 10,
-      'Số câu đúng': r.correctCount,
-      'Số câu sai': r.wrongCount,
-      'Tỷ lệ %': `${r.percentage}%`,
-      'Vi phạm tab': r.tabViolations || 0,
-      'Thời gian nộp bài': new Date(r.submittedAt).toLocaleString('vi-VN'),
-      'Đánh giá': r.score >= (exam.passScore || 5) ? 'Đạt' : 'Chưa đạt'
-    }));
+    const dataToExport = stat.students.map((r, i) => {
+      const p = extractResultPartScores(r, questions);
+      return {
+        'Xếp hạng': i + 1,
+        'Họ và tên': r.studentName,
+        'Email / Tên đăng nhập': r.studentEmail,
+        'Lớp': stat.className,
+        'Điểm Phần I (Trắc nghiệm)': p.part1Max > 0 ? `${p.part1} / ${p.part1Max}đ` : `${p.part1}đ`,
+        'Điểm Phần II (Đúng/Sai)': p.part2Max > 0 ? `${p.part2} / ${p.part2Max}đ` : `${p.part2}đ`,
+        'Điểm Phần III (Trả lời ngắn)': p.part3Max > 0 ? `${p.part3} / ${p.part3Max}đ` : `${p.part3}đ`,
+        'Điểm Phần IV (Tự luận)': p.part4Max > 0 ? `${p.part4} / ${p.part4Max}đ` : `${p.part4}đ`,
+        'Tổng điểm': r.score,
+        'Thang điểm': r.maxScore || 10,
+        'Số câu đúng': r.correctCount,
+        'Số câu sai': r.wrongCount,
+        'Tỷ lệ %': `${r.percentage}%`,
+        'Vi phạm tab': r.tabViolations || 0,
+        'Thời gian nộp bài': new Date(r.submittedAt).toLocaleString('vi-VN'),
+        'Đánh giá': r.score >= (exam.passScore || 5) ? 'Đạt' : 'Chưa đạt'
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
@@ -286,6 +349,23 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       
+      {/* Alert banner for recalculation message */}
+      {recalculateMessage && (
+        <div className="p-4 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-2xl flex items-center justify-between shadow-xs animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5">
+            <RefreshCw className={`w-4 h-4 text-indigo-600 ${isRecalculating ? 'animate-spin' : ''}`} />
+            <span className="text-xs font-bold">{recalculateMessage}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setRecalculateMessage(null)}
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-900 cursor-pointer"
+          >
+            Đóng ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div>
@@ -311,6 +391,42 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Recalculate Scores Button */}
+          <button
+            type="button"
+            disabled={isRecalculating || results.length === 0}
+            onClick={handleRecalculateScores}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold shadow-sm transition-all cursor-pointer disabled:opacity-40"
+            title="Chấm lại toàn bộ bài thi theo đáp án và thang điểm mới của đề thi"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-950 ${isRecalculating ? 'animate-spin' : ''}`} />
+            <span>{isRecalculating ? 'Đang cập nhật điểm...' : 'Cập nhật lại điểm'}</span>
+          </button>
+
+          {/* Export Word (.docx) Buttons */}
+          <button
+            type="button"
+            disabled={isExportingWord}
+            onClick={() => handleExportWord('exam')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40"
+            title="Xuất file Word (.docx) đề thi"
+          >
+            <FileDown className="w-3.5 h-3.5 text-blue-600" />
+            <span>Xuất Đề (Word)</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isExportingWord}
+            onClick={() => handleExportWord('answers')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40"
+            title="Xuất file Word (.docx) bảng đáp án & biểu điểm"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-600" />
+            <span>Xuất Đáp án (Word)</span>
+          </button>
+
+          {/* Print A4 Buttons */}
           <button
             onClick={() => setPrintModeTarget('exam')}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
@@ -338,13 +454,15 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
             <span>Chấm phiếu OMR</span>
           </button>
 
+          {/* Export Excel (.xlsx) with all component scores */}
           <button
-            onClick={() => exportResultsToCsv(exam, results)}
+            onClick={() => exportResultsToExcel(exam, results, questions)}
             disabled={results.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-40"
+            title="Xuất bảng điểm tổng hợp đầy đủ các phần thi ra file Excel (.xlsx)"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            <span>Xuất Excel/CSV</span>
+            <span>Xuất Excel (.xlsx)</span>
           </button>
         </div>
       </div>
@@ -810,72 +928,106 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Học sinh</th>
-                  <th className="py-3 px-4">Lớp</th>
-                  <th className="py-3 px-4 text-center">Điểm số</th>
-                  <th className="py-3 px-4 text-center">Đúng / Sai</th>
-                  <th className="py-3 px-4 text-center">Tỷ lệ</th>
-                  <th className="py-3 px-4 text-center">Cảnh báo tab</th>
-                  <th className="py-3 px-4">Thời gian nộp bài</th>
-                  <th className="py-3 px-4 text-center">Đánh giá</th>
-                  <th className="py-3 px-4 text-right">Thao tác chấm</th>
+                  <th className="py-3 px-3">Học sinh</th>
+                  <th className="py-3 px-2">Lớp</th>
+                  <th className="py-3 px-2 text-center" title="Phần I: Trắc nghiệm 4 lựa chọn">Phần I (TN)</th>
+                  <th className="py-3 px-2 text-center" title="Phần II: Đúng / Sai">Phần II (Đ/S)</th>
+                  <th className="py-3 px-2 text-center" title="Phần III: Trả lời ngắn / Điền khuyết">Phần III (TLN)</th>
+                  <th className="py-3 px-2 text-center" title="Phần IV: Tự luận">Phần IV (TL)</th>
+                  <th className="py-3 px-3 text-center bg-indigo-50/70 text-indigo-950 font-bold">Tổng điểm</th>
+                  <th className="py-3 px-2 text-center">Đúng / Sai</th>
+                  <th className="py-3 px-2 text-center">Tỷ lệ</th>
+                  <th className="py-3 px-2 text-center">Tab</th>
+                  <th className="py-3 px-3">Thời gian nộp bài</th>
+                  <th className="py-3 px-2 text-center">Đánh giá</th>
+                  <th className="py-3 px-3 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredResults.length > 0 ? (
                   filteredResults.map((r, i) => {
                     const passed = r.score >= (exam.passScore || 5);
+                    const p = extractResultPartScores(r, questions);
                     return (
                       <tr key={r.id || i} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-slate-900">
+                        <td className="py-3 px-3 font-semibold text-slate-900">
                           {r.studentName}
                           <span className="block text-[11px] text-slate-400 font-normal">{r.studentEmail}</span>
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-2">
                           <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold">
                             {r.classId || '10A1'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center font-extrabold text-sm text-slate-900">
-                          {r.score}
+                        {/* Part 1 Score */}
+                        <td className="py-3 px-2 text-center font-bold text-slate-700">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
+                            {p.part1}đ
+                          </span>
+                        </td>
+                        {/* Part 2 Score */}
+                        <td className="py-3 px-2 text-center font-bold text-slate-700">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
+                            {p.part2}đ
+                          </span>
+                        </td>
+                        {/* Part 3 Score */}
+                        <td className="py-3 px-2 text-center font-bold text-slate-700">
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
+                            {p.part3}đ
+                          </span>
+                        </td>
+                        {/* Part 4 Score */}
+                        <td className="py-3 px-2 text-center font-bold">
+                          {p.part4 > 0 || r.hasEssayGraded ? (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                              {p.part4}đ
+                            </span>
+                          ) : r.status === 'pending_essay_grading' ? (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 text-[10px]">
+                              Chờ chấm
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">0đ</span>
+                          )}
+                        </td>
+                        {/* Total Score */}
+                        <td className="py-3 px-3 text-center bg-indigo-50/40 font-extrabold text-sm text-slate-900">
+                          <span className="text-indigo-900 font-black text-base">{r.score}</span>
+                          <span className="text-[10px] text-slate-400 font-normal"> / {r.maxScore || 10}</span>
                           {r.isAiGraded && (
-                            <span className="block text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-200 mt-0.5 mx-auto w-max">
+                            <span className="block text-[8px] font-bold text-purple-700 bg-purple-50 px-1 py-0.2 rounded-full border border-purple-200 mt-0.5 mx-auto w-max">
                               🤖 AI Chấm
                             </span>
                           )}
-                          {r.status === 'pending_essay_grading' && (
-                            <span className="block text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded-full border border-amber-200 mt-0.5 mx-auto w-max">
-                              Chờ chấm tự luận
-                            </span>
-                          )}
                         </td>
-                        <td className="py-3 px-4 text-center text-slate-500">
+                        <td className="py-3 px-2 text-center text-slate-500">
                           <span className="text-emerald-600 font-semibold">{r.correctCount}</span> / <span className="text-rose-500">{r.wrongCount}</span>
                         </td>
-                        <td className="py-3 px-4 text-center font-semibold text-slate-600">
+                        <td className="py-3 px-2 text-center font-semibold text-slate-600">
                           {r.percentage}%
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-2 text-center">
                           {r.tabViolations ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
                               <ShieldAlert className="w-3 h-3 text-rose-600" />
-                              {r.tabViolations} lần
+                              {r.tabViolations}
                             </span>
                           ) : (
-                            <span className="text-slate-300 text-[11px]">Không</span>
+                            <span className="text-slate-300 text-[11px]">0</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-slate-500 text-[11px]">
+                        <td className="py-3 px-3 text-slate-500 text-[11px]">
                           {new Date(r.submittedAt).toLocaleString('vi-VN')}
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-2 text-center">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                           }`}>
                             {passed ? 'Đạt' : 'Chưa đạt'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-3 text-right">
                           <button
                             onClick={() => setSelectedGradingResult(r)}
                             className={`px-3 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all ${
@@ -883,7 +1035,7 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                                 ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
                                 : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                             }`}
-                            title="Xem chi tiết câu Đúng/Sai và chấm tự luận"
+                            title="Xem chi tiết các phần thi và chấm điểm"
                           >
                             <PenTool className="w-3.5 h-3.5" />
                             <span>{r.status === 'pending_essay_grading' ? 'Chấm tự luận ngay' : 'Xem & Sửa điểm'}</span>
@@ -894,7 +1046,7 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <td colSpan={13} className="py-12 text-center text-slate-400">
                       Chưa có kết quả nộp bài nào thỏa mãn điều kiện lọc.
                     </td>
                   </tr>

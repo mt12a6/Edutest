@@ -29,7 +29,8 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 import { 
   isMultipleChoiceCorrect, 
   isFillBlankCorrect, 
-  evaluateTrueFalseQuestion 
+  evaluateTrueFalseQuestion,
+  calculateExamSubmissionBreakdown
 } from '../utils/grading';
 import { performanceTracker } from '../utils/performanceMetrics';
 
@@ -1429,70 +1430,7 @@ export async function submitExamAttempt(
   questions: Question[],
   tabViolations: number = 0
 ): Promise<ExamResult> {
-  let correctCount = 0;
-  let wrongCount = 0;
-  let unattemptedCount = 0;
-  let earnedPoints = 0;
-  let totalPoints = 0;
-
-  questions.forEach(q => {
-    const qWeight = q.points || 1;
-    totalPoints += qWeight;
-    const studentAns = answers[q.id];
-
-    if (studentAns === undefined || studentAns === null || studentAns === '') {
-      unattemptedCount++;
-      return;
-    }
-
-    const qType = q.type || 'multiple_choice';
-
-    if (qType === 'multiple_choice') {
-      const isCorrect = isMultipleChoiceCorrect(studentAns, q.correctOption, q.options);
-      if (isCorrect) {
-        correctCount++;
-        earnedPoints += qWeight;
-      } else {
-        wrongCount++;
-      }
-    } else if (qType === 'true_false') {
-      const { subMatches, totalSubs, ratio, earnedPoints: tfEarned } = evaluateTrueFalseQuestion(studentAns, q.subQuestions, qWeight);
-      earnedPoints += tfEarned;
-
-      if (subMatches === totalSubs && totalSubs > 0) {
-        correctCount++;
-      } else if (subMatches > 0) {
-        correctCount += ratio;
-        wrongCount += (1 - ratio);
-      } else {
-        wrongCount++;
-      }
-    } else if (qType === 'fill_blank') {
-      const isCorrect = isFillBlankCorrect(studentAns, q.acceptableAnswers, q.correctOption, q.sampleAnswer);
-      if (isCorrect) {
-        correctCount++;
-        earnedPoints += qWeight;
-      } else {
-        wrongCount++;
-      }
-    } else if (qType === 'essay') {
-      if (String(studentAns).trim().length > 0) {
-        // Essay is submitted, pending grading by teacher or AI
-      } else {
-        unattemptedCount++;
-      }
-    }
-  });
-
-  const hasEssayQuestions = questions.some(q => q.type === 'essay');
-  const maxScale = exam.maxScore || 10;
-  const finalScore = totalPoints > 0 
-    ? Number(((earnedPoints / totalPoints) * maxScale).toFixed(2)) 
-    : 0;
-  const percentage = totalPoints > 0 
-    ? Math.min(100, Math.round((earnedPoints / totalPoints) * 100)) 
-    : 0;
-
+  const breakdown = calculateExamSubmissionBreakdown(exam, questions, answers);
   const nowStr = new Date().toISOString();
 
   const result: ExamResult = {
@@ -1503,19 +1441,27 @@ export async function submitExamAttempt(
     studentName: student.displayName,
     studentEmail: student.email,
     classId: student.classIds?.[0] || '10A1',
-    score: finalScore,
-    maxScore: maxScale,
-    correctCount: Math.round(correctCount),
-    wrongCount: Math.round(wrongCount),
-    unattemptedCount,
-    percentage,
+    score: breakdown.scaledScore,
+    maxScore: exam.maxScore || 10,
+    correctCount: breakdown.correctCount,
+    wrongCount: breakdown.wrongCount,
+    unattemptedCount: breakdown.unattemptedCount,
+    percentage: breakdown.percentage,
     submittedAt: nowStr,
-    feedback: hasEssayQuestions 
+    feedback: breakdown.hasEssay && breakdown.hasPendingEssay 
       ? 'Bài thi có câu tự luận, đang chờ giáo viên hoặc AI chấm điểm.'
-      : (finalScore >= (exam.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'),
+      : (breakdown.scaledScore >= (exam.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'),
     tabViolations,
-    status: hasEssayQuestions ? 'pending_essay_grading' : 'completed',
-    hasEssay: hasEssayQuestions,
+    status: (breakdown.hasEssay && breakdown.hasPendingEssay) ? 'pending_essay_grading' : 'completed',
+    hasEssay: breakdown.hasEssay,
+    objectiveScore: Number((breakdown.part1.earnedPoints + breakdown.part2.earnedPoints + breakdown.part3.earnedPoints).toFixed(2)),
+    essayScore: breakdown.part4.earnedPoints,
+    partScores: {
+      part1: { earned: breakdown.part1.earnedPoints, max: breakdown.part1.maxPoints, count: breakdown.part1.questionCount, correctCount: breakdown.part1.correctCount },
+      part2: { earned: breakdown.part2.earnedPoints, max: breakdown.part2.maxPoints, count: breakdown.part2.questionCount, correctCount: breakdown.part2.correctCount },
+      part3: { earned: breakdown.part3.earnedPoints, max: breakdown.part3.maxPoints, count: breakdown.part3.questionCount, correctCount: breakdown.part3.correctCount },
+      part4: { earned: breakdown.part4.earnedPoints, max: breakdown.part4.maxPoints, count: breakdown.part4.questionCount, correctCount: breakdown.part4.correctCount },
+    },
     answers // Attach answers directly for persistent review
   };
 
@@ -1535,7 +1481,7 @@ export async function submitExamAttempt(
             status: 'submitted',
             submittedAt: nowStr,
             answers,
-            score: finalScore,
+            score: breakdown.scaledScore,
             answeredCount: Object.keys(answers).length,
             tabViolations
           };
@@ -1553,7 +1499,7 @@ export async function submitExamAttempt(
       status: 'submitted',
       submittedAt: nowStr,
       answers,
-      score: finalScore,
+      score: breakdown.scaledScore,
       answeredCount: Object.keys(answers).length,
       lastSavedAt: nowStr,
       tabViolations
@@ -1776,6 +1722,120 @@ export async function updateExamResultScore(
 
   performanceTracker.recordSample('grading', `updateExamResultScore:${attemptId}`, performance.now() - startTime, false);
   return updated;
+}
+
+/**
+ * Re-grades / Recalculates all submitted student results for an exam.
+ * Crucial when a teacher edits questions, changes correct answer keys, modifies
+ * point values per question, or updates answer choices for finished exams.
+ */
+export async function recalculateExamResults(
+  examId: string,
+  graderName: string = 'Hệ thống cập nhật đề thi',
+  graderId?: string
+): Promise<{ count: number; results: ExamResult[] }> {
+  const startTime = performance.now();
+  const exam = await getExamById(examId);
+  if (!exam) return { count: 0, results: [] };
+
+  const [questions, allResults, allAttempts] = await Promise.all([
+    getExamQuestions(examId),
+    getExamResults(examId),
+    getAttemptsForExam(examId)
+  ]);
+
+  if (allResults.length === 0) {
+    return { count: 0, results: [] };
+  }
+
+  const updatedResults: ExamResult[] = [];
+  const now = new Date().toISOString();
+
+  for (const res of allResults) {
+    const matchedAttempt = allAttempts.find(a => a.id === res.attemptId || a.id === res.id);
+    const answers = (res.answers && Object.keys(res.answers).length > 0)
+      ? res.answers 
+      : (matchedAttempt?.answers || {});
+
+    const breakdown = calculateExamSubmissionBreakdown(
+      exam,
+      questions,
+      answers,
+      res.essayGrades,
+      res.essayScore
+    );
+
+    const historyEntry = {
+      graderId: graderId || 'system',
+      graderName: graderName || 'Giáo viên phụ trách',
+      score: breakdown.scaledScore,
+      timestamp: now,
+      action: 'Cập nhật lại điểm theo đáp án & thang điểm mới của đề thi'
+    };
+
+    const updatedRes: ExamResult = {
+      ...res,
+      score: breakdown.scaledScore,
+      maxScore: exam.maxScore || 10,
+      correctCount: breakdown.correctCount,
+      wrongCount: breakdown.wrongCount,
+      unattemptedCount: breakdown.unattemptedCount,
+      percentage: breakdown.percentage,
+      objectiveScore: Number((breakdown.part1.earnedPoints + breakdown.part2.earnedPoints + breakdown.part3.earnedPoints).toFixed(2)),
+      essayScore: breakdown.part4.earnedPoints,
+      hasEssay: breakdown.hasEssay,
+      status: breakdown.hasPendingEssay ? 'pending_essay_grading' : 'completed',
+      partScores: {
+        part1: { earned: breakdown.part1.earnedPoints, max: breakdown.part1.maxPoints, count: breakdown.part1.questionCount, correctCount: breakdown.part1.correctCount },
+        part2: { earned: breakdown.part2.earnedPoints, max: breakdown.part2.maxPoints, count: breakdown.part2.questionCount, correctCount: breakdown.part2.correctCount },
+        part3: { earned: breakdown.part3.earnedPoints, max: breakdown.part3.maxPoints, count: breakdown.part3.questionCount, correctCount: breakdown.part3.correctCount },
+        part4: { earned: breakdown.part4.earnedPoints, max: breakdown.part4.maxPoints, count: breakdown.part4.questionCount, correctCount: breakdown.part4.correctCount },
+      },
+      answers,
+      lastUpdatedAt: now,
+      lastUpdatedBy: graderName,
+      lastUpdatedById: graderId,
+      graderHistory: [...(res.graderHistory || []), historyEntry],
+      feedback: breakdown.scaledScore >= (exam.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'
+    };
+
+    updatedResults.push(updatedRes);
+    saveLocalResult(updatedRes);
+  }
+
+  invalidateResultsCache();
+
+  // Commit updates to Firestore in batches
+  try {
+    const batch = writeBatch(db);
+    updatedResults.forEach(r => {
+      const cleanR = sanitizeForFirestore(r);
+      batch.set(doc(db, 'results', r.id), cleanR, { merge: true });
+      if (r.attemptId && r.attemptId !== r.id) {
+        batch.set(doc(db, 'results', r.attemptId), cleanR, { merge: true });
+      }
+      batch.set(doc(db, 'attempts', r.attemptId || r.id), sanitizeForFirestore({
+        score: r.score,
+        lastUpdatedAt: now,
+        lastUpdatedBy: graderName
+      }), { merge: true });
+    });
+    await batch.commit();
+  } catch (err) {
+    console.warn('recalculateExamResults batch commit warning:', err);
+  }
+
+  // Cross-component immediate real-time synchronization
+  if (typeof window !== 'undefined') {
+    updatedResults.forEach(r => {
+      window.dispatchEvent(new CustomEvent('edutest:score_updated', {
+        detail: { result: r, examId }
+      }));
+    });
+  }
+
+  performanceTracker.recordSample('grading', `recalculateExamResults:${examId}`, performance.now() - startTime, false);
+  return { count: updatedResults.length, results: updatedResults };
 }
 
 export async function getAllResults(forceRefresh: boolean = false): Promise<ExamResult[]> {

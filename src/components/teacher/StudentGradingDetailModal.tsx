@@ -24,7 +24,8 @@ import { useAuth } from '../../context/AuthContext';
 import { 
   isMultipleChoiceCorrect as checkMCCorrect, 
   isFillBlankCorrect as checkFBCorrect, 
-  evaluateTrueFalseQuestion as evalTF 
+  evaluateTrueFalseQuestion as evalTF,
+  calculateExamSubmissionBreakdown 
 } from '../../utils/grading';
 
 interface StudentGradingDetailModalProps {
@@ -93,6 +94,21 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
   const totalMaxEssayPoints = Number(
     essayQuestions.reduce((sum, q) => sum + (q.points || 1), 0).toFixed(2)
   );
+
+  // Full 4-part score breakdown
+  const currentBreakdown = React.useMemo(() => {
+    const gradesMapForBreakdown: Record<string, { score: number }> = {};
+    essayQuestions.forEach(q => {
+      gradesMapForBreakdown[q.id] = { score: essayScores[q.id] ?? 0 };
+    });
+    return calculateExamSubmissionBreakdown(
+      exam,
+      questions,
+      studentAnswers,
+      gradesMapForBreakdown,
+      totalEssayScore
+    );
+  }, [exam, questions, studentAnswers, essayScores, totalEssayScore]);
 
   // Check if multiple choice is correct
   const isMultipleChoiceCorrect = (q: Question) => {
@@ -332,62 +348,99 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
           </div>
         </div>
 
-        {/* Score overview summary ribbon */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
-          <div className="flex items-center gap-4">
-            <div>
-              <span className="text-slate-400 font-semibold block text-[10px] uppercase">Tổng điểm bài thi</span>
-              {result.hasEssayGraded || (result.essayScore !== undefined && result.essayScore > 0) ? (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-xl border border-purple-200">
-                    {result.score} <span className="text-xs font-normal text-purple-500">/ {result.maxScore || 10}</span>
+        {/* Score overview summary ribbon with 4 component parts */}
+        <div className="px-6 py-3.5 bg-slate-50 border-b border-slate-200 space-y-2.5 shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-4">
+              <div>
+                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Tổng điểm bài thi</span>
+                {result.hasEssayGraded || (result.essayScore !== undefined && result.essayScore > 0) ? (
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-xl border border-purple-200">
+                      {result.score} <span className="text-xs font-normal text-purple-500">/ {result.maxScore || 10}</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-purple-600 hidden sm:inline">
+                      (Trắc nghiệm: {result.objectiveScore ?? Math.max(0, Number(((result.score || 0) - (result.essayScore || 0)).toFixed(2)))}đ + Tự luận: +{result.essayScore}đ)
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-xl font-black text-slate-900">
+                    {result.score} <span className="text-xs font-normal text-slate-400">/ {result.maxScore || 10}</span>
                   </span>
-                  <span className="text-[11px] font-bold text-purple-600 hidden sm:inline">
-                    (Trắc nghiệm: {result.objectiveScore ?? Math.max(0, Number(((result.score || 0) - (result.essayScore || 0)).toFixed(2)))}đ + Tự luận: +{result.essayScore}đ)
-                  </span>
-                </div>
-              ) : (
-                <span className="text-xl font-black text-slate-900">
-                  {result.score} <span className="text-xs font-normal text-slate-400">/ {result.maxScore || 10}</span>
+                )}
+              </div>
+              <div className="h-7 w-px bg-slate-200" />
+              <div>
+                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Đúng / Sai</span>
+                <span className="font-bold text-slate-800">
+                  <span className="text-emerald-700">{result.correctCount} đúng</span> • <span className="text-rose-600">{result.wrongCount} sai</span>
                 </span>
-              )}
+              </div>
+              <div className="h-7 w-px bg-slate-200" />
+              <div>
+                <span className="text-slate-400 font-semibold block text-[10px] uppercase">Trạng thái tự luận</span>
+                <span className={`inline-block font-bold px-2 py-0.5 rounded-full text-[10px] ${
+                  result.status === 'pending_essay_grading'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : result.isAiGraded
+                    ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                }`}>
+                  {result.status === 'pending_essay_grading' 
+                    ? `Chờ chấm tự luận (${essayQuestions.length} câu)` 
+                    : result.isAiGraded 
+                    ? '🤖 AI đã chấm' 
+                    : '🧑‍🏫 Giáo viên đã chấm'}
+                </span>
+              </div>
             </div>
-            <div className="h-7 w-px bg-slate-200" />
-            <div>
-              <span className="text-slate-400 font-semibold block text-[10px] uppercase">Đúng / Sai</span>
-              <span className="font-bold text-slate-800">
-                <span className="text-emerald-700">{result.correctCount} đúng</span> • <span className="text-rose-600">{result.wrongCount} sai</span>
+
+            {result.tabViolations ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                <span>{result.tabViolations} lần rời màn hình thi</span>
               </span>
-            </div>
-            <div className="h-7 w-px bg-slate-200" />
-            <div>
-              <span className="text-slate-400 font-semibold block text-[10px] uppercase">Trạng thái tự luận</span>
-              <span className={`inline-block font-bold px-2 py-0.5 rounded-full text-[10px] ${
-                result.status === 'pending_essay_grading'
-                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                  : result.isAiGraded
-                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                  : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-              }`}>
-                {result.status === 'pending_essay_grading' 
-                  ? `Chờ chấm tự luận (${essayQuestions.length} câu)` 
-                  : result.isAiGraded 
-                  ? '🤖 AI đã chấm' 
-                  : '🧑‍🏫 Giáo viên đã chấm'}
+            ) : (
+              <span className="text-[11px] text-emerald-700 font-semibold">
+                ✓ Không vi phạm chuyển tab
               </span>
-            </div>
+            )}
           </div>
 
-          {result.tabViolations ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-              <span>{result.tabViolations} lần rời màn hình thi</span>
-            </span>
-          ) : (
-            <span className="text-[11px] text-emerald-700 font-semibold">
-              ✓ Không vi phạm chuyển tab
-            </span>
-          )}
+          {/* 4 Parts Component Breakdown Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-200/60">
+            <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-semibold text-slate-500 block truncate">Phần I: Trắc nghiệm</span>
+              <span className="text-sm font-extrabold text-slate-800">
+                {currentBreakdown.part1.earnedPoints} <span className="text-[10px] text-slate-400 font-normal">/ {currentBreakdown.part1.maxPoints}đ</span>
+              </span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">{currentBreakdown.part1.questionCount} câu hỏi</span>
+            </div>
+
+            <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-semibold text-slate-500 block truncate">Phần II: Đúng / Sai</span>
+              <span className="text-sm font-extrabold text-slate-800">
+                {currentBreakdown.part2.earnedPoints} <span className="text-[10px] text-slate-400 font-normal">/ {currentBreakdown.part2.maxPoints}đ</span>
+              </span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">{currentBreakdown.part2.questionCount} câu hỏi</span>
+            </div>
+
+            <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-semibold text-slate-500 block truncate">Phần III: Trả lời ngắn</span>
+              <span className="text-sm font-extrabold text-slate-800">
+                {currentBreakdown.part3.earnedPoints} <span className="text-[10px] text-slate-400 font-normal">/ {currentBreakdown.part3.maxPoints}đ</span>
+              </span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">{currentBreakdown.part3.questionCount} câu hỏi</span>
+            </div>
+
+            <div className="p-2 bg-purple-50/60 rounded-xl border border-purple-200 shadow-2xs">
+              <span className="text-[10px] font-semibold text-purple-700 block truncate">Phần IV: Tự luận</span>
+              <span className="text-sm font-extrabold text-purple-900">
+                {totalEssayScore} <span className="text-[10px] text-purple-500 font-normal">/ {totalMaxEssayPoints}đ</span>
+              </span>
+              <span className="text-[9px] text-purple-500 block mt-0.5">{essayQuestions.length} câu tự luận</span>
+            </div>
+          </div>
         </div>
 
         {/* Modal Body */}

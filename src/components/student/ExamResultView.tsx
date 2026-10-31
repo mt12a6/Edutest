@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
-import { isQuestionCorrect, evaluateTrueFalseQuestion } from '../../utils/grading';
+import { isQuestionCorrect, evaluateTrueFalseQuestion, calculateExamSubmissionBreakdown } from '../../utils/grading';
 import { useAuth } from '../../context/AuthContext';
 
 interface ExamResultViewProps {
@@ -52,6 +52,16 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
   const isPassed = result.score >= (exam.passScore || 5);
   // Guarantee studentAnswers is never empty by reading from attempt or result
   const studentAnswers = attempt?.answers || result?.answers || {};
+
+  const breakdown = React.useMemo(() => {
+    return calculateExamSubmissionBreakdown(
+      exam,
+      questions,
+      studentAnswers,
+      result.essayGrades,
+      result.essayScore
+    );
+  }, [exam, questions, studentAnswers, result]);
 
   const checkCorrect = (q: Question) => isQuestionCorrect(q, studentAnswers);
 
@@ -119,6 +129,56 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
               <div className="p-2.5 bg-slate-100 rounded-xl border border-slate-200">
                 <p className="text-slate-600 font-medium">Chưa làm</p>
                 <p className="text-base font-bold text-slate-800">{result.unattemptedCount}</p>
+              </div>
+            </div>
+
+            {/* 4 Parts Component Scores Breakdown */}
+            <div className="pt-4 border-t border-slate-200/80 mt-4 max-w-xl mx-auto">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-2 text-center">
+                Điểm chi tiết theo từng phần thi:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left">
+                {/* Part 1 */}
+                <div className="p-2.5 bg-white/90 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block truncate">Phần I: Trắc nghiệm</span>
+                  <p className="text-base font-black text-slate-900 mt-0.5">
+                    {breakdown.part1.earnedPoints} <span className="text-[10px] font-normal text-slate-400">/ {breakdown.part1.maxPoints}đ</span>
+                  </p>
+                  <span className="text-[9px] text-slate-400">{breakdown.part1.questionCount} câu</span>
+                </div>
+
+                {/* Part 2 */}
+                <div className="p-2.5 bg-white/90 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block truncate">Phần II: Đúng / Sai</span>
+                  <p className="text-base font-black text-slate-900 mt-0.5">
+                    {breakdown.part2.earnedPoints} <span className="text-[10px] font-normal text-slate-400">/ {breakdown.part2.maxPoints}đ</span>
+                  </p>
+                  <span className="text-[10px] text-slate-400">{breakdown.part2.questionCount} câu</span>
+                </div>
+
+                {/* Part 3 */}
+                <div className="p-2.5 bg-white/90 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-500 block truncate">Phần III: Điền khuyết</span>
+                  <p className="text-base font-black text-slate-900 mt-0.5">
+                    {breakdown.part3.earnedPoints} <span className="text-[10px] font-normal text-slate-400">/ {breakdown.part3.maxPoints}đ</span>
+                  </p>
+                  <span className="text-[10px] text-slate-400">{breakdown.part3.questionCount} câu</span>
+                </div>
+
+                {/* Part 4 */}
+                <div className="p-2.5 bg-purple-50/70 rounded-2xl border border-purple-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-purple-700 block truncate">Phần IV: Tự luận</span>
+                  <p className="text-base font-black text-purple-900 mt-0.5">
+                    {breakdown.part4.earnedPoints} <span className="text-[10px] font-normal text-purple-400">/ {breakdown.part4.maxPoints}đ</span>
+                  </p>
+                  {result.status === 'pending_essay_grading' ? (
+                    <span className="inline-block text-[8px] font-bold text-amber-700 bg-amber-50 px-1 rounded-full border border-amber-200">
+                      Chờ chấm
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-purple-500">{breakdown.part4.questionCount} câu</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
