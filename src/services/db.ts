@@ -1944,6 +1944,12 @@ export const GEOMETRY_TRIANGLE_IMAGE = `data:image/svg+xml;utf8,<svg xmlns="http
 export const PARABOLA_GRAPH_IMAGE = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200" viewBox="0 0 360 200"><rect width="100%" height="100%" fill="%23f8fafc" rx="12"/><line x1="30" y1="140" x2="330" y2="140" stroke="%2364748b" stroke-width="1.5"/><line x1="120" y1="180" x2="120" y2="20" stroke="%2364748b" stroke-width="1.5"/><path d="M 50 20 Q 180 260 310 20" fill="none" stroke="%232563eb" stroke-width="3"/><circle cx="180" cy="165" r="4" fill="%23dc2626"/><text x="190" y="175" font-family="sans-serif" font-size="11" font-weight="bold" fill="%23dc2626">Đỉnh I(2; -1)</text><text x="335" y="145" font-family="sans-serif" font-size="12" fill="%23334155">x</text><text x="110" y="20" font-family="sans-serif" font-size="12" fill="%23334155">y</text><text x="210" y="50" font-family="sans-serif" font-size="12" font-weight="bold" fill="%231e40af">y = x² - 4x + 3</text></svg>`;
 
 export async function checkAndSeedInitialData(): Promise<void> {
+  // FAST-PATH: If initial seeding was already completed on this browser session, return immediately in 0ms!
+  // This eliminates 40+ sequential network writes to Firestore on page refresh.
+  if (typeof window !== 'undefined' && localStorage.getItem('edutest_initial_seeded_done') === 'true') {
+    return;
+  }
+
   try {
     // Explicitly delete class 6A1 data per user request
     addDeletedClassId('c_6a');
@@ -1951,45 +1957,37 @@ export async function checkAndSeedInitialData(): Promise<void> {
     const existingClasses = getLocalClasses().filter(c => c.name !== '6A1' && c.id !== 'c_6a' && c.id !== '6A1');
     saveLocalClasses(existingClasses);
 
-    // Always ensure all user accounts (including local custom accounts) exist in Firestore for cross-device login
+    // Parallel background sync for initial seed (does not block data retrieval)
+    const promises: Promise<any>[] = [];
+
     const deletedUserIds = getDeletedUserIds();
     const localUsers = getLocalUsers();
     const allUsersToSync = [...getDefaultUsers(), ...localUsers];
     for (const defUser of allUsersToSync) {
       if (!deletedUserIds.includes(defUser.id)) {
-        try {
-          await setDoc(doc(db, 'users', defUser.id), sanitizeForFirestore(defUser), { merge: true });
-        } catch (e) {
-          // non-blocking
-        }
+        promises.push(setDoc(doc(db, 'users', defUser.id), sanitizeForFirestore(defUser), { merge: true }).catch(() => {}));
       }
     }
 
-    // Ensure standard subjects exist in Firestore
     const deletedSubIds = getDeletedSubjectIds();
     const defaultSubs = getDefaultSubjects();
     for (const sub of defaultSubs) {
       if (!deletedSubIds.includes(sub.id) && !deletedSubIds.includes(sub.code)) {
-        try {
-          await setDoc(doc(db, 'subjects', sub.id), sanitizeForFirestore(sub), { merge: true });
-        } catch (e) {
-          // non-blocking
-        }
+        promises.push(setDoc(doc(db, 'subjects', sub.id), sanitizeForFirestore(sub), { merge: true }).catch(() => {}));
       }
     }
 
-    // Ensure standard classes exist in Firestore
     const defaultClasses = getDefaultClasses().filter(c => c.name !== '6A1' && c.id !== 'c_6a' && c.id !== '6A1');
     for (const cls of defaultClasses) {
-      try {
-        await setDoc(doc(db, 'classes', cls.id), sanitizeForFirestore(cls), { merge: true });
-      } catch (e) {
-        // non-blocking
-      }
+      promises.push(setDoc(doc(db, 'classes', cls.id), sanitizeForFirestore(cls), { merge: true }).catch(() => {}));
     }
 
-    // Disable automatic exam seeding per user request
-    localStorage.setItem('edutest_initial_seeded_done', 'true');
+    // Execute in parallel
+    await Promise.allSettled(promises);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('edutest_initial_seeded_done', 'true');
+    }
     return;
 
     const seededExamsData: any[] = [

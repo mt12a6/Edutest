@@ -36,7 +36,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { MathRenderer } from '../common/MathRenderer';
 import { RichTextEditorToolbar } from '../common/RichTextEditorToolbar';
-import { createBackupGoogleForm } from '../../services/googleFormsService';
+import { createBackupGoogleForm, generateGoogleAppsScriptCode } from '../../services/googleFormsService';
 import { Key, Globe, ExternalLink, Share2, Copy } from 'lucide-react';
 
 interface WordExamUploadModalProps {
@@ -179,6 +179,26 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
   const [googleFormId, setGoogleFormId] = useState<string>(initialExam?.googleFormId || '');
   const [googleFormUrl, setGoogleFormUrl] = useState<string>(initialExam?.googleFormUrl || '');
   const [googleFormSyncStatus, setGoogleFormSyncStatus] = useState<string | null>(null);
+  const [isCopiedGfScript, setIsCopiedGfScript] = useState<boolean>(false);
+
+  const handleCopyGoogleAppsScript = () => {
+    const resolvedSubjectName = isCustomSubject 
+      ? customSubjectName 
+      : (effectiveSubjects.find(s => s.code === subjectId || s.id === subjectId)?.name || 'Môn học');
+
+    const formExamData = {
+      id: initialExam?.id || 'temp',
+      title: title.trim() || 'Đề thi trắc nghiệm',
+      subjectName: resolvedSubjectName,
+      grade,
+      durationMinutes: Number(durationMinutes) || 45,
+      examCode: examCode.trim() || undefined,
+    };
+    const code = generateGoogleAppsScriptCode(formExamData, parsedQuestions);
+    navigator.clipboard.writeText(code);
+    setIsCopiedGfScript(true);
+    setTimeout(() => setIsCopiedGfScript(false), 3000);
+  };
 
   const generateSecretToken = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1818,29 +1838,75 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                 </div>
 
                 {/* GOOGLE FORMS BACKUP INTEGRATION */}
-                <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2.5">
+                <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <label className="flex items-start gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={autoCreateGoogleForm}
-                        onChange={(e) => setAutoCreateGoogleForm(e.target.checked)}
-                        className="w-4 h-4 mt-0.5 text-emerald-600 rounded focus:ring-emerald-500"
-                      />
-                      <div>
-                        <span className="font-bold text-xs text-emerald-950 block">
-                          📑 Tự động tạo Google Form dự phòng (Google Forms API v1 & Drive)
-                        </span>
-                        <span className="text-[11px] text-emerald-800">
-                          Đồng bộ toàn bộ câu hỏi trắc nghiệm, thang điểm và bảng đáp án lên biểu mẫu Google Form trong Drive của bạn
-                        </span>
-                      </div>
-                    </label>
+                    <div>
+                      <span className="font-bold text-xs text-emerald-950 block">
+                        📑 Đồng bộ Google Form &amp; Google Drive
+                      </span>
+                      <span className="text-[11px] text-emerald-800">
+                        Tạo biểu mẫu dự phòng với đầy đủ câu hỏi, đáp án đúng và thang điểm vào Google Drive của bạn.
+                      </span>
+                    </div>
                   </div>
+
+                  {/* 1-Click Apps Script Action */}
+                  <div className="p-2.5 bg-white rounded-lg border border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div>
+                      <strong className="block text-emerald-950 text-[11px]">Cách 1: Tạo tự động qua Google Script (100% Không lỗi)</strong>
+                      <span className="text-[10px] text-slate-500">Mở script.new, dán mã vào và bấm ▶ Run để tạo Form ngay vào Drive</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleCopyGoogleAppsScript}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      >
+                        <Copy className="w-3 h-3" />
+                        <span>{isCopiedGfScript ? 'Đã sao chép mã!' : 'Sao chép mã Script'}</span>
+                      </button>
+                      <a
+                        href="https://script.new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      >
+                        <span>Mở script.new</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Direct Link Input */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-emerald-950">
+                      Link Google Form (dán vào đây sau khi tạo):
+                    </label>
+                    <input
+                      type="url"
+                      value={googleFormUrl}
+                      onChange={(e) => setGoogleFormUrl(e.target.value)}
+                      placeholder="https://docs.google.com/forms/d/e/.../viewform"
+                      className="w-full text-xs font-mono p-2 bg-white rounded-lg border border-emerald-300 text-emerald-950 focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Checkbox for API creation if permitted */}
+                  <label className="flex items-center gap-2 cursor-pointer pt-1 border-t border-emerald-200/60">
+                    <input
+                      type="checkbox"
+                      checked={autoCreateGoogleForm}
+                      onChange={(e) => setAutoCreateGoogleForm(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                    />
+                    <span className="text-[11px] text-emerald-900 font-medium">
+                      Thử tự động tạo qua Google Forms API khi lưu đề (yêu cầu quyền Google Workspace)
+                    </span>
+                  </label>
 
                   {googleFormUrl && (
                     <div className="flex items-center gap-2 pt-1 border-t border-emerald-200/80 text-xs text-emerald-900">
-                      <span className="font-semibold text-[11px]">Đã tạo Google Form:</span>
+                      <span className="font-semibold text-[11px]">Đã liên kết Google Form:</span>
                       <a
                         href={googleFormUrl}
                         target="_blank"

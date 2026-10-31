@@ -57,6 +57,7 @@ import { ShuffledExamExportModal } from './ShuffledExamExportModal';
 import { ShareExamModal } from '../common/ShareExamModal';
 import { ExamPrintModal } from '../common/ExamPrintModal';
 import { OMRScannerModal } from './OMRScannerModal';
+import { GoogleFormModal } from './GoogleFormModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -112,6 +113,9 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [securityExamCode, setSecurityExamCode] = useState<string>('');
   const [isSecurityEnabled, setIsSecurityEnabled] = useState<boolean>(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState<boolean>(false);
+
+  // Google Form Management Modal State
+  const [googleFormModalExam, setGoogleFormModalExam] = useState<Exam | null>(null);
 
   const handleOpenSecurityModal = (exam: Exam) => {
     setSecurityModalExam(exam);
@@ -697,43 +701,48 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="font-bold text-emerald-950">📑 Google Form:</span>
                       {exam.googleFormUrl ? (
-                        <span className="text-emerald-700 font-semibold truncate">Đã đồng bộ Drive</span>
+                        <span className="text-emerald-700 font-semibold truncate">Đã liên kết</span>
                       ) : (
-                        <span className="text-slate-500">Chưa tạo bản sao lưu</span>
+                        <span className="text-slate-500">Chưa tạo Form</span>
                       )}
                     </div>
-                    {exam.googleFormUrl ? (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(exam.googleFormUrl!);
-                            showSuccess('Đã sao chép link Google Form vào bộ nhớ tạm!');
-                          }}
-                          className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-semibold cursor-pointer"
-                        >
-                          Chép link
-                        </button>
-                        <a
-                          href={exam.googleFormUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1"
-                        >
-                          <span>Mở</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                      </div>
-                    ) : (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {exam.googleFormUrl && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(exam.googleFormUrl!);
+                              showSuccess('Đã sao chép link Google Form vào bộ nhớ tạm!');
+                            }}
+                            className="px-2 py-0.5 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-semibold cursor-pointer"
+                          >
+                            Chép link
+                          </button>
+                          <a
+                            href={exam.googleFormUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1"
+                          >
+                            <span>Mở</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </>
+                      )}
                       <button
                         type="button"
-                        disabled={generatingGfExamId === exam.id}
-                        onClick={() => handleGenerateGoogleForm(exam)}
-                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold shrink-0 transition-colors cursor-pointer disabled:opacity-50"
+                        onClick={() => setGoogleFormModalExam(exam)}
+                        className={`px-2 py-0.5 rounded font-bold shrink-0 transition-colors cursor-pointer ${
+                          exam.googleFormUrl
+                            ? 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                        }`}
+                        title="Tạo hoặc quản lý Google Form cho đề thi này"
                       >
-                        {generatingGfExamId === exam.id ? 'Đang tạo...' : '+ Tạo Google Form'}
+                        {exam.googleFormUrl ? 'Cài đặt' : '+ Tạo Google Form'}
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1055,6 +1064,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Google Form Integration Modal */}
+      {googleFormModalExam && (
+        <GoogleFormModal
+          isOpen={Boolean(googleFormModalExam)}
+          onClose={() => setGoogleFormModalExam(null)}
+          exam={googleFormModalExam}
+          onExamUpdated={onRefreshExams}
+        />
       )}
     </div>
   );

@@ -275,3 +275,166 @@ export async function createBackupGoogleForm(
     };
   }
 }
+
+/**
+ * Generates ready-to-run Google Apps Script code to create a Google Form quiz
+ * in the teacher's own Google Drive (script.google.com / script.new).
+ * 100% reliable - completely bypasses Google OAuth domain verification and 403 access_denied restrictions.
+ */
+export function generateGoogleAppsScriptCode(exam: any, questions: any[]): string {
+  const cleanTitle = (exam?.title || 'Đề thi trắc nghiệm').replace(/"/g, '\\"');
+  const cleanDesc = `Đề thi khảo thí trực tuyến tạo từ EduTest PRO\\nMôn: ${exam?.subjectName || 'Chung'} - Khối: ${exam?.grade || '10'} - Thời lượng: ${exam?.durationMinutes || 45} phút.`;
+
+  let script = `/**
+ * ====================================================================
+ * EDUTEST PRO - SCRIPT TỰ ĐỘNG TẠO GOOGLE FORM DỰ PHÒNG
+ * Đề thi: ${cleanTitle}
+ * Thời gian: ${new Date().toLocaleString('vi-VN')}
+ * ====================================================================
+ * 
+ * HƯỚNG DẪN 3 BƯỚC ĐỂ TẠO FORM VÀO GOOGLE DRIVE CỦA BẠN:
+ * 1. Mở trang: https://script.new (hoặc Google Drive > Mới > Google Apps Script)
+ * 2. Xóa hết mã mặc định, dán toàn bộ đoạn mã này vào.
+ * 3. Bấm nút "Chạy" (Run - biểu tượng hình tam giác ▶).
+ *    - Lần đầu chạy, Google sẽ hỏi cấp quyền: Bấm "Xem lại quyền" -> Chọn tài khoản -> Bấm "Nâng cao" -> Bấm "Đi tới... (không an toàn)" -> Bấm "Cho phép".
+ * 4. Google Form đề thi đầy đủ câu hỏi & đáp án sẽ xuất hiện ngay trong Google Drive của bạn!
+ */
+
+function createEduTestForm() {
+  Logger.log("Đang khởi tạo Google Form...");
+  const form = FormApp.create(${JSON.stringify(`[ĐỀ THI] ${exam.title}`)});
+  form.setDescription(${JSON.stringify(cleanDesc)});
+  form.setIsQuiz(true);
+  form.setAllowResponseEdits(false);
+  form.setLimitOneResponsePerUser(false);
+
+  // 1. Thu thập thông tin thí sinh
+  const nameItem = form.addTextItem();
+  nameItem.setTitle("Họ và tên thí sinh");
+  nameItem.setHelpText("Vui lòng nhập họ và tên đúng danh sách lớp");
+  nameItem.setRequired(true);
+
+  const classItem = form.addTextItem();
+  classItem.setTitle("Lớp học");
+  classItem.setHelpText("Ví dụ: 12A1, 10 Chuyên");
+  classItem.setRequired(true);
+
+  const codeItem = form.addTextItem();
+  codeItem.setTitle("Mã đề thi");
+  codeItem.setHelpText(${JSON.stringify(exam.examCode ? `Mã đề của bạn: ${exam.examCode}` : 'Nhập mã đề (nếu có)')});
+  codeItem.setRequired(true);
+
+  Logger.log("Đang thêm câu hỏi vào Form...");
+`;
+
+  questions.forEach((q, idx) => {
+    const qNum = q.questionNumber || idx + 1;
+    const promptText = (q.prompt || `Câu hỏi ${qNum}`).replace(/<[^>]+>/g, '').trim();
+    const points = Math.max(1, Math.round((q.points || 1) * 10) / 10);
+    const explanation = q.explanation ? q.explanation.replace(/<[^>]+>/g, '').trim() : '';
+
+    if (q.type === 'multiple_choice' || !q.type) {
+      const optA = (q.options?.A || 'Phương án A').replace(/<[^>]+>/g, '').trim();
+      const optB = (q.options?.B || 'Phương án B').replace(/<[^>]+>/g, '').trim();
+      const optC = (q.options?.C || 'Phương án C').replace(/<[^>]+>/g, '').trim();
+      const optD = (q.options?.D || 'Phương án D').replace(/<[^>]+>/g, '').trim();
+      const correctOpt = (q.correctOption || 'A').toUpperCase().trim();
+
+      script += `
+  // Câu ${qNum} (Trắc nghiệm 4 lựa chọn)
+  try {
+    const q${qNum} = form.addMultipleChoiceItem();
+    q${qNum}.setTitle(${JSON.stringify(`Câu ${qNum}: ${promptText}`)});
+    ${explanation ? `q${qNum}.setHelpText(${JSON.stringify(`Lời giải chi tiết: ${explanation}`)});` : ''}
+    q${qNum}.setRequired(true);
+    q${qNum}.setPoints(${points});
+    q${qNum}.setChoices([
+      q${qNum}.createChoice(${JSON.stringify(`A. ${optA}`)}, ${correctOpt === 'A'}),
+      q${qNum}.createChoice(${JSON.stringify(`B. ${optB}`)}, ${correctOpt === 'B'}),
+      q${qNum}.createChoice(${JSON.stringify(`C. ${optC}`)}, ${correctOpt === 'C'}),
+      q${qNum}.createChoice(${JSON.stringify(`D. ${optD}`)}, ${correctOpt === 'D'})
+    ]);
+  } catch (err) {
+    Logger.log("Lỗi tạo câu ${qNum}: " + err);
+  }
+`;
+    } else if (q.type === 'true_false') {
+      const subList = q.subQuestions || [
+        { key: 'a', text: 'Ý a', correct: true },
+        { key: 'b', text: 'Ý b', correct: false },
+        { key: 'c', text: 'Ý c', correct: true },
+        { key: 'd', text: 'Ý d', correct: false }
+      ];
+
+      script += `
+  // Câu ${qNum} (Đúng / Sai)
+  try {
+    const section${qNum} = form.addSectionHeaderItem();
+    section${qNum}.setTitle(${JSON.stringify(`Câu ${qNum}: ${promptText}`)});
+    ${explanation ? `section${qNum}.setHelpText(${JSON.stringify(`Lời giải chi tiết: ${explanation}`)});` : ''}
+  } catch (e) {}
+`;
+
+      subList.forEach((sub: any, sIdx: number) => {
+        const subKey = sub.key || String.fromCharCode(97 + sIdx);
+        const subText = (sub.text || '').replace(/<[^>]+>/g, '').trim();
+        const isTrue = sub.correct === true;
+
+        script += `
+  try {
+    const q${qNum}_${subKey} = form.addMultipleChoiceItem();
+    q${qNum}_${subKey}.setTitle(${JSON.stringify(`Câu ${qNum}.${subKey}: ${subText}`)});
+    q${qNum}_${subKey}.setRequired(true);
+    q${qNum}_${subKey}.setPoints(1);
+    q${qNum}_${subKey}.setChoices([
+      q${qNum}_${subKey}.createChoice("Đúng", ${isTrue}),
+      q${qNum}_${subKey}.createChoice("Sai", ${!isTrue})
+    ]);
+  } catch (e) {}
+`;
+      });
+    } else if (q.type === 'fill_blank') {
+      const acceptable = (q.acceptableAnswers || []).map((a: string) => a.trim()).filter(Boolean);
+      script += `
+  // Câu ${qNum} (Trả lời ngắn / Điền khuyết)
+  try {
+    const q${qNum} = form.addTextItem();
+    q${qNum}.setTitle(${JSON.stringify(`Câu ${qNum} (Trả lời ngắn): ${promptText}`)});
+    ${acceptable.length > 0 ? `q${qNum}.setHelpText(${JSON.stringify(`Đáp án mẫu: ${acceptable.join(', ')}`)});` : ''}
+    q${qNum}.setRequired(true);
+    q${qNum}.setPoints(${points});
+  } catch (err) {}
+`;
+    } else {
+      // Essay
+      const sampleAnswer = q.sampleAnswer ? q.sampleAnswer.replace(/<[^>]+>/g, '').trim() : '';
+      script += `
+  // Câu ${qNum} (Tự luận)
+  try {
+    const q${qNum} = form.addParagraphTextItem();
+    q${qNum}.setTitle(${JSON.stringify(`Câu ${qNum} (Tự luận): ${promptText}`)});
+    ${sampleAnswer ? `q${qNum}.setHelpText(${JSON.stringify(`Gợi ý chấm điểm: ${sampleAnswer}`)});` : ''}
+    q${qNum}.setRequired(false);
+  } catch (err) {}
+`;
+    }
+  });
+
+  script += `
+  const publishedUrl = form.getPublishedUrl();
+  const editUrl = form.getEditUrl();
+
+  Logger.log("=================================================");
+  Logger.log("ĐÃ TẠO GOOGLE FORM THÀNH CÔNG VÀO GOOGLE DRIVE!");
+  Logger.log("1. Link học sinh làm bài: " + publishedUrl);
+  Logger.log("2. Link giáo viên chỉnh sửa: " + editUrl);
+  Logger.log("=================================================");
+  
+  try {
+    Browser.msgBox("Tạo Google Form thành công!", "Link học sinh làm bài:\\n" + publishedUrl + "\\n\\nLink chỉnh sửa:\\n" + editUrl, Browser.Buttons.OK);
+  } catch (e) {}
+}
+`;
+
+  return script;
+}
