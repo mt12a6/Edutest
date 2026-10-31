@@ -38,11 +38,26 @@ app.get('/api/time', (req, res) => {
   });
 });
 
-// Server-side secret exam access verification with rate limiting
+// Server-side strict exam access verification with 3-layer authorization & rate limiting
 app.post('/api/verify-exam-access', (req, res) => {
-  const { studentName, classId, examCode, requiredExamCode, openTime, closeTime, secretToken, expectedSecretToken } = req.body;
-  const clientKey = `${req.ip || 'client'}_${studentName || ''}_${classId || ''}`;
+  const { 
+    studentId,
+    studentName, 
+    studentClass, 
+    isRegistered, 
+    examId,
+    examTitle,
+    allowedClassIds,
+    examCode, 
+    requiredExamCode, 
+    openTime, 
+    closeTime, 
+    secretToken, 
+    expectedSecretToken,
+    requiresAuth = true
+  } = req.body;
 
+  const clientKey = `${req.ip || 'client'}_${studentId || studentName || 'anon'}_${examId || 'exam'}`;
   const nowMs = Date.now();
   const record = accessAttemptsMap.get(clientKey);
 
@@ -55,6 +70,30 @@ app.post('/api/verify-exam-access', (req, res) => {
       remainingSeconds,
       error: `Bạn đã nhập sai mã đề quá 5 lần. Vui lòng thử lại sau ${remainingSeconds} giây.`
     });
+  }
+
+  // 1. Condition 1: Check Registered Student Account
+  if (requiresAuth && !isRegistered) {
+    return res.status(401).json({
+      success: false,
+      requireAuth: true,
+      error: 'Bài thi này yêu cầu bạn phải có tài khoản học sinh hợp lệ đã được đăng ký và đăng nhập vào hệ thống.'
+    });
+  }
+
+  // 2. Condition 2: Check Class Assignment (if exam is restricted to specific classes)
+  if (allowedClassIds && Array.isArray(allowedClassIds) && allowedClassIds.length > 0) {
+    const normStudentClass = String(studentClass || '').trim().toUpperCase();
+    const isAssigned = allowedClassIds.some((c: string) => String(c).trim().toUpperCase() === normStudentClass);
+    if (!isAssigned) {
+      return res.status(403).json({
+        success: false,
+        wrongClass: true,
+        studentClass,
+        allowedClassIds,
+        error: `Bạn không thuộc lớp được phân công tham gia bài thi này (Lớp của bạn: "${studentClass || 'Chưa xếp lớp'}", Lớp được giao: ${allowedClassIds.join(', ')}).`
+      });
+    }
   }
 
   // Check Open Time
@@ -94,7 +133,7 @@ app.post('/api/verify-exam-access', (req, res) => {
     });
   }
 
-  // Check Exam Code
+  // 3. Condition 3: Check Exam Code
   const normalizedInput = String(examCode || '').trim().toUpperCase();
   const normalizedExpected = String(requiredExamCode || '').trim().toUpperCase();
 
@@ -107,25 +146,29 @@ app.post('/api/verify-exam-access', (req, res) => {
         success: false,
         isLocked: true,
         remainingSeconds: 120,
-        error: 'Mã đề thi không chính xác! Bạn đã thử sai 5 lần và bị tạm khóa trong 2 phút để bảo mật.'
+        error: 'Mã bảo mật đề thi không chính xác! Bạn đã thử sai 5 lần và bị tạm khóa trong 2 phút để bảo mật.'
       });
     } else {
       accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: 0 });
       return res.status(400).json({
         success: false,
+        wrongCode: true,
         remainingAttempts: 5 - currentCount,
-        error: `Mã đề thi không chính xác (Bạn còn ${5 - currentCount} lần thử).`
+        error: `Mã bảo mật đề thi không chính xác (Bạn còn ${5 - currentCount} lần thử).`
       });
     }
   }
 
-  // Verification successful: reset rate limit record
+  // Verification successful: reset rate limit record & generate session token
   accessAttemptsMap.delete(clientKey);
+
+  const verificationToken = `vt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
   return res.json({
     success: true,
+    verificationToken,
     serverVerifiedAt: new Date().toISOString(),
-    message: 'Xác thực thí sinh và mã đề thành công.'
+    message: 'Xác thực tài khoản, danh sách lớp và mã đề thành công. Chúc bạn làm bài thi tốt!'
   });
 });
 

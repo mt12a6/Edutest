@@ -24,14 +24,23 @@ export const db = (targetDatabaseId && targetDatabaseId !== '(default)')
   ? getFirestore(app, targetDatabaseId) 
   : getFirestore(app);
 
-// Initialize Firebase Auth
+// Initialize Firebase Auth with standard profile/email permissions (avoid 403 access_denied in test mode)
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/forms.body');
-googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
 googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
+
+// Dedicated provider for optional Google Workspace export (Google Forms / Drive) requested on-demand
+export function getGoogleWorkspaceProvider(): GoogleAuthProvider {
+  const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/forms.body');
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
+  provider.setCustomParameters({
+    prompt: 'consent'
+  });
+  return provider;
+}
 
 // Test connection to Firestore on boot as mandated by Firebase skill
 export async function testConnection() {

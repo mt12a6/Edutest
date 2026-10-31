@@ -393,6 +393,9 @@ function MainApp() {
           onClose={() => setLobbyExam(null)}
           exam={lobbyExam.exam}
           questions={lobbyExam.questions}
+          onOpenLoginModal={() => {
+            window.dispatchEvent(new CustomEvent('edutest:open_login_modal'));
+          }}
           onStartExam={(attempt) => {
             setActiveTakingSession({
               exam: lobbyExam.exam,

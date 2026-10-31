@@ -61,6 +61,20 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       }
     };
     fetchAllData();
+
+    const handleScoreUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ result: ExamResult; examId: string }>;
+      if (customEvent.detail?.result) {
+        const updated = customEvent.detail.result;
+        setResults(prev => {
+          const filtered = prev.filter(r => r.id !== updated.id && r.attemptId !== updated.attemptId);
+          return [...filtered, updated];
+        });
+      }
+    };
+
+    window.addEventListener('edutest:score_updated', handleScoreUpdated);
+    return () => window.removeEventListener('edutest:score_updated', handleScoreUpdated);
   }, []);
 
   // Set selectedExamId if initialExam changes

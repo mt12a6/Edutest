@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
-import { gradeEssaySubmission, getAllUsers } from '../../services/db';
+import { gradeEssaySubmission, updateExamResultScore, getAllUsers } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { 
   isMultipleChoiceCorrect as checkMCCorrect, 
@@ -249,6 +249,41 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
       console.error('Lỗi lưu điểm tự luận:', err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // State & handler for direct score override / manual adjustments
+  const [manualScore, setManualScore] = useState<number>(result.score);
+  const [manualReason, setManualReason] = useState<string>('');
+  const [isSavingManual, setIsSavingManual] = useState<boolean>(false);
+  const [showManualSection, setShowManualSection] = useState<boolean>(essayQuestions.length === 0);
+
+  const handleSaveManualScore = async () => {
+    setIsSavingManual(true);
+    try {
+      const updated = await updateExamResultScore(
+        result.attemptId || result.id,
+        manualScore,
+        manualReason || 'Giáo viên chỉnh sửa điểm trực tiếp',
+        profile?.displayName || 'Giáo viên bộ môn',
+        profile?.id || 'teacher'
+      );
+      if (updated) {
+        result.score = updated.score;
+        result.percentage = updated.percentage;
+        result.lastUpdatedAt = updated.lastUpdatedAt;
+        result.lastUpdatedBy = updated.lastUpdatedBy;
+        result.graderHistory = updated.graderHistory;
+        setSaveSuccessMsg(`Đã lưu thành công điểm điều chỉnh: ${updated.score} điểm.`);
+        setTimeout(() => {
+          onGradedSuccess();
+          onClose();
+        }, 1200);
+      }
+    } catch (e) {
+      console.error('Lỗi điều chỉnh điểm:', e);
+    } finally {
+      setIsSavingManual(false);
     }
   };
 
@@ -576,6 +611,101 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
               </div>
             </div>
           )}
+
+          {/* SECTION: DIRECT SCORE ADJUSTMENT & AUDIT HISTORY */}
+          <div className="p-4 rounded-2xl border border-sky-200 bg-sky-50/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-7 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                  ⚙️
+                </span>
+                <div>
+                  <h4 className="font-bold text-xs text-sky-950">
+                    Điều chỉnh điểm thi trực tiếp & Lịch sử sửa đổi
+                  </h4>
+                  <p className="text-[10px] text-sky-800">
+                    Dành cho giáo viên muốn sửa điểm trực tiếp, cộng điểm thưởng hoặc hiệu chỉnh điểm số học sinh.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManualSection(!showManualSection)}
+                className="text-xs font-bold text-sky-700 hover:text-sky-900 cursor-pointer"
+              >
+                {showManualSection ? 'Thu gọn ▲' : 'Mở bảng sửa điểm ▼'}
+              </button>
+            </div>
+
+            {showManualSection && (
+              <div className="pt-3 border-t border-sky-100 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Điểm số mới (Thang điểm {result.maxScore || 10}):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max={result.maxScore || 10}
+                      value={manualScore}
+                      onChange={(e) => setManualScore(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 text-sm font-black bg-white border border-sky-300 rounded-xl focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Lý do điều chỉnh (lưu vào nhật ký):
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ví dụ: Cộng điểm phát biểu, sửa câu 3..."
+                      value={manualReason}
+                      onChange={(e) => setManualReason(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white border border-sky-300 rounded-xl focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-slate-500">
+                    Điểm hiện tại: <strong>{result.score}đ</strong> → Điểm mới: <strong className="text-sky-700 font-black">{manualScore}đ</strong>
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isSavingManual}
+                    onClick={handleSaveManualScore}
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingManual ? 'Đang cập nhật...' : 'Lưu điểm điều chỉnh'}</span>
+                  </button>
+                </div>
+
+                {/* Audit History Log */}
+                {result.graderHistory && result.graderHistory.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-sky-200/60">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase block mb-1.5">
+                      Nhật ký chấm & sửa đổi điểm số:
+                    </span>
+                    <div className="space-y-1">
+                      {result.graderHistory.map((h, i) => (
+                        <div key={i} className="text-[10px] text-slate-600 flex items-center justify-between bg-white/80 px-2 py-1 rounded-lg border border-sky-100">
+                          <span>
+                            <strong>{h.graderName}</strong>: {h.action}
+                          </span>
+                          <span className="font-mono text-slate-400">
+                            {new Date(h.timestamp).toLocaleString('vi-VN')} • {h.score}đ
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* SECTION 2: QUESTION BY QUESTION DETAILED BREAKDOWN */}
           <div className="space-y-4">

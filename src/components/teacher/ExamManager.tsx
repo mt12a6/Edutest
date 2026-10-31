@@ -28,7 +28,9 @@ import {
   Camera,
   Key,
   ExternalLink,
-  Copy
+  Copy,
+  X,
+  Save
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject } from '../../types';
 import { 
@@ -104,6 +106,38 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Exam Security Code Management Modal State
+  const [securityModalExam, setSecurityModalExam] = useState<Exam | null>(null);
+  const [securityExamCode, setSecurityExamCode] = useState<string>('');
+  const [isSecurityEnabled, setIsSecurityEnabled] = useState<boolean>(false);
+  const [isSavingSecurity, setIsSavingSecurity] = useState<boolean>(false);
+
+  const handleOpenSecurityModal = (exam: Exam) => {
+    setSecurityModalExam(exam);
+    setSecurityExamCode(exam.examCode || (exam as any).trialCode || '');
+    setIsSecurityEnabled(Boolean(exam.isSecure || exam.examCode));
+  };
+
+  const handleSaveSecurityCode = async () => {
+    if (!securityModalExam) return;
+    setIsSavingSecurity(true);
+    try {
+      const codeToSave = isSecurityEnabled ? securityExamCode.trim().toUpperCase() : '';
+      await updateExamWithQuestions(securityModalExam.id, {
+        examCode: codeToSave,
+        isSecure: isSecurityEnabled,
+        trialCode: codeToSave
+      });
+      showSuccess(`Đã lưu thiết lập bảo mật cho đề thi "${securityModalExam.title}"!`);
+      setSecurityModalExam(null);
+      onRefreshExams();
+    } catch (e: any) {
+      showError('Lỗi cập nhật mã bảo mật: ' + (e?.message || 'Thất bại'));
+    } finally {
+      setIsSavingSecurity(false);
+    }
+  };
 
   const handleGenerateGoogleForm = async (exam: Exam) => {
     setGeneratingGfExamId(exam.id);
@@ -621,16 +655,17 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     </div>
                   )}
 
-                  {/* Secret Token & Exam Code row */}
-                  {(exam.secretToken || exam.examCode) && (
-                    <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-amber-50/70 border border-amber-200 text-[10px]">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <Key className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                        {exam.examCode && <span className="font-bold text-amber-900">Mã đề: {exam.examCode}</span>}
-                        {exam.secretToken && (
-                          <span className="text-amber-800 font-mono truncate">Token: {exam.secretToken}</span>
-                        )}
-                      </div>
+                  {/* Security Code & Proctoring Management Row */}
+                  <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-amber-50/80 border border-amber-200 text-[10px]">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Key className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      {exam.examCode ? (
+                        <span className="font-bold text-amber-900">Mã bảo mật: <span className="font-mono bg-amber-100 px-1 rounded">{exam.examCode}</span></span>
+                      ) : (
+                        <span className="text-slate-500">Chưa đặt mã bảo mật đề thi</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
                       {exam.secretToken && (
                         <button
                           type="button"
@@ -639,12 +674,21 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                             showSuccess(`Đã sao chép đường link bí mật của đề thi "${exam.title}"!`);
                           }}
                           className="px-2 py-0.5 rounded bg-amber-200 hover:bg-amber-300 text-amber-950 font-bold shrink-0 transition-colors cursor-pointer"
+                          title="Sao chép link bí mật"
                         >
                           Chép link
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenSecurityModal(exam)}
+                        className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold shrink-0 transition-colors cursor-pointer shadow-2xs"
+                        title="Quản lý mã bảo mật đề thi"
+                      >
+                        {exam.examCode ? 'Đổi mã' : 'Đặt mã'}
+                      </button>
                     </div>
-                  )}
+                  </div>
 
                   {/* Google Forms backup badge & action */}
                   <div className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-emerald-50/70 border border-emerald-200 text-[10px]">
@@ -916,18 +960,99 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         />
       )}
 
-      {/* OMR Offline Scanner & Sheet Generator Modal */}
-      {omrScannerExam && (
-        <OMRScannerModal
-          isOpen={Boolean(omrScannerExam)}
-          onClose={() => setOmrScannerExam(null)}
-          exam={omrScannerExam}
-          classes={classes}
-          onGradedSuccess={() => {
-            showSuccess('Đã lưu kết quả chấm OMR vào hệ thống thành công!');
-            onRefreshExams();
-          }}
-        />
+      {/* Security Code & Proctoring Management Modal */}
+      {securityModalExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md w-full overflow-hidden animate-in zoom-in-95">
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold">
+                  <Key className="w-4 h-4 fill-slate-950" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base">Quản lý mã bảo mật đề thi</h3>
+                  <p className="text-[11px] text-slate-300 line-clamp-1">{securityModalExam.title}</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setSecurityModalExam(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {/* Enable Security Switch */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">Bảo mật & Yêu cầu mã đề</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Học sinh phải nhập đúng mã bảo mật này mới được phép bắt đầu làm bài.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isSecurityEnabled}
+                  onChange={(e) => setIsSecurityEnabled(e.target.checked)}
+                  className="w-5 h-5 text-indigo-600 rounded cursor-pointer accent-indigo-600"
+                />
+              </div>
+
+              {/* Code Input */}
+              {isSecurityEnabled && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                      Mã bảo mật phòng thi:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomCode = `THI${securityModalExam.grade || '10'}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+                        setSecurityExamCode(randomCode);
+                      }}
+                      className="text-[10px] text-indigo-600 font-bold hover:underline cursor-pointer"
+                    >
+                      + Tạo mã ngẫu nhiên
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={securityExamCode}
+                    onChange={(e) => setSecurityExamCode(e.target.value.toUpperCase())}
+                    placeholder="Ví dụ: HK2-TOAN6A hoặc KTHK-2025"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-indigo-300 dark:border-indigo-700 rounded-xl text-xs font-mono font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200 focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Mã này được bảo mật và không hiển thị công khai ở trang chủ khách.
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSecurityModalExam(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingSecurity || (isSecurityEnabled && !securityExamCode.trim())}
+                  onClick={handleSaveSecurityCode}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{isSavingSecurity ? 'Đang lưu...' : 'Lưu thiết lập bảo mật'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -31,6 +31,7 @@ import {
   isFillBlankCorrect, 
   evaluateTrueFalseQuestion 
 } from '../utils/grading';
+import { performanceTracker } from '../utils/performanceMetrics';
 
 // Utility to recursively strip undefined keys so Firebase never throws Unsupported field value: undefined
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
@@ -59,6 +60,42 @@ const STORAGE_DELETED_CLASSES_KEY = 'edutest_deleted_class_ids';
 const STORAGE_DELETED_SUBJECTS_KEY = 'edutest_deleted_subject_ids';
 const STORAGE_DELETED_EXAMS_KEY = 'edutest_deleted_exam_ids';
 export const STORAGE_TEACHER_SCOPE_KEY = 'edutest_teacher_scope';
+
+// ==================== HIGH PERFORMANCE CACHING SYSTEM ====================
+// In-memory & session storage caches provide sub-15ms data access for students and teachers
+let inMemoryExamsCache: { data: Exam[]; expiresAt: number } | null = null;
+let inMemoryResultsCache: { data: ExamResult[]; expiresAt: number } | null = null;
+const inMemoryQuestionsCache = new Map<string, { data: Question[]; expiresAt: number }>();
+let inMemoryClassesCache: { data: SchoolClass[]; expiresAt: number } | null = null;
+let inMemorySubjectsCache: { data: Subject[]; expiresAt: number } | null = null;
+
+const CACHE_TTL_MS = 45 * 1000; // 45 seconds TTL for background freshness
+
+export function invalidateExamsCache() {
+  inMemoryExamsCache = null;
+}
+
+export function invalidateResultsCache() {
+  inMemoryResultsCache = null;
+}
+
+export function invalidateQuestionsCache(examId?: string) {
+  if (examId) {
+    inMemoryQuestionsCache.delete(examId);
+    try {
+      sessionStorage.removeItem(`edutest_q_${examId}`);
+    } catch (e) {
+      console.warn('SessionStorage remove error:', e);
+    }
+  } else {
+    inMemoryQuestionsCache.clear();
+  }
+}
+
+export function invalidateMetadataCache() {
+  inMemoryClassesCache = null;
+  inMemorySubjectsCache = null;
+}
 
 export interface TeacherScopeConfig {
   enabled: boolean;
@@ -667,7 +704,14 @@ export async function loginWithUsernamePassword(identifier: string, password: st
 
 // ==================== CLASSES ====================
 
-export async function getClasses(): Promise<SchoolClass[]> {
+export async function getClasses(forceRefresh: boolean = false): Promise<SchoolClass[]> {
+  const startTime = performance.now();
+  const now = Date.now();
+  if (!forceRefresh && inMemoryClassesCache && inMemoryClassesCache.expiresAt > now) {
+    performanceTracker.recordSample('api', 'getClasses (cached)', performance.now() - startTime, true);
+    return inMemoryClassesCache.data;
+  }
+
   const collectionPath = 'classes';
   const deletedIds = getDeletedClassIds();
   const localList = getLocalClasses();
@@ -693,15 +737,20 @@ export async function getClasses(): Promise<SchoolClass[]> {
       result = getDefaultClasses().filter(c => !deletedIds.includes(c.id));
     }
     saveLocalClasses(result);
+    inMemoryClassesCache = { data: result, expiresAt: now + CACHE_TTL_MS };
+    performanceTracker.recordSample('api', 'getClasses (network)', performance.now() - startTime, false);
     return result;
   } catch (err) {
     console.warn('Lấy danh sách lớp note:', err);
     const fallback = (localList.length > 0 ? localList : getDefaultClasses()).filter(c => !deletedIds.includes(c.id));
-    return fallback.length > 0 ? fallback : getDefaultClasses().filter(c => !deletedIds.includes(c.id));
+    const finalRes = fallback.length > 0 ? fallback : getDefaultClasses().filter(c => !deletedIds.includes(c.id));
+    inMemoryClassesCache = { data: finalRes, expiresAt: now + 15000 };
+    return finalRes;
   }
 }
 
 export async function addClass(classData: Omit<SchoolClass, 'id'>): Promise<string> {
+  invalidateMetadataCache();
   const collectionPath = 'classes';
   const newId = 'cls_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
   const newClass: SchoolClass = {
@@ -722,6 +771,7 @@ export async function addClass(classData: Omit<SchoolClass, 'id'>): Promise<stri
 }
 
 export async function deleteClass(classId: string): Promise<void> {
+  invalidateMetadataCache();
   addDeletedClassId(classId);
   const current = getLocalClasses();
   saveLocalClasses(current.filter(c => c.id !== classId));
@@ -734,6 +784,7 @@ export async function deleteClass(classId: string): Promise<void> {
 }
 
 export async function toggleHideClass(classId: string, isHidden: boolean): Promise<void> {
+  invalidateMetadataCache();
   const current = getLocalClasses();
   const found = current.find(c => c.id === classId);
   if (found) {
@@ -750,7 +801,14 @@ export async function toggleHideClass(classId: string, isHidden: boolean): Promi
 
 // ==================== SUBJECTS ====================
 
-export async function getSubjects(): Promise<Subject[]> {
+export async function getSubjects(forceRefresh: boolean = false): Promise<Subject[]> {
+  const startTime = performance.now();
+  const now = Date.now();
+  if (!forceRefresh && inMemorySubjectsCache && inMemorySubjectsCache.expiresAt > now) {
+    performanceTracker.recordSample('api', 'getSubjects (cached)', performance.now() - startTime, true);
+    return inMemorySubjectsCache.data;
+  }
+
   const collectionPath = 'subjects';
   const deletedIds = getDeletedSubjectIds();
   const localList = getLocalSubjects();
@@ -775,11 +833,15 @@ export async function getSubjects(): Promise<Subject[]> {
       result = getDefaultSubjects();
     }
     saveLocalSubjects(result);
+    inMemorySubjectsCache = { data: result, expiresAt: now + CACHE_TTL_MS };
+    performanceTracker.recordSample('api', 'getSubjects (network)', performance.now() - startTime, false);
     return result;
   } catch (err) {
     console.warn('Lấy môn học note:', err);
     const fallback = (localList.length > 0 ? localList : getDefaultSubjects()).filter(s => !deletedIds.includes(s.id) && !deletedIds.includes(s.code));
-    return fallback.length > 0 ? fallback : getDefaultSubjects();
+    const finalRes = fallback.length > 0 ? fallback : getDefaultSubjects();
+    inMemorySubjectsCache = { data: finalRes, expiresAt: now + 15000 };
+    return finalRes;
   }
 }
 
@@ -816,7 +878,16 @@ export async function deleteSubject(subjectId: string): Promise<void> {
 
 // ==================== EXAMS & QUESTIONS ====================
 
-export async function getExams(): Promise<Exam[]> {
+export async function getExams(forceRefresh: boolean = false): Promise<Exam[]> {
+  const startTime = performance.now();
+  const now = Date.now();
+
+  // Return in-memory cache immediately if fresh (< 15ms)
+  if (!forceRefresh && inMemoryExamsCache && inMemoryExamsCache.expiresAt > now) {
+    performanceTracker.recordSample('exam_load', 'getExams (cached)', performance.now() - startTime, true);
+    return inMemoryExamsCache.data;
+  }
+
   const collectionPath = 'exams';
   const localExams = getLocalExams();
   const deletedIds = getDeletedExamIds();
@@ -866,14 +937,23 @@ export async function getExams(): Promise<Exam[]> {
       });
 
     saveLocalExams(list);
-    return list.sort((a, b) => {
+    const sorted = list.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+
+    // Save to high-performance memory cache
+    inMemoryExamsCache = {
+      data: sorted,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    };
+
+    performanceTracker.recordSample('exam_load', 'getExams (network)', performance.now() - startTime, false);
+    return sorted;
   } catch (err) {
     console.warn('Lấy danh sách đề thi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
-    return localExams
+    const fallback = localExams
       .filter(e => !deletedIds.includes(e.id))
       .map(e => ({
         ...e,
@@ -884,6 +964,14 @@ export async function getExams(): Promise<Exam[]> {
         if (!a.isPinned && b.isPinned) return 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
+
+    inMemoryExamsCache = {
+      data: fallback,
+      expiresAt: Date.now() + 15000
+    };
+
+    performanceTracker.recordSample('exam_load', 'getExams (fallback)', performance.now() - startTime, false);
+    return fallback;
   }
 }
 
@@ -961,6 +1049,9 @@ export async function createExamWithQuestions(
     console.warn('createExamWithQuestions Firestore warning (preserved in local storage):', err);
   }
 
+  invalidateExamsCache();
+  invalidateQuestionsCache(examId);
+
   return examId;
 }
 
@@ -1009,9 +1100,39 @@ export async function updateExamWithQuestions(
   } catch (err) {
     console.warn('updateExamWithQuestions Firestore warning (preserved in local storage):', err);
   }
+
+  invalidateExamsCache();
+  invalidateQuestionsCache(examId);
 }
 
-export async function getExamQuestions(examId: string): Promise<Question[]> {
+export async function getExamQuestions(examId: string, forceRefresh: boolean = false): Promise<Question[]> {
+  const startTime = performance.now();
+  const now = Date.now();
+
+  // 1. In-memory cache check (<5ms)
+  if (!forceRefresh) {
+    const memoryHit = inMemoryQuestionsCache.get(examId);
+    if (memoryHit && memoryHit.expiresAt > now && memoryHit.data.length > 0) {
+      performanceTracker.recordSample('exam_load', `getExamQuestions:${examId} (mem-cached)`, performance.now() - startTime, true);
+      return memoryHit.data;
+    }
+
+    // 2. SessionStorage cache check (<10ms)
+    try {
+      const sessionRaw = sessionStorage.getItem(`edutest_q_${examId}`);
+      if (sessionRaw) {
+        const parsed = JSON.parse(sessionRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          inMemoryQuestionsCache.set(examId, { data: parsed, expiresAt: now + CACHE_TTL_MS });
+          performanceTracker.recordSample('exam_load', `getExamQuestions:${examId} (session-cached)`, performance.now() - startTime, true);
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('SessionStorage read note:', e);
+    }
+  }
+
   const localMap = getLocalQuestionsMap();
   const path = `exams/${examId}/questions`;
   try {
@@ -1020,13 +1141,25 @@ export async function getExamQuestions(examId: string): Promise<Question[]> {
     const sorted = list.sort((a, b) => a.questionNumber - b.questionNumber);
     if (sorted.length > 0) {
       saveLocalQuestions(examId, sorted);
+      inMemoryQuestionsCache.set(examId, { data: sorted, expiresAt: now + CACHE_TTL_MS });
+      try {
+        sessionStorage.setItem(`edutest_q_${examId}`, JSON.stringify(sorted));
+      } catch (e) {
+        console.warn('SessionStorage write note:', e);
+      }
+      performanceTracker.recordSample('exam_load', `getExamQuestions:${examId} (network)`, performance.now() - startTime, false);
       return sorted;
     }
   } catch (err) {
     console.warn('Lấy câu hỏi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
   }
 
-  return localMap[examId] || [];
+  const fallback = localMap[examId] || [];
+  if (fallback.length > 0) {
+    inMemoryQuestionsCache.set(examId, { data: fallback, expiresAt: now + 30000 });
+  }
+  performanceTracker.recordSample('exam_load', `getExamQuestions:${examId} (fallback)`, performance.now() - startTime, false);
+  return fallback;
 }
 
 export async function toggleExamPublish(examId: string, isPublished: boolean): Promise<void> {
@@ -1070,6 +1203,9 @@ export async function deleteExam(examId: string): Promise<void> {
   } catch (err) {
     console.warn('Delete exam note:', err);
   }
+
+  invalidateExamsCache();
+  invalidateQuestionsCache(examId);
 }
 
 export async function toggleExamHide(examId: string, isHidden: boolean): Promise<void> {
@@ -1447,13 +1583,30 @@ export async function gradeEssaySubmission(
   }>,
   graderId?: string
 ): Promise<ExamResult | null> {
+  const startTime = performance.now();
   const allResults = getLocalResults();
-  const targetResult = allResults.find(r => r.attemptId === attemptId || r.id === attemptId);
+  let targetResult = allResults.find(r => r.attemptId === attemptId || r.id === attemptId);
+
+  // Firestore Fallback: If not found in local cache, pull directly from Firestore
+  if (!targetResult) {
+    try {
+      const snap = await getDoc(doc(db, 'results', attemptId));
+      if (snap.exists()) {
+        targetResult = { ...snap.data(), id: snap.id } as ExamResult;
+      } else {
+        const qSnap = await getDocs(query(collection(db, 'results'), where('attemptId', '==', attemptId)));
+        if (!qSnap.empty) {
+          targetResult = { ...qSnap.docs[0].data(), id: qSnap.docs[0].id } as ExamResult;
+        }
+      }
+    } catch (e) {
+      console.warn('Firestore fallback fetch in gradeEssaySubmission note:', e);
+    }
+  }
+
   if (!targetResult) return null;
 
   const exam = await getExamById(targetResult.examId);
-  const questions = await getExamQuestions(targetResult.examId);
-
   const maxScale = targetResult.maxScore || 10;
 
   // Base objective score preservation
@@ -1474,7 +1627,7 @@ export async function gradeEssaySubmission(
     graderName: graderName.trim() || 'Giáo viên phụ trách',
     score: updatedScore,
     timestamp: now,
-    action: targetResult.hasEssayGraded ? 'Cập nhật điểm' : 'Chấm điểm lần đầu'
+    action: targetResult.hasEssayGraded ? 'Cập nhật điểm tự luận' : 'Chấm điểm tự luận lần đầu'
   };
   const updatedHistory = [...currentHistory, newHistoryEntry];
 
@@ -1501,6 +1654,7 @@ export async function gradeEssaySubmission(
   };
 
   saveLocalResult(updated);
+  invalidateResultsCache();
 
   try {
     const cleanUpdated = sanitizeForFirestore(updated);
@@ -1526,10 +1680,114 @@ export async function gradeEssaySubmission(
     console.warn('gradeEssaySubmission Firestore warning:', err);
   }
 
+  // Cross-component immediate real-time synchronization
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:score_updated', {
+      detail: { result: updated, examId: updated.examId }
+    }));
+  }
+
+  performanceTracker.recordSample('grading', `gradeEssaySubmission:${attemptId}`, performance.now() - startTime, false);
   return updated;
 }
 
-export async function getAllResults(): Promise<ExamResult[]> {
+/**
+ * Teacher Score Override & Modification Utility
+ * Allows adjusting overall score or manual score corrections with full audit logging
+ */
+export async function updateExamResultScore(
+  attemptId: string,
+  newScore: number,
+  reason: string,
+  graderName: string = 'Giáo viên',
+  graderId?: string
+): Promise<ExamResult | null> {
+  const startTime = performance.now();
+  const allResults = getLocalResults();
+  let targetResult = allResults.find(r => r.attemptId === attemptId || r.id === attemptId);
+
+  if (!targetResult) {
+    try {
+      const snap = await getDoc(doc(db, 'results', attemptId));
+      if (snap.exists()) {
+        targetResult = { ...snap.data(), id: snap.id } as ExamResult;
+      }
+    } catch (e) {
+      console.warn('updateExamResultScore Firestore fallback error:', e);
+    }
+  }
+
+  if (!targetResult) return null;
+
+  const exam = await getExamById(targetResult.examId);
+  const maxScale = targetResult.maxScore || 10;
+  const clampedScore = Math.max(0, Math.min(maxScale, Number(newScore.toFixed(2))));
+  const percentage = Math.min(100, Math.round((clampedScore / maxScale) * 100));
+
+  const now = new Date().toISOString();
+  const currentHistory = targetResult.graderHistory || [];
+  const newHistoryEntry = {
+    graderId: graderId || 'teacher',
+    graderName: graderName.trim() || 'Giáo viên phụ trách',
+    score: clampedScore,
+    timestamp: now,
+    action: `Điều chỉnh điểm thủ công: ${reason || 'Giáo viên điều chỉnh'}`
+  };
+  const updatedHistory = [...currentHistory, newHistoryEntry];
+
+  const updated: ExamResult = {
+    ...targetResult,
+    score: clampedScore,
+    percentage,
+    status: 'completed',
+    lastUpdatedById: graderId || targetResult.lastUpdatedById,
+    lastUpdatedBy: graderName,
+    lastUpdatedAt: now,
+    graderHistory: updatedHistory,
+    feedback: clampedScore >= (exam?.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'
+  };
+
+  saveLocalResult(updated);
+  invalidateResultsCache();
+
+  try {
+    const cleanUpdated = sanitizeForFirestore(updated);
+    await setDoc(doc(db, 'results', targetResult.id), cleanUpdated, { merge: true });
+    if (targetResult.attemptId && targetResult.attemptId !== targetResult.id) {
+      await setDoc(doc(db, 'results', targetResult.attemptId), cleanUpdated, { merge: true });
+    }
+    await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore({
+      score: clampedScore,
+      lastUpdatedById: updated.lastUpdatedById,
+      lastUpdatedBy: updated.lastUpdatedBy,
+      lastUpdatedAt: updated.lastUpdatedAt,
+      graderHistory: updatedHistory
+    }), { merge: true });
+  } catch (err) {
+    console.warn('updateExamResultScore Firestore warning:', err);
+  }
+
+  // Cross-component immediate real-time synchronization
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:score_updated', {
+      detail: { result: updated, examId: updated.examId }
+    }));
+  }
+
+  performanceTracker.recordSample('grading', `updateExamResultScore:${attemptId}`, performance.now() - startTime, false);
+  return updated;
+}
+
+export async function getAllResults(forceRefresh: boolean = false): Promise<ExamResult[]> {
+  const startTime = performance.now();
+  const now = Date.now();
+
+  // In-memory cache hit (< 10ms)
+  if (!forceRefresh && inMemoryResultsCache && inMemoryResultsCache.expiresAt > now) {
+    performanceTracker.recordSample('results_sync', 'getAllResults (cached)', performance.now() - startTime, true);
+    return inMemoryResultsCache.data;
+  }
+
   const local = getLocalResults();
   try {
     const snap = await getDocs(collection(db, 'results'));
@@ -1545,15 +1803,24 @@ export async function getAllResults(): Promise<ExamResult[]> {
       if (!existing) {
         mergedMap.set(r.id, r);
       } else {
-        const localGradeTime = new Date(existing.essayGradedAt || existing.submittedAt || 0).getTime();
-        const firestoreGradeTime = new Date(r.essayGradedAt || r.submittedAt || 0).getTime();
+        const localGradeTime = new Date(existing.lastUpdatedAt || existing.essayGradedAt || existing.submittedAt || 0).getTime();
+        const firestoreGradeTime = new Date(r.lastUpdatedAt || r.essayGradedAt || r.submittedAt || 0).getTime();
         if (firestoreGradeTime >= localGradeTime) {
           mergedMap.set(r.id, r);
         }
       }
     });
-    return Array.from(mergedMap.values());
-  } catch {
+
+    const resultList = Array.from(mergedMap.values());
+    inMemoryResultsCache = {
+      data: resultList,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    };
+
+    performanceTracker.recordSample('results_sync', 'getAllResults (network)', performance.now() - startTime, false);
+    return resultList;
+  } catch (err) {
+    performanceTracker.recordSample('results_sync', 'getAllResults (fallback)', performance.now() - startTime, false);
     return local;
   }
 }

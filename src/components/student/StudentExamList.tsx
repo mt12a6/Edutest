@@ -58,6 +58,23 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
       }
     };
     fetchStudentData();
+
+    // Listen for real-time grade updates from teacher
+    const handleScoreUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ result: ExamResult; examId: string }>;
+      if (customEvent.detail?.result) {
+        const updated = customEvent.detail.result;
+        if (updated.studentId === profile.id || updated.studentEmail === profile.email) {
+          setResults(prev => {
+            const filtered = prev.filter(r => r.id !== updated.id && r.attemptId !== updated.attemptId);
+            return [...filtered, updated];
+          });
+        }
+      }
+    };
+
+    window.addEventListener('edutest:score_updated', handleScoreUpdated);
+    return () => window.removeEventListener('edutest:score_updated', handleScoreUpdated);
   }, [profile]);
 
   // All grades 1 - 12
@@ -271,9 +288,17 @@ export const StudentExamList: React.FC<StudentExamListProps> = ({
                       </div>
 
                       {status.type === 'completed' && (
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          {exam.showScoreAfterExam !== false ? `Điểm: ${status.result.score}/10` : 'Đã nộp bài (Bảo mật điểm)'}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                          status.result.hasEssayGraded || (status.result.essayScore !== undefined && status.result.essayScore > 0)
+                            ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}>
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          {exam.showScoreAfterExam !== false 
+                            ? (status.result.hasEssayGraded || (status.result.essayScore !== undefined && status.result.essayScore > 0)
+                                ? `Điểm: ${status.result.score}/10 (+${status.result.essayScore}đ TL)`
+                                : `Điểm: ${status.result.score}/10`)
+                            : 'Đã nộp bài (Bảo mật điểm)'}
                         </span>
                       )}
 

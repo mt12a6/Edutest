@@ -39,6 +39,22 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ exams, onViewRes
       }
     };
     fetchResults();
+
+    const handleScoreUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ result: ExamResult; examId: string }>;
+      if (customEvent.detail?.result) {
+        const updated = customEvent.detail.result;
+        if (updated.studentId === profile.id || updated.studentEmail === profile.email) {
+          setResults(prev => {
+            const filtered = prev.filter(r => r.id !== updated.id && r.attemptId !== updated.attemptId);
+            return [updated, ...filtered];
+          });
+        }
+      }
+    };
+
+    window.addEventListener('edutest:score_updated', handleScoreUpdated);
+    return () => window.removeEventListener('edutest:score_updated', handleScoreUpdated);
   }, [profile]);
 
   // Metrics
@@ -48,10 +64,13 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ exams, onViewRes
   const passCount = results.filter(r => r.score >= 5).length;
   const passRate = total > 0 ? Math.round((passCount / total) * 100) : 0;
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   const handleReview = async (res: ExamResult) => {
     const exam = exams.find(e => e.id === res.examId);
     if (!exam) {
-      alert('Không tìm thấy thông tin đề thi này.');
+      setToastMessage('Không tìm thấy thông tin đề thi này trong hệ thống.');
+      setTimeout(() => setToastMessage(null), 3000);
       return;
     }
     try {
@@ -74,6 +93,12 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ exams, onViewRes
           Theo dõi tiến độ học tập, điểm số tích lũy và ôn lại các câu hỏi đã làm
         </p>
       </div>
+
+      {toastMessage && (
+        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-semibold animate-in fade-in">
+          {toastMessage}
+        </div>
+      )}
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

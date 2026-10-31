@@ -57,6 +57,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
     }
   }, [isDarkMode]);
 
+  useEffect(() => {
+    const handleOpenLogin = () => setShowLoginModal(true);
+    window.addEventListener('edutest:open_login_modal', handleOpenLogin);
+    return () => window.removeEventListener('edutest:open_login_modal', handleOpenLogin);
+  }, []);
+
   const toggleDarkMode = () => {
     const nextDark = !isDarkMode;
     setIsDarkMode(nextDark);
