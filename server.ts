@@ -54,7 +54,7 @@ app.post('/api/verify-exam-access', (req, res) => {
     closeTime, 
     secretToken, 
     expectedSecretToken,
-    requiresAuth = true
+    requiresAuth = false
   } = req.body;
 
   const clientKey = `${req.ip || 'client'}_${studentId || studentName || 'anon'}_${examId || 'exam'}`;
@@ -68,12 +68,12 @@ app.post('/api/verify-exam-access', (req, res) => {
       success: false,
       isLocked: true,
       remainingSeconds,
-      error: `Bạn đã nhập sai mã đề quá 5 lần. Vui lòng thử lại sau ${remainingSeconds} giây.`
+      error: `Bạn đã nhập sai mã bảo mật quá 5 lần. Vui lòng thử lại sau ${remainingSeconds} giây.`
     });
   }
 
-  // 1. Condition 1: Check Registered Student Account
-  if (requiresAuth && !isRegistered) {
+  // 1. Condition 1: Check Registered Student Account (Only if explicitly required)
+  if (requiresAuth === true && !isRegistered) {
     return res.status(401).json({
       success: false,
       requireAuth: true,
@@ -133,31 +133,35 @@ app.post('/api/verify-exam-access', (req, res) => {
     });
   }
 
-  // 3. Condition 3: Check Exam Code
-  const normalizedInput = String(examCode || '').trim().toUpperCase();
+  // 3. Condition 3: Check Exam Security Code
+  // CHỈ KIỂM TRA NẾU ĐỀ THI CÓ THIẾT LẬP MÃ BẢO MẬT. NẾU ĐỂ TRỐNG THÌ KHÔNG CẦN KIỂM TRA MÃ BẢO MẬT.
   const normalizedExpected = String(requiredExamCode || '').trim().toUpperCase();
+  const normalizedInput = String(examCode || '').trim().toUpperCase();
 
-  if (normalizedExpected && normalizedInput !== normalizedExpected) {
-    const currentCount = (record?.count || 0) + 1;
-    if (currentCount >= 5) {
-      // Lock for 2 minutes
-      accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: nowMs + 2 * 60 * 1000 });
-      return res.status(429).json({
-        success: false,
-        isLocked: true,
-        remainingSeconds: 120,
-        error: 'Mã bảo mật đề thi không chính xác! Bạn đã thử sai 5 lần và bị tạm khóa trong 2 phút để bảo mật.'
-      });
-    } else {
-      accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: 0 });
-      return res.status(400).json({
-        success: false,
-        wrongCode: true,
-        remainingAttempts: 5 - currentCount,
-        error: `Mã bảo mật đề thi không chính xác (Bạn còn ${5 - currentCount} lần thử).`
-      });
+  if (normalizedExpected.length > 0) {
+    if (!normalizedInput || normalizedInput !== normalizedExpected) {
+      const currentCount = (record?.count || 0) + 1;
+      if (currentCount >= 5) {
+        // Lock for 2 minutes
+        accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: nowMs + 2 * 60 * 1000 });
+        return res.status(429).json({
+          success: false,
+          isLocked: true,
+          remainingSeconds: 120,
+          error: 'Mã bảo mật đề thi không chính xác! Bạn đã thử sai 5 lần và bị tạm khóa trong 2 phút để bảo mật.'
+        });
+      } else {
+        accessAttemptsMap.set(clientKey, { count: currentCount, lockedUntil: 0 });
+        return res.status(400).json({
+          success: false,
+          wrongCode: true,
+          remainingAttempts: 5 - currentCount,
+          error: `Mã bảo mật đề thi không chính xác (Bạn còn ${5 - currentCount} lần thử).`
+        });
+      }
     }
   }
+  // Nếu không có mã bảo mật hoặc để trống: Bỏ qua hoàn toàn bước kiểm tra mã!
 
   // Verification successful: reset rate limit record & generate session token
   accessAttemptsMap.delete(clientKey);

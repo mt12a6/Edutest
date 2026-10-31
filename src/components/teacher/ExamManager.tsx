@@ -115,8 +115,8 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
   const handleOpenSecurityModal = (exam: Exam) => {
     setSecurityModalExam(exam);
-    setSecurityExamCode(exam.examCode || (exam as any).trialCode || '');
-    setIsSecurityEnabled(Boolean(exam.isSecure || exam.examCode));
+    setSecurityExamCode(exam.examCode?.trim() || '');
+    setIsSecurityEnabled(Boolean(exam.examCode && exam.examCode.trim().length > 0));
   };
 
   const handleSaveSecurityCode = async () => {
@@ -125,11 +125,13 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     try {
       const codeToSave = isSecurityEnabled ? securityExamCode.trim().toUpperCase() : '';
       await updateExamWithQuestions(securityModalExam.id, {
-        examCode: codeToSave,
-        isSecure: isSecurityEnabled,
-        trialCode: codeToSave
+        examCode: codeToSave || '',
+        isSecure: Boolean(codeToSave)
       });
-      showSuccess(`Đã lưu thiết lập bảo mật cho đề thi "${securityModalExam.title}"!`);
+      showSuccess(codeToSave 
+        ? `Đã lưu mã bảo mật "${codeToSave}" cho đề thi "${securityModalExam.title}"!`
+        : `Đã xóa mã bảo mật. Đề thi "${securityModalExam.title}" vào thi tự do không cần kiểm tra mã!`
+      );
       setSecurityModalExam(null);
       onRefreshExams();
     } catch (e: any) {
@@ -662,7 +664,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       {exam.examCode ? (
                         <span className="font-bold text-amber-900">Mã bảo mật: <span className="font-mono bg-amber-100 px-1 rounded">{exam.examCode}</span></span>
                       ) : (
-                        <span className="text-slate-500">Chưa đặt mã bảo mật đề thi</span>
+                        <span className="text-slate-500 font-medium">Không dùng mã bảo mật (Để trống • Vào thi tự do)</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1">
@@ -987,9 +989,9 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               {/* Enable Security Switch */}
               <div className="p-3.5 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                 <div>
-                  <p className="font-bold text-slate-800 dark:text-slate-200">Bảo mật & Yêu cầu mã đề</p>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">Mã bảo mật phòng thi</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Học sinh phải nhập đúng mã bảo mật này mới được phép bắt đầu làm bài.
+                    Chỉ dùng đối với trường hợp có mã bảo mật. Còn lại để trống thì không cần kiểm tra mã bảo mật khi vào thi.
                   </p>
                 </div>
                 <input

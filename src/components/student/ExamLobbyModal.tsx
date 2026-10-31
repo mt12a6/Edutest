@@ -43,7 +43,8 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
   const [lockoutRemaining, setLockoutRemaining] = useState<number | null>(null);
   const [systemClasses, setSystemClasses] = useState<SchoolClass[]>([]);
 
-  const isExamSecured = Boolean(exam.isSecure || exam.examCode || (exam.classIds && exam.classIds.length > 0));
+  const hasSecurityCode = Boolean(exam.examCode && exam.examCode.trim().length > 0);
+  const isExamSecured = Boolean(exam.isSecure || (exam.classIds && exam.classIds.length > 0));
 
   useEffect(() => {
     if (!isOpen) return;
@@ -110,8 +111,8 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
       return;
     }
 
-    // 3. Condition 3: Check Exam Code with Server Verification & Rate Limiting
-    const expectedCode = exam.examCode || (exam as any).trialCode;
+    // 3. Condition 3: Check Exam Security Code (CHỈ DÙNG ĐỐI VỚI TRƯỜNG HỢP CÓ MÃ BẢO MẬT, CÒN LẠI ĐỂ TRỐNG THÌ KHÔNG CẦN KIỂM TRA)
+    const expectedCode = exam.examCode?.trim();
     if (expectedCode) {
       if (!inputCode.trim()) {
         setValidationError('Vui lòng nhập mã bảo mật đề thi do giáo viên cung cấp để mở đề.');
@@ -135,7 +136,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
             requiredExamCode: expectedCode,
             openTime: exam.openTime,
             closeTime: exam.closeTime,
-            requiresAuth: isExamSecured
+            requiresAuth: false
           })
         });
 
@@ -145,7 +146,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
           if (verifyData.isLocked && verifyData.remainingSeconds) {
             setLockoutRemaining(verifyData.remainingSeconds);
           }
-          setValidationError(verifyData.error || 'Xác thực mã đề thi không thành công.');
+          setValidationError(verifyData.error || 'Xác thực mã bảo mật không thành công.');
           setIsStarting(false);
 
           // Log security failure to system logs
@@ -156,7 +157,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
               profile.email,
               exam.id,
               'exam',
-              `Thí sinh nhập sai mã đề thi hoặc bị chặn (${verifyData.error})`
+              `Thí sinh nhập sai mã bảo mật đề thi (${verifyData.error})`
             ).catch(() => {});
           }
           return;
@@ -361,8 +362,8 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
             </div>
           )}
 
-          {/* Condition 3: Exam Code Input */}
-          {(exam.examCode || (exam as any).trialCode) && (
+          {/* Condition 3: Exam Security Code Input - CHỈ HIỂN THỊ KHI ĐỀ THI CÓ MÃ BẢO MẬT */}
+          {hasSecurityCode && (
             <div className="space-y-1.5 p-3.5 bg-indigo-50/60 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-800">
               <label className="block text-[11px] font-bold text-indigo-950 dark:text-indigo-200 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -412,7 +413,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
                 (isExamSecured && !isRegisteredAccount) ||
                 (hasClassRestriction && !isClassAssigned) ||
                 (!profile && !guestName.trim()) ||
-                (Boolean(exam.examCode || (exam as any).trialCode) && !inputCode.trim())
+                (hasSecurityCode && !inputCode.trim())
               }
               onClick={handleStart}
               className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"

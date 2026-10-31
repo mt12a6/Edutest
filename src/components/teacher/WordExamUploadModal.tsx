@@ -1774,7 +1774,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Mã đề thi (Học sinh nhập khi vào thi):
+                        Mã bảo mật đề thi (Học sinh nhập khi vào thi):
                       </label>
                       <input
                         type="text"
@@ -1784,7 +1784,7 @@ export const WordExamUploadModal: React.FC<WordExamUploadModalProps> = ({
                         className="w-full text-xs font-mono font-bold text-slate-900 bg-white border border-amber-300 rounded-lg p-2 focus:ring-2 focus:ring-amber-500"
                       />
                       <span className="text-[10px] text-slate-500 mt-0.5 block">
-                        Nếu thiết lập, học sinh bắt buộc phải nhập đúng mã để vào làm bài
+                        Chỉ dùng đối với trường hợp có mã bảo mật. Để trống thì học sinh vào thi trực tiếp mà không cần kiểm tra mã.
                       </span>
                     </div>
 

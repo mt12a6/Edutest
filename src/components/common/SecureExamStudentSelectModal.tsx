@@ -187,13 +187,15 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
     });
   }, [allStudents, selectedClassId, searchTerm]);
 
+  const hasSecurityCode = Boolean(exam.examCode && exam.examCode.trim().length > 0);
+
   const handleConfirmAndEnter = async () => {
     if (!selectedStudent) return;
     if (isLocked) return;
 
-    // Check if exam requires an examCode and student hasn't entered it
-    if (exam.examCode && !inputExamCode.trim()) {
-      setVerificationError('Vui lòng nhập Mã đề thi do giáo viên cung cấp trước khi vào thi.');
+    // Chỉ kiểm tra mã bảo mật đối với trường hợp đề thi có mã bảo mật, còn lại để trống thì không cần kiểm tra
+    if (hasSecurityCode && !inputExamCode.trim()) {
+      setVerificationError('Vui lòng nhập Mã bảo mật do giáo viên cung cấp trước khi vào thi.');
       return;
     }
 
@@ -216,12 +218,13 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
         body: JSON.stringify({
           studentName: selectedStudent.displayName,
           classId: studentClassId,
-          examCode: inputExamCode.trim(),
-          requiredExamCode: exam.examCode,
+          examCode: hasSecurityCode ? inputExamCode.trim() : undefined,
+          requiredExamCode: hasSecurityCode ? exam.examCode!.trim() : undefined,
           openTime: exam.openTime,
           closeTime: exam.closeTime,
           secretToken: tokenToVerify,
-          expectedSecretToken: exam.secretToken
+          expectedSecretToken: exam.secretToken,
+          requiresAuth: false
         })
       });
 
@@ -364,25 +367,25 @@ export const SecureExamStudentSelectModal: React.FC<SecureExamStudentSelectModal
             </div>
           )}
 
-          {/* Exam Code Input Field (if required by teacher) */}
-          <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-1.5">
-            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
-              <span>Mã đề thi (do giáo viên cung cấp):</span>
-              {exam.examCode && (
+          {/* Exam Security Code Input Field - CHỈ HIỂN THỊ KHI ĐỀ THI CÓ THIẾT LẬP MÃ BẢO MẬT */}
+          {hasSecurityCode && (
+            <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl space-y-1.5 animate-in fade-in">
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Mã bảo mật đề thi (do giáo viên cung cấp):</span>
                 <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">Bắt buộc nhập</span>
-              )}
-            </label>
-            <input
-              type="text"
-              value={inputExamCode}
-              onChange={(e) => {
-                setInputExamCode(e.target.value.toUpperCase());
-                if (verificationError) setVerificationError(null);
-              }}
-              placeholder={exam.examCode ? "Nhập mã đề (ví dụ: 101, 201)..." : "Mã đề (không bắt buộc nếu thi tự do)..."}
-              className="w-full text-xs font-mono font-bold tracking-wider px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
-            />
-          </div>
+              </label>
+              <input
+                type="text"
+                value={inputExamCode}
+                onChange={(e) => {
+                  setInputExamCode(e.target.value.toUpperCase());
+                  if (verificationError) setVerificationError(null);
+                }}
+                placeholder="Nhập mã bảo mật phòng thi..."
+                className="w-full text-xs font-mono font-bold tracking-wider px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 uppercase focus:ring-2 focus:ring-indigo-500 focus:outline-hidden"
+              />
+            </div>
+          )}
 
           {/* Error / Rate Limit Warning */}
           {verificationError && (
