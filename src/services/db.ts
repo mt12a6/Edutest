@@ -23,7 +23,9 @@ import {
   ExamAttempt, 
   ExamResult, 
   SystemLog,
-  UserRole
+  UserRole,
+  HomepageSettings,
+  DEFAULT_HOMEPAGE_SETTINGS
 } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 import { 
@@ -3430,3 +3432,87 @@ export async function restoreBackupData(payload: EduTestBackupPayload): Promise<
     }
   };
 }
+
+// ==================== HOMEPAGE & PINNED SETTINGS ====================
+
+const STORAGE_HOMEPAGE_SETTINGS_KEY = 'edutest_homepage_settings';
+let inMemoryHomepageSettingsCache: { data: HomepageSettings; expiresAt: number } | null = null;
+
+export function getLocalHomepageSettings(): HomepageSettings {
+  try {
+    const raw = localStorage.getItem(STORAGE_HOMEPAGE_SETTINGS_KEY);
+    if (raw) {
+      return { ...DEFAULT_HOMEPAGE_SETTINGS, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+  return { ...DEFAULT_HOMEPAGE_SETTINGS };
+}
+
+export function saveLocalHomepageSettings(settings: HomepageSettings) {
+  try {
+    localStorage.setItem(STORAGE_HOMEPAGE_SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+export async function getHomepageSettings(forceRefresh: boolean = false): Promise<HomepageSettings> {
+  const now = Date.now();
+  if (!forceRefresh && inMemoryHomepageSettingsCache && inMemoryHomepageSettingsCache.expiresAt > now) {
+    return inMemoryHomepageSettingsCache.data;
+  }
+
+  const local = getLocalHomepageSettings();
+
+  try {
+    const snap = await getDoc(doc(db, 'siteSettings', 'homepage'));
+    if (snap.exists()) {
+      const data = snap.data();
+      const merged: HomepageSettings = {
+        ...DEFAULT_HOMEPAGE_SETTINGS,
+        ...local,
+        ...data,
+        id: 'homepage'
+      };
+      saveLocalHomepageSettings(merged);
+      inMemoryHomepageSettingsCache = { data: merged, expiresAt: now + 60000 };
+      return merged;
+    }
+  } catch (err) {
+    console.warn('getHomepageSettings Firestore note:', err);
+  }
+
+  inMemoryHomepageSettingsCache = { data: local, expiresAt: now + 30000 };
+  return local;
+}
+
+export async function saveHomepageSettings(
+  settings: Partial<HomepageSettings>,
+  actorInfo?: { id?: string; displayName?: string }
+): Promise<HomepageSettings> {
+  const current = await getHomepageSettings();
+  const updated: HomepageSettings = {
+    ...current,
+    ...settings,
+    id: 'homepage',
+    updatedAt: new Date().toISOString(),
+    updatedBy: actorInfo?.displayName || actorInfo?.id || 'admin'
+  };
+
+  saveLocalHomepageSettings(updated);
+  inMemoryHomepageSettingsCache = { data: updated, expiresAt: Date.now() + 60000 };
+
+  try {
+    await setDoc(doc(db, 'siteSettings', 'homepage'), sanitizeForFirestore(updated), { merge: true });
+  } catch (err) {
+    console.warn('saveHomepageSettings Firestore note:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:homepage_settings_updated', { detail: updated }));
+  }
+  return updated;
+}
+

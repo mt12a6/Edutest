@@ -92,5 +92,11 @@ service cloud.firestore {
     match /systemLogs/{logId} {
       allow read, write: if true;
     }
+
+    // Site settings (homepage pinned exams config)
+    match /siteSettings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

@@ -266,3 +266,38 @@ export interface ImportedUserRecord {
   isValid: boolean;
   error?: string;
 }
+
+export type ExamDisplayMode = 'list' | 'table' | 'grid';
+
+export interface HomepageSettings {
+  id?: string;
+  pinnedEnabled: boolean;
+  maxPinnedExams: number; // 3, 4, 6, 8, 10 or custom
+  maxPinnedSubjects: number; // 1, 2, 3 or custom
+  pinnedSubjectIds: string[]; // subject IDs or names selected for pinning
+  pinnedExamIds: string[]; // specific exam IDs explicitly chosen
+  pinnedOrder: string[]; // explicit ordering of pinned exam IDs
+  publishedOnly: boolean; // only show published exams
+  hideExpired: boolean; // hide expired exams
+  excludePinnedFromList: boolean; // automatically exclude pinned exams from catalog below
+  pinnedStartTime?: string; // optional start time for pinning
+  pinnedEndTime?: string; // optional end time for pinning
+  visibilityMode?: 'all' | 'students_and_teachers' | 'teachers_only';
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export const DEFAULT_HOMEPAGE_SETTINGS: HomepageSettings = {
+  pinnedEnabled: true,
+  maxPinnedExams: 4,
+  maxPinnedSubjects: 2,
+  pinnedSubjectIds: [],
+  pinnedExamIds: [],
+  pinnedOrder: [],
+  publishedOnly: true,
+  hideExpired: true,
+  excludePinnedFromList: true,
+  visibilityMode: 'all',
+  updatedAt: new Date().toISOString()
+};
+

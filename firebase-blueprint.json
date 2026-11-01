@@ -160,6 +160,20 @@
         "timestamp": { "type": "string" }
       },
       "required": ["id", "action", "actorId", "timestamp"]
+    },
+    "SiteSetting": {
+      "title": "SiteSetting",
+      "description": "Global website configuration including homepage pinned exams settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "pinnedEnabled": { "type": "boolean" },
+        "maxPinnedExams": { "type": "number" },
+        "maxPinnedSubjects": { "type": "number" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "pinnedEnabled"]
     }
   },
   "firestore": {
@@ -198,6 +212,10 @@
     "/systemLogs/{logId}": {
       "schema": "SystemLog",
       "description": "System audit trail entries"
+    },
+    "/siteSettings/{settingId}": {
+      "schema": "SiteSetting",
+      "description": "Global and homepage configuration settings"
     }
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
   Plus, 
@@ -49,8 +49,11 @@ import {
   isExamInTeacherScope,
   TeacherScopeConfig,
   togglePinExam,
-  recalculateExamResults
+  recalculateExamResults,
+  getHomepageSettings,
+  saveHomepageSettings
 } from '../../services/db';
+import { HomepageSettings, DEFAULT_HOMEPAGE_SETTINGS } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { createBackupGoogleForm } from '../../services/googleFormsService';
 import { exportExamToWord } from '../../utils/docxExportUtils';
@@ -62,6 +65,7 @@ import { ShareExamModal } from '../common/ShareExamModal';
 import { ExamPrintModal } from '../common/ExamPrintModal';
 import { OMRScannerModal } from './OMRScannerModal';
 import { GoogleFormModal } from './GoogleFormModal';
+import { PinnedExamsConfigModal } from '../home/PinnedExamsConfigModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -120,6 +124,14 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
   // Google Form Management Modal State
   const [googleFormModalExam, setGoogleFormModalExam] = useState<Exam | null>(null);
+
+  // Homepage Pinned Exams Configuration Modal State
+  const [showPinConfigModal, setShowPinConfigModal] = useState<boolean>(false);
+  const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(DEFAULT_HOMEPAGE_SETTINGS);
+
+  useEffect(() => {
+    getHomepageSettings().then(setHomepageSettings).catch(() => {});
+  }, []);
 
   const handleOpenSecurityModal = (exam: Exam) => {
     setSecurityModalExam(exam);
@@ -406,6 +418,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowPinConfigModal(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-teal-500 hover:text-teal-700 bg-white text-slate-700 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="Cấu hình số lượng đề ghim, môn ghim và thứ tự ưu tiên trên trang chủ"
+          >
+            <Pin className="w-4 h-4 text-teal-600 fill-teal-600" />
+            <span>Cấu hình đề ghim</span>
+          </button>
+
           <button
             onClick={() => setShowScopeModal(true)}
             className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:text-emerald-700 bg-white text-slate-700 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
@@ -1152,6 +1174,20 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           onExamUpdated={onRefreshExams}
         />
       )}
+
+      {/* Pinned Exams Homepage Configuration Modal */}
+      <PinnedExamsConfigModal
+        isOpen={showPinConfigModal}
+        onClose={() => setShowPinConfigModal(false)}
+        exams={exams}
+        subjects={subjects}
+        currentSettings={homepageSettings}
+        onSaved={(newSettings) => {
+          setHomepageSettings(newSettings);
+          showSuccess('Đã cập nhật cấu hình đề ghim trang chủ thành công!');
+          onRefreshExams();
+        }}
+      />
     </div>
   );
 };
