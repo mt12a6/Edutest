@@ -11,7 +11,9 @@ import {
   Eye,
   EyeOff,
   Filter,
-  Sparkles
+  Sparkles,
+  Copy,
+  Check
 } from 'lucide-react';
 import { SchoolClass, Subject } from '../../types';
 import { 
@@ -26,6 +28,7 @@ import {
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { ConfirmModal } from '../common/ConfirmModal';
+import { getDynamicRouteUrl, copyToClipboard, slugifyVietnamese } from '../../utils/slugUtils';
 
 interface ClassSubjectManagerProps {
   classes: SchoolClass[];
@@ -510,30 +513,57 @@ export const ClassSubjectManager: React.FC<ClassSubjectManagerProps> = ({
 
         {/* Subjects Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {subjects.map((s) => (
-            <div 
-              key={s.id || s.code} 
-              className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between hover:border-slate-300 transition-all"
-            >
-              <div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold inline-block">
-                  {s.code}
-                </span>
-                <p className="text-sm font-bold text-slate-900 mt-1">{s.name}</p>
-                <p className="text-[11px] text-slate-400 truncate max-w-[150px]">{s.description || 'Chương trình giảng dạy'}</p>
-              </div>
+          {subjects.map((s) => {
+            const folderSlug = s.slug || slugifyVietnamese(s.name);
+            const fullUrl = getDynamicRouteUrl('thu-muc', folderSlug);
 
-              {/* Delete Subject Button */}
-              <button
-                type="button"
-                onClick={() => setSubjectToDelete(s)}
-                className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                title={`Xóa môn ${s.name}`}
+            return (
+              <div 
+                key={s.id || s.code} 
+                className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all gap-3"
               >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold inline-block">
+                      {s.code}
+                    </span>
+                    <p className="text-sm font-bold text-slate-900 mt-1">{s.name}</p>
+                    <p className="text-[11px] text-slate-400 truncate max-w-[160px]">{s.description || 'Chương trình giảng dạy'}</p>
+                  </div>
+
+                  {/* Delete Subject Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSubjectToDelete(s)}
+                    className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                    title={`Xóa môn ${s.name}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Direct Folder URL & Copy Button */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded truncate max-w-[170px]" title={fullUrl}>
+                    /thu-muc/{folderSlug}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await copyToClipboard(fullUrl);
+                      if (ok) {
+                        showSuccess(`Đã sao chép liên kết thư mục: /thu-muc/${folderSlug}`);
+                      }
+                    }}
+                    className="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-md transition-colors cursor-pointer"
+                    title="Sao chép đường dẫn thư mục"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

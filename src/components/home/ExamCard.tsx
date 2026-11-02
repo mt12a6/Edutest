@@ -16,9 +16,12 @@ import {
   Pin, 
   Lock, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 import { Exam, ExamDisplayMode } from '../../types';
+import { getDynamicRouteUrl, copyToClipboard } from '../../utils/slugUtils';
 
 interface ExamCardProps {
   exam: Exam;
@@ -59,7 +62,18 @@ export const ExamCard: React.FC<ExamCardProps> = ({
   onDeleteExam
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleCopyLink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = getDynamicRouteUrl('bai-thi', exam.slug || exam.id);
+    const ok = await copyToClipboard(url);
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
 
   // Close dropdown menu on outside click
   useEffect(() => {
@@ -229,6 +243,15 @@ export const ExamCard: React.FC<ExamCardProps> = ({
                   </span>
                 </>
               )}
+              <span aria-hidden="true" className="text-slate-300">·</span>
+              <span 
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1.5 py-0.2 rounded cursor-pointer transition-colors"
+                title="Sao chép đường dẫn bài thi"
+              >
+                <span>/bai-thi/{exam.slug || exam.id}</span>
+                {copiedLink ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5 text-teal-600" />}
+              </span>
             </div>
           </div>
         </div>
@@ -285,11 +308,21 @@ export const ExamCard: React.FC<ExamCardProps> = ({
               >
                 {exam.title}
               </span>
-              {exam.classIds && exam.classIds.length > 0 && (
-                <span className="text-[11px] text-slate-400 block truncate">
-                  Lớp: {exam.classIds.join(', ')}
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span 
+                  onClick={handleCopyLink}
+                  className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1 py-0.2 rounded cursor-pointer transition-colors"
+                  title="Sao chép đường dẫn bài thi"
+                >
+                  <span>/bai-thi/{exam.slug || exam.id}</span>
+                  {copiedLink ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5 text-teal-600" />}
                 </span>
-              )}
+                {exam.classIds && exam.classIds.length > 0 && (
+                  <span className="text-[11px] text-slate-400 truncate">
+                    · Lớp: {exam.classIds.join(', ')}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </td>
@@ -403,6 +436,19 @@ export const ExamCard: React.FC<ExamCardProps> = ({
       >
         {exam.title}
       </h3>
+
+      {/* Direct Route URL & Copy Button */}
+      <div className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-[11px] font-mono text-teal-700">
+        <span className="truncate">/bai-thi/{exam.slug || exam.id}</span>
+        <button
+          type="button"
+          onClick={handleCopyLink}
+          className="p-0.5 hover:text-teal-900 transition-colors cursor-pointer shrink-0"
+          title="Sao chép đường dẫn bài thi"
+        >
+          {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-teal-600" />}
+        </button>
+      </div>
 
       {/* Metadata Row */}
       <div className="flex items-center gap-3 text-xs text-slate-500 pt-1">

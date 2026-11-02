@@ -68,6 +68,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { createBackupGoogleForm } from '../../services/googleFormsService';
 import { exportExamToWord } from '../../utils/docxExportUtils';
+import { getDynamicRouteUrl, copyToClipboard } from '../../utils/slugUtils';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { TeacherScopeModal } from '../common/TeacherScopeModal';
 import { ExamPreviewModal } from './ExamPreviewModal';
@@ -938,6 +939,24 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                           </span>
                         </>
                       )}
+
+                      {/* Direct Exam Route URL & Copy Button */}
+                      <span aria-hidden="true" className="text-slate-300">·</span>
+                      <span
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const url = getDynamicRouteUrl('bai-thi', exam.slug || exam.id);
+                          const ok = await copyToClipboard(url);
+                          if (ok) {
+                            showSuccess(`Đã sao chép liên kết: /bai-thi/${exam.slug || exam.id}`);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 font-mono text-[11px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/80 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                        title="Bấm để sao chép đường dẫn bài thi"
+                      >
+                        <span>/bai-thi/{exam.slug || exam.id}</span>
+                        <Copy className="w-3 h-3 text-teal-600" />
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1019,11 +1038,26 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                           >
                             {exam.title}
                           </span>
-                          {exam.classIds && exam.classIds.length > 0 && (
-                            <span className="text-[11px] text-slate-400 block truncate">
-                              Lớp: {exam.classIds.join(', ')}
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span 
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const url = getDynamicRouteUrl('bai-thi', exam.slug || exam.id);
+                                const ok = await copyToClipboard(url);
+                                if (ok) showSuccess(`Đã sao chép liên kết: /bai-thi/${exam.slug || exam.id}`);
+                              }}
+                              className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1.5 py-0.2 rounded cursor-pointer transition-colors"
+                              title="Sao chép đường dẫn bài thi"
+                            >
+                              <span>/bai-thi/{exam.slug || exam.id}</span>
+                              <Copy className="w-2.5 h-2.5 text-teal-600" />
                             </span>
-                          )}
+                            {exam.classIds && exam.classIds.length > 0 && (
+                              <span className="text-[11px] text-slate-400 truncate">
+                                · Lớp: {exam.classIds.join(', ')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -1145,6 +1179,24 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               >
                 {exam.title}
               </h3>
+
+              {/* Route URL & Copy Button */}
+              <div className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-[11px] font-mono text-teal-700">
+                <span className="truncate">/bai-thi/{exam.slug || exam.id}</span>
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const url = getDynamicRouteUrl('bai-thi', exam.slug || exam.id);
+                    const ok = await copyToClipboard(url);
+                    if (ok) showSuccess(`Đã sao chép: /bai-thi/${exam.slug || exam.id}`);
+                  }}
+                  className="p-0.5 hover:text-teal-900 transition-colors cursor-pointer shrink-0"
+                  title="Sao chép đường dẫn bài thi"
+                >
+                  <Copy className="w-3 h-3 text-teal-600" />
+                </button>
+              </div>
 
               {/* Metadata */}
               <div className="flex items-center gap-3 text-xs text-slate-500 pt-1">

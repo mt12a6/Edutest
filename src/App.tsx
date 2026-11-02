@@ -35,9 +35,13 @@ import {
   getExamById,
   getExamQuestions,
   deleteExam,
-  startOrCreateAttempt
+  startOrCreateAttempt,
+  findExamBySlug,
+  findSubjectBySlug
 } from './services/db';
 import { SecureExamStudentSelectModal } from './components/common/SecureExamStudentSelectModal';
+import { FolderView } from './components/folder/FolderView';
+import { NotFoundView } from './components/common/NotFoundView';
 
 import { AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
 
@@ -86,6 +90,104 @@ function MainApp() {
     attempt?: ExamAttempt;
   } | null>(null);
 
+  // Dynamic Routing & Folder states
+  const [activeFolderSubject, setActiveFolderSubject] = useState<Subject | null>(null);
+  const [notFoundRoute, setNotFoundRoute] = useState<{ path: string; type: 'bai-thi' | 'thu-muc' | 'page' } | null>(null);
+
+  // Dynamic Route Resolver for /bai-thi/:slug and /thu-muc/:slug and aliases
+  const resolveCurrentRoute = async (examList: Exam[], subjectList: Subject[]) => {
+    if (typeof window === 'undefined') return;
+    const pathname = window.location.pathname;
+
+    // 1. Direct Exam Route: /bai-thi/:slug
+    if (pathname.startsWith('/bai-thi/')) {
+      const rawSlug = pathname.replace(/^\/bai-thi\//, '').replace(/\/+$/, '');
+      const slug = decodeURIComponent(rawSlug).trim();
+      if (!slug) {
+        setNotFoundRoute({ path: pathname, type: 'bai-thi' });
+        return;
+      }
+
+      const res = await findExamBySlug(slug);
+      if (res.exam) {
+        // Automatic Redirect if matched an older slug
+        if (res.isRedirect && res.canonicalSlug) {
+          window.history.replaceState(null, '', `/bai-thi/${res.canonicalSlug}`);
+        }
+        setNotFoundRoute(null);
+        setActiveFolderSubject(null);
+        try {
+          const qList = await getExamQuestions(res.exam.id);
+          setLobbyExam({ exam: res.exam, questions: qList });
+        } catch (err) {
+          console.warn('Lỗi tải câu hỏi theo đường dẫn:', err);
+        }
+      } else {
+        setNotFoundRoute({ path: pathname, type: 'bai-thi' });
+      }
+      return;
+    }
+
+    // 2. Direct Folder Route: /thu-muc/:slug
+    if (pathname.startsWith('/thu-muc/')) {
+      const rawSlug = pathname.replace(/^\/thu-muc\//, '').replace(/\/+$/, '');
+      const slug = decodeURIComponent(rawSlug).trim();
+      if (!slug) {
+        setNotFoundRoute({ path: pathname, type: 'thu-muc' });
+        return;
+      }
+
+      const res = await findSubjectBySlug(slug);
+      if (res.subject) {
+        // Automatic Redirect if matched an older slug
+        if (res.isRedirect && res.canonicalSlug) {
+          window.history.replaceState(null, '', `/thu-muc/${res.canonicalSlug}`);
+        }
+        setNotFoundRoute(null);
+        setActiveFolderSubject(res.subject);
+      } else {
+        setNotFoundRoute({ path: pathname, type: 'thu-muc' });
+      }
+      return;
+    }
+
+    // 3. Known static tabs (/home, /teacher-exams, etc.)
+    const cleanTab = pathname.replace(/^\//, '').replace(/\/+$/, '');
+    const validTabs = [
+      'home', 'teacher-exams', 'teacher-results', 'teacher-live', 
+      'student-exams', 'student-history', 
+      'admin-users', 'admin-classes', 'admin-logs', 'admin-backup'
+    ];
+    if (validTabs.includes(cleanTab)) {
+      setNotFoundRoute(null);
+      setActiveFolderSubject(null);
+      setCurrentTab(cleanTab);
+      return;
+    }
+
+    if (pathname === '/' || pathname === '') {
+      setNotFoundRoute(null);
+      setActiveFolderSubject(null);
+      return;
+    }
+
+    // 4. Unknown route -> 404
+    if (!pathname.startsWith('/api') && !pathname.startsWith('/assets') && !pathname.startsWith('/@')) {
+      setNotFoundRoute({ path: pathname, type: 'page' });
+    }
+  };
+
+  const navigateTo = (path: string, tabName: string = 'home') => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', path);
+    }
+    setNotFoundRoute(null);
+    setActiveFolderSubject(null);
+    setViewingResultsExam(null);
+    setViewingResultSession(null);
+    setCurrentTab(tabName);
+  };
+
   // Initial data loader - optimized for instant sub-200ms page load
   const reloadData = async () => {
     setIsDataLoading(true);
@@ -101,6 +203,9 @@ function MainApp() {
       setExams(examList);
       setClasses(classList);
       setSubjects(subjectList);
+
+      // Resolve current URL routing after data is ready
+      resolveCurrentRoute(examList, subjectList);
     } catch (err) {
       console.warn('Initial data note:', err);
     } finally {
@@ -111,6 +216,17 @@ function MainApp() {
   useEffect(() => {
     reloadData();
   }, []);
+
+  // Browser Back/Forward navigation listener
+  useEffect(() => {
+    const handlePopState = () => {
+      if (exams.length > 0) {
+        resolveCurrentRoute(exams, subjects);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [exams, subjects]);
 
   // Listen for direct exam links, secret links, or scanned QR codes (?secretToken=... or ?examId=...)
   useEffect(() => {
@@ -185,9 +301,7 @@ function MainApp() {
       <Navbar
         currentTab={currentTab}
         onTabChange={(tab) => {
-          setViewingResultsExam(null);
-          setViewingResultSession(null);
-          setCurrentTab(tab);
+          navigateTo(tab === 'home' ? '/' : `/${tab}`, tab);
         }}
       />
 
@@ -198,9 +312,7 @@ function MainApp() {
         <Sidebar
           currentTab={currentTab}
           onTabChange={(tab) => {
-            setViewingResultsExam(null);
-            setViewingResultSession(null);
-            setCurrentTab(tab);
+            navigateTo(tab === 'home' ? '/' : `/${tab}`, tab);
           }}
           onOpenWordUpload={() => setShowWordUpload(true)}
         />
@@ -217,11 +329,33 @@ function MainApp() {
               attempt={viewingResultSession.attempt}
               onBackToDashboard={() => {
                 setViewingResultSession(null);
-                setCurrentTab('home');
+                navigateTo('/', 'home');
               }}
               onRetakeExam={(exam, questions) => {
                 setViewingResultSession(null);
                 setLobbyExam({ exam, questions });
+              }}
+            />
+
+          ) : notFoundRoute ? (
+            <NotFoundView
+              attemptedPath={notFoundRoute.path}
+              type={notFoundRoute.type}
+              onBackToHome={() => navigateTo('/', 'home')}
+            />
+
+          ) : activeFolderSubject ? (
+            <FolderView
+              subject={activeFolderSubject}
+              exams={exams}
+              classes={classes}
+              onBackToHome={() => navigateTo('/', 'home')}
+              onSelectExamToTake={(exam, questions) => {
+                setLobbyExam({ exam, questions: questions || [] });
+              }}
+              onViewResults={(exam) => {
+                setViewingResultsExam(exam);
+                navigateTo('/teacher-results', 'teacher-results');
               }}
             />
 
@@ -231,7 +365,7 @@ function MainApp() {
               classes={classes}
               onBack={() => {
                 setViewingResultsExam(null);
-                setCurrentTab('teacher-exams');
+                navigateTo('/teacher-exams', 'teacher-exams');
               }}
             />
           ) : currentTab === 'home' ? (
@@ -239,7 +373,7 @@ function MainApp() {
               exams={exams}
               classes={classes}
               subjects={subjects}
-              onNavigateTab={setCurrentTab}
+              onNavigateTab={(tab) => navigateTo(tab === 'home' ? '/' : `/${tab}`, tab)}
               onOpenWordUpload={() => {
                 setEditingExamSession(null);
                 setShowWordUpload(true);
@@ -266,7 +400,7 @@ function MainApp() {
               onEditExam={handleStartEditExam}
               onViewResults={(exam) => {
                 setViewingResultsExam(exam);
-                setCurrentTab('teacher-results');
+                navigateTo('/teacher-results', 'teacher-results');
               }}
               onRefreshExams={reloadData}
             />

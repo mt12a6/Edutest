@@ -35,6 +35,7 @@ import {
   calculateExamSubmissionBreakdown
 } from '../utils/grading';
 import { performanceTracker } from '../utils/performanceMetrics';
+import { slugifyVietnamese, ensureUniqueSlug } from '../utils/slugUtils';
 
 // Utility to recursively strip undefined keys so Firebase never throws Unsupported field value: undefined
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): T {
@@ -835,6 +836,22 @@ export async function getSubjects(forceRefresh: boolean = false): Promise<Subjec
     if (result.length === 0) {
       result = getDefaultSubjects();
     }
+
+    // Auto-generate and assign slugs for all subjects if missing
+    const existingSubjectSlugs: string[] = [];
+    result = result.map(s => {
+      let subjectSlug = s.slug;
+      if (!subjectSlug) {
+        subjectSlug = ensureUniqueSlug(slugifyVietnamese(s.name), existingSubjectSlugs);
+      }
+      existingSubjectSlugs.push(subjectSlug);
+      return {
+        ...s,
+        slug: subjectSlug,
+        previousSlugs: s.previousSlugs || []
+      };
+    });
+
     saveLocalSubjects(result);
     inMemorySubjectsCache = { data: result, expiresAt: now + CACHE_TTL_MS };
     performanceTracker.recordSample('api', 'getSubjects (network)', performance.now() - startTime, false);
@@ -851,13 +868,19 @@ export async function getSubjects(forceRefresh: boolean = false): Promise<Subjec
 export async function addSubject(subjectData: Omit<Subject, 'id'>): Promise<string> {
   const collectionPath = 'subjects';
   const newId = 'sub_' + (subjectData.code ? subjectData.code.toLowerCase() : Date.now());
+  const current = getLocalSubjects();
+  const existingSlugs = current.map(s => s.slug).filter(Boolean) as string[];
+  const finalSlug = subjectData.slug || ensureUniqueSlug(slugifyVietnamese(subjectData.name), existingSlugs);
+
   const newSubject: Subject = {
     ...subjectData,
-    id: newId
+    id: newId,
+    slug: finalSlug,
+    previousSlugs: subjectData.previousSlugs || []
   };
 
-  const current = getLocalSubjects();
   saveLocalSubjects([...current.filter(s => s.id !== newId), newSubject]);
+  invalidateMetadataCache();
 
   try {
     await setDoc(doc(db, collectionPath, newId), sanitizeForFirestore(newSubject));
@@ -867,10 +890,47 @@ export async function addSubject(subjectData: Omit<Subject, 'id'>): Promise<stri
   return newId;
 }
 
+export async function updateSubject(subjectId: string, subjectData: Partial<Subject>): Promise<void> {
+  const current = getLocalSubjects();
+  const existing = current.find(s => s.id === subjectId || s.code === subjectId);
+  if (!existing) return;
+
+  const existingSlugs = current.filter(s => s.id !== existing.id).map(s => s.slug).filter(Boolean) as string[];
+  let finalSlug = existing.slug || slugifyVietnamese(existing.name);
+  let previousSlugs = [...(existing.previousSlugs || [])];
+
+  if (subjectData.name && subjectData.name.trim() !== existing.name.trim()) {
+    const candidateSlug = slugifyVietnamese(subjectData.name);
+    if (candidateSlug !== existing.slug) {
+      if (existing.slug && !previousSlugs.includes(existing.slug)) {
+        previousSlugs.push(existing.slug);
+      }
+      finalSlug = ensureUniqueSlug(candidateSlug, existingSlugs);
+    }
+  }
+
+  const updatedSubject: Subject = {
+    ...existing,
+    ...subjectData,
+    slug: finalSlug,
+    previousSlugs
+  };
+
+  saveLocalSubjects([...current.filter(s => s.id !== existing.id), updatedSubject]);
+  invalidateMetadataCache();
+
+  try {
+    await setDoc(doc(db, 'subjects', existing.id), sanitizeForFirestore(updatedSubject), { merge: true });
+  } catch (err) {
+    console.warn('Update subject note:', err);
+  }
+}
+
 export async function deleteSubject(subjectId: string): Promise<void> {
   addDeletedSubjectId(subjectId);
   const current = getLocalSubjects();
   saveLocalSubjects(current.filter(s => s.id !== subjectId && s.code !== subjectId));
+  invalidateMetadataCache();
 
   try {
     await deleteDoc(doc(db, 'subjects', subjectId));
@@ -939,8 +999,23 @@ export async function getExams(forceRefresh: boolean = false): Promise<Exam[]> {
         };
       });
 
-    saveLocalExams(list);
-    const sorted = list.sort((a, b) => {
+    // Auto-generate and assign unique slugs for all exams if missing
+    const existingExamSlugs: string[] = [];
+    const listWithSlugs = list.map(e => {
+      let examSlug = e.slug;
+      if (!examSlug) {
+        examSlug = ensureUniqueSlug(slugifyVietnamese(e.title), existingExamSlugs);
+      }
+      existingExamSlugs.push(examSlug);
+      return {
+        ...e,
+        slug: examSlug,
+        previousSlugs: e.previousSlugs || []
+      };
+    });
+
+    saveLocalExams(listWithSlugs);
+    const sorted = listWithSlugs.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
@@ -956,12 +1031,22 @@ export async function getExams(forceRefresh: boolean = false): Promise<Exam[]> {
     return sorted;
   } catch (err) {
     console.warn('Lấy danh sách đề thi từ Firestore thất bại, dùng bộ nhớ cục bộ:', err);
+    const existingSlugsFallback: string[] = [];
     const fallback = localExams
       .filter(e => !deletedIds.includes(e.id))
-      .map(e => ({
-        ...e,
-        classIds: (e.classIds || []).filter(c => !excludedClasses.includes(c))
-      }))
+      .map(e => {
+        let slug = e.slug;
+        if (!slug) {
+          slug = ensureUniqueSlug(slugifyVietnamese(e.title), existingSlugsFallback);
+        }
+        existingSlugsFallback.push(slug);
+        return {
+          ...e,
+          slug,
+          previousSlugs: e.previousSlugs || [],
+          classIds: (e.classIds || []).filter(c => !excludedClasses.includes(c))
+        };
+      })
       .sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
@@ -1014,10 +1099,15 @@ export async function createExamWithQuestions(
   questions: Array<Omit<Question, 'id' | 'examId'>>
 ): Promise<string> {
   const examId = 'exam_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+  const currentExams = getLocalExams();
+  const existingSlugs = currentExams.map(e => e.slug).filter(Boolean) as string[];
+  const finalSlug = examData.slug || ensureUniqueSlug(slugifyVietnamese(examData.title), existingSlugs);
 
   const fullExam: Exam = {
     ...examData,
     id: examId,
+    slug: finalSlug,
+    previousSlugs: examData.previousSlugs || [],
     questionCount: questions.length,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
@@ -1032,7 +1122,6 @@ export async function createExamWithQuestions(
   }));
 
   // 1. Immediately store in local cache so it appears without delay
-  const currentExams = getLocalExams();
   saveLocalExams([fullExam, ...currentExams.filter(e => e.id !== examId)]);
   saveLocalQuestions(examId, fullQuestions);
 
@@ -1066,10 +1155,32 @@ export async function updateExamWithQuestions(
   const currentExams = getLocalExams();
   const existingExam = currentExams.find(e => e.id === examId);
 
+  let finalSlug = examData.slug || existingExam?.slug;
+  let previousSlugs = [...(existingExam?.previousSlugs || [])];
+
+  // If title was modified and generates a new slug
+  if (examData.title && existingExam && examData.title.trim() !== existingExam.title.trim()) {
+    const candidateSlug = slugifyVietnamese(examData.title);
+    if (candidateSlug !== existingExam.slug) {
+      if (existingExam.slug && !previousSlugs.includes(existingExam.slug)) {
+        previousSlugs.push(existingExam.slug);
+      }
+      const otherSlugs = currentExams.filter(e => e.id !== examId).map(e => e.slug).filter(Boolean) as string[];
+      finalSlug = ensureUniqueSlug(candidateSlug, otherSlugs);
+    }
+  }
+
+  if (!finalSlug && examData.title) {
+    const otherSlugs = currentExams.filter(e => e.id !== examId).map(e => e.slug).filter(Boolean) as string[];
+    finalSlug = ensureUniqueSlug(slugifyVietnamese(examData.title), otherSlugs);
+  }
+
   const updatedExam: Exam = {
     ...(existingExam || ({} as Exam)),
     ...examData,
     id: examId,
+    slug: finalSlug,
+    previousSlugs,
     questionCount: questions ? questions.length : (existingExam?.questionCount || 0),
     updatedAt: new Date().toISOString()
   };
@@ -1106,6 +1217,70 @@ export async function updateExamWithQuestions(
 
   invalidateExamsCache();
   invalidateQuestionsCache(examId);
+}
+
+/**
+ * Tra cứu bài thi bằng slug:
+ * - Khớp trực tiếp với slug hiện tại -> isRedirect: false
+ * - Khớp với lịch sử slug cũ (previousSlugs) -> isRedirect: true (cần tự động cập nhật URL về canonicalSlug)
+ * - Khớp với ID gốc -> trả về bài thi kèm canonicalSlug
+ */
+export async function findExamBySlug(targetSlug: string): Promise<{ exam: Exam | null; isRedirect: boolean; canonicalSlug?: string }> {
+  if (!targetSlug) return { exam: null, isRedirect: false };
+  const clean = targetSlug.trim().toLowerCase();
+  const allExams = await getExams();
+
+  // 1. Khớp chính xác slug hiện tại
+  const directMatch = allExams.find(e => (e.slug || '').toLowerCase() === clean);
+  if (directMatch) {
+    return { exam: directMatch, isRedirect: false, canonicalSlug: directMatch.slug };
+  }
+
+  // 2. Khớp lịch sử slug cũ khi đã đổi tên (Tự động Redirect)
+  const redirectMatch = allExams.find(e => (e.previousSlugs || []).some(s => s.toLowerCase() === clean));
+  if (redirectMatch) {
+    return { exam: redirectMatch, isRedirect: true, canonicalSlug: redirectMatch.slug };
+  }
+
+  // 3. Fallback: Khớp trực tiếp bằng ID bài thi (ví dụ links cũ ?examId=...)
+  const idMatch = allExams.find(e => e.id.toLowerCase() === clean);
+  if (idMatch) {
+    return { exam: idMatch, isRedirect: Boolean(idMatch.slug), canonicalSlug: idMatch.slug };
+  }
+
+  return { exam: null, isRedirect: false };
+}
+
+/**
+ * Tra cứu thư mục môn học bằng slug:
+ * - Khớp trực tiếp với slug hiện tại -> isRedirect: false
+ * - Khớp với lịch sử slug cũ (previousSlugs) -> isRedirect: true
+ * - Khớp với code hoặc ID môn
+ */
+export async function findSubjectBySlug(targetSlug: string): Promise<{ subject: Subject | null; isRedirect: boolean; canonicalSlug?: string }> {
+  if (!targetSlug) return { subject: null, isRedirect: false };
+  const clean = targetSlug.trim().toLowerCase();
+  const allSubjects = await getSubjects();
+
+  // 1. Khớp chính xác slug hiện tại
+  const directMatch = allSubjects.find(s => (s.slug || '').toLowerCase() === clean);
+  if (directMatch) {
+    return { subject: directMatch, isRedirect: false, canonicalSlug: directMatch.slug };
+  }
+
+  // 2. Khớp lịch sử slug cũ khi đã đổi tên (Tự động Redirect)
+  const redirectMatch = allSubjects.find(s => (s.previousSlugs || []).some(p => p.toLowerCase() === clean));
+  if (redirectMatch) {
+    return { subject: redirectMatch, isRedirect: true, canonicalSlug: redirectMatch.slug };
+  }
+
+  // 3. Khớp theo mã môn (code) hoặc ID (sub_math, MATH)
+  const codeMatch = allSubjects.find(s => (s.code || '').toLowerCase() === clean || s.id.toLowerCase() === clean);
+  if (codeMatch) {
+    return { subject: codeMatch, isRedirect: Boolean(codeMatch.slug), canonicalSlug: codeMatch.slug };
+  }
+
+  return { subject: null, isRedirect: false };
 }
 
 export async function getExamQuestions(examId: string, forceRefresh: boolean = false): Promise<Question[]> {
@@ -1986,17 +2161,17 @@ export function getDefaultClasses(): SchoolClass[] {
 
 export function getDefaultSubjects(): Subject[] {
   return [
-    { id: 'sub_math', name: 'Toán học', code: 'MATH', description: 'Đại số, Hình học & Thống kê xác suất' },
-    { id: 'sub_phys', name: 'Vật lí', code: 'PHYS', description: 'Cơ học, Nhiệt học, Quang học & Điện từ' },
-    { id: 'sub_chem', name: 'Hóa học', code: 'CHEM', description: 'Hóa vô cơ & Hóa hữu cơ' },
-    { id: 'sub_eng', name: 'Tiếng Anh', code: 'ENG', description: 'Ngữ pháp, từ vựng và đọc hiểu' },
-    { id: 'sub_lit', name: 'Ngữ văn', code: 'LIT', description: 'Đọc hiểu tác phẩm, làm văn & tiếng Việt' },
-    { id: 'sub_bio', name: 'Sinh học', code: 'BIO', description: 'Di truyền học, Tiến hóa và Sinh thái học' },
-    { id: 'sub_hist', name: 'Lịch sử', code: 'HIST', description: 'Lịch sử Việt Nam và Thế giới' },
-    { id: 'sub_geo', name: 'Địa lí', code: 'GEO', description: 'Địa lí tự nhiên, dân cư & kinh tế' },
-    { id: 'sub_khtn', name: 'Khoa học tự nhiên', code: 'KHTN', description: 'Vật lí, Hóa học, Sinh học tích hợp' },
-    { id: 'sub_it', name: 'Tin học', code: 'IT', description: 'Thuật toán, lập trình & ứng dụng số' },
-    { id: 'sub_tiengviet', name: 'Tiếng Việt', code: 'VIE', description: 'Tiếng Việt bậc Tiểu học' }
+    { id: 'sub_math', name: 'Toán học', code: 'MATH', description: 'Đại số, Hình học & Thống kê xác suất', slug: 'toan-hoc', previousSlugs: ['toan'] },
+    { id: 'sub_phys', name: 'Vật lí', code: 'PHYS', description: 'Cơ học, Nhiệt học, Quang học & Điện từ', slug: 'vat-ly', previousSlugs: ['vat-li', 'vat-ly-hoc'] },
+    { id: 'sub_chem', name: 'Hóa học', code: 'CHEM', description: 'Hóa vô cơ & Hóa hữu cơ', slug: 'hoa-hoc', previousSlugs: ['hoa'] },
+    { id: 'sub_eng', name: 'Tiếng Anh', code: 'ENG', description: 'Ngữ pháp, từ vựng và đọc hiểu', slug: 'tieng-anh', previousSlugs: ['ngoai-ngu', 'english'] },
+    { id: 'sub_lit', name: 'Ngữ văn', code: 'LIT', description: 'Đọc hiểu tác phẩm, làm văn & tiếng Việt', slug: 'ngu-van', previousSlugs: ['van-hoc', 'van'] },
+    { id: 'sub_bio', name: 'Sinh học', code: 'BIO', description: 'Di truyền học, Tiến hóa và Sinh thái học', slug: 'sinh-hoc', previousSlugs: ['sinh'] },
+    { id: 'sub_hist', name: 'Lịch sử', code: 'HIST', description: 'Lịch sử Việt Nam và Thế giới', slug: 'lich-su', previousSlugs: ['su'] },
+    { id: 'sub_geo', name: 'Địa lí', code: 'GEO', description: 'Địa lí tự nhiên, dân cư & kinh tế', slug: 'dia-ly', previousSlugs: ['dia-li', 'dia'] },
+    { id: 'sub_khtn', name: 'Khoa học tự nhiên', code: 'KHTN', description: 'Vật lí, Hóa học, Sinh học tích hợp', slug: 'khoa-hoc-tu-nhien', previousSlugs: ['khtn'] },
+    { id: 'sub_it', name: 'Tin học', code: 'IT', description: 'Thuật toán, lập trình & ứng dụng số', slug: 'tin-hoc', previousSlugs: ['tin', 'cong-nghe-thong-tin'] },
+    { id: 'sub_tiengviet', name: 'Tiếng Việt', code: 'VIE', description: 'Tiếng Việt bậc Tiểu học', slug: 'tieng-viet', previousSlugs: ['tv'] }
   ];
 }
 

@@ -34,6 +34,8 @@ export interface Subject {
   name: string; // e.g. "Toán học", "Vật lí", "Tiếng Anh"
   code: string; // e.g. "MATH", "PHYS", "ENG"
   description?: string;
+  slug?: string; // Slug định danh đường dẫn (e.g. "toan-hoc", "vat-ly")
+  previousSlugs?: string[]; // Lịch sử các slug cũ khi đổi tên để tự động redirect
 }
 
 export interface Exam {
@@ -42,6 +44,8 @@ export interface Exam {
   subjectId: string;
   subjectName: string;
   grade: string;
+  slug?: string; // Slug định danh đường dẫn (e.g. "toan-giua-ky", "vat-ly-cuoi-ky")
+  previousSlugs?: string[]; // Lịch sử các slug cũ khi đổi tên để tự động redirect
   durationMinutes: number;
   passScore: number;
   maxScore: number;
