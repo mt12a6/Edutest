@@ -176,11 +176,14 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
             {(user || profile) ? (
               <div className="relative" ref={accountMenuRef}>
-                {/* Unified Account Profile Button */}
+                {/* Unified Account Profile Button - Min 44px touch target */}
                 <button
                   type="button"
-                  onClick={() => setShowAccountMenu(prev => !prev)}
-                  className="flex items-center gap-2 p-1 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  onClick={() => {
+                    setShowAccountMenu(prev => !prev);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="Menu tài khoản cá nhân"
                   aria-label="Tài khoản người dùng"
                 >
@@ -215,128 +218,136 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                   <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
                 </button>
 
-                {/* Account Dropdown Popover */}
+                {/* Account Dropdown Popover with Mobile Backdrop */}
                 {showAccountMenu && (
-                  <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-3.5 z-50 animate-in fade-in slide-in-from-top-2">
-                    {/* User Info Header */}
-                    <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                      {profile?.photoURL || user?.photoURL ? (
-                        <img 
-                          src={(profile?.photoURL || user?.photoURL) ?? undefined} 
-                          alt="" 
-                          className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-600 object-cover shrink-0" 
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                          {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
+                  <>
+                    {/* Dark backdrop overlay on mobile */}
+                    <div 
+                      className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-2xs sm:hidden"
+                      onClick={() => setShowAccountMenu(false)}
+                    />
+
+                    <div className="fixed sm:absolute top-16 right-3 sm:top-full sm:right-0 mt-1.5 w-[calc(100vw-24px)] max-w-sm sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in slide-in-from-top-2">
+                      {/* User Info Header */}
+                      <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+                        {profile?.photoURL || user?.photoURL ? (
+                          <img 
+                            src={(profile?.photoURL || user?.photoURL) ?? undefined} 
+                            alt="" 
+                            className="w-11 h-11 rounded-full border border-slate-300 dark:border-slate-600 object-cover shrink-0" 
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-base shrink-0">
+                            {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                            {profile?.displayName || user?.displayName || 'Người dùng'}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                            {profile?.email || user?.email}
+                          </p>
+                          <div className="mt-1">
+                            {getRoleBadge(activeRole)}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Admin Role Switcher */}
+                      {isAdmin && (
+                        <div className="py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-1">
+                            Xem giao diện theo vai trò:
+                          </span>
+                          <div className="grid grid-cols-3 gap-1.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setActiveRole('admin')}
+                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                                activeRole === 'admin'
+                                  ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200'
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <ShieldCheck className="w-4 h-4 text-rose-500" />
+                              <span className="text-[10px] font-bold">Admin</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveRole('teacher')}
+                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                                activeRole === 'teacher'
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200'
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <GraduationCap className="w-4 h-4 text-indigo-500" />
+                              <span className="text-[10px] font-bold">Giáo viên</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveRole('student')}
+                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                                activeRole === 'student'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200'
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <UserCheck className="w-4 h-4 text-emerald-500" />
+                              <span className="text-[10px] font-bold">Học sinh</span>
+                            </button>
+                          </div>
                         </div>
                       )}
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                          {profile?.displayName || user?.displayName || 'Người dùng'}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                          {profile?.email || user?.email}
-                        </p>
-                        <div className="mt-1">
-                          {getRoleBadge(activeRole)}
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Admin Role Switcher */}
-                    {isAdmin && (
+                      {/* Mobile Quick Options */}
                       <div className="py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-1">
-                          Xem giao diện theo vai trò:
-                        </span>
-                        <div className="grid grid-cols-3 gap-1 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setActiveRole('admin')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
-                              activeRole === 'admin'
-                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200'
-                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <ShieldCheck className="w-3.5 h-3.5 text-rose-500" />
-                            <span className="text-[10px]">Admin</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveRole('teacher')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
-                              activeRole === 'teacher'
-                                ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200'
-                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <GraduationCap className="w-3.5 h-3.5 text-indigo-500" />
-                            <span className="text-[10px]">Giáo viên</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setActiveRole('student')}
-                            className={`py-1.5 px-2 rounded-lg text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
-                              activeRole === 'student'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200'
-                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <UserCheck className="w-3.5 h-3.5 text-emerald-500" />
-                            <span className="text-[10px]">Học sinh</span>
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={toggleDarkMode}
+                          className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+                            <span>Chế độ giao diện</span>
+                          </div>
+                          <span className="text-[11px] font-bold text-slate-400">
+                            {isDarkMode ? 'Tối' : 'Sáng'}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowShareModal(true);
+                            setShowAccountMenu(false);
+                          }}
+                          className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Share2 className="w-4 h-4 text-emerald-600" />
+                            <span>Chia sẻ liên kết</span>
+                          </div>
+                        </button>
                       </div>
-                    )}
 
-                    {/* Mobile Quick Options */}
-                    <div className="py-2 border-b border-slate-100 dark:border-slate-800 space-y-1">
-                      <button
-                        type="button"
-                        onClick={toggleDarkMode}
-                        className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
-                          <span>Chế độ giao diện</span>
-                        </div>
-                        <span className="text-[11px] font-bold text-slate-400">
-                          {isDarkMode ? 'Tối' : 'Sáng'}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowShareModal(true);
-                          setShowAccountMenu(false);
-                        }}
-                        className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Share2 className="w-4 h-4 text-emerald-600" />
-                          <span>Chia sẻ liên kết</span>
-                        </div>
-                      </button>
+                      {/* Logout Button */}
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAccountMenu(false);
+                            logout();
+                          }}
+                          className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer border border-rose-200/40"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Đăng xuất tài khoản</span>
+                        </button>
+                      </div>
                     </div>
-
-                    {/* Logout Button */}
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAccountMenu(false);
-                          logout();
-                        }}
-                        className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Đăng xuất tài khoản</span>
-                      </button>
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
             ) : (
@@ -361,8 +372,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
             {/* Mobile menu toggle button */}
             <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+              onClick={() => {
+                setMobileMenuOpen(!mobileMenuOpen);
+                setShowAccountMenu(false);
+              }}
+              className="md:hidden p-2.5 min-h-[42px] min-w-[42px] rounded-xl border border-slate-200 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center"
               aria-label="Menu điều hướng di động"
             >
               {mobileMenuOpen ? <X className="w-5 h-5 text-slate-800" /> : <Menu className="w-5 h-5 text-slate-800" />}

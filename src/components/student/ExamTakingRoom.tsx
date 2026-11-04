@@ -445,9 +445,9 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col select-none">
       
-      {/* Sticky Exam Header Bar */}
+      {/* Sticky Exam Header Bar - Compact on mobile */}
       <header className="sticky top-0 z-30 bg-slate-900 text-white shadow-md border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-13 sm:h-16 flex items-center justify-between">
           
           {/* Exam info */}
           <div className="flex items-center gap-3">

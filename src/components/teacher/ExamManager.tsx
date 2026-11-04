@@ -44,7 +44,9 @@ import {
   Languages,
   ShieldCheck,
   ShieldAlert,
-  ArrowUpDown
+  ArrowUpDown,
+  Presentation,
+  FileCode
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject, ExamDisplayMode, HomepageSettings, DEFAULT_HOMEPAGE_SETTINGS } from '../../types';
 import { 
@@ -68,6 +70,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { createBackupGoogleForm } from '../../services/googleFormsService';
 import { exportExamToWord } from '../../utils/docxExportUtils';
+import { exportExamToPptx } from '../../utils/pptxExportUtils';
 import { getDynamicRouteUrl, copyToClipboard } from '../../utils/slugUtils';
 import { ConfirmModal } from '../common/ConfirmModal';
 import { TeacherScopeModal } from '../common/TeacherScopeModal';
@@ -78,6 +81,9 @@ import { ExamPrintModal } from '../common/ExamPrintModal';
 import { OMRScannerModal } from './OMRScannerModal';
 import { GoogleFormModal } from './GoogleFormModal';
 import { PinnedExamsConfigModal } from '../home/PinnedExamsConfigModal';
+import { QRCardPrintModal } from '../qr-exam/QRCardPrintModal';
+import { QRExamScannerModal } from '../qr-exam/QRExamScannerModal';
+import { TexExamUploadModal } from './TexExamUploadModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -165,6 +171,14 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   // Homepage Pinned Exams Configuration Modal State
   const [showPinConfigModal, setShowPinConfigModal] = useState<boolean>(false);
   const [homepageSettings, setHomepageSettings] = useState<HomepageSettings>(DEFAULT_HOMEPAGE_SETTINGS);
+
+  // LaTeX .tex Upload Modal
+  const [showTexUploadModal, setShowTexUploadModal] = useState<boolean>(false);
+
+  // QR Plickers Print & Live Scanner Modals
+  const [qrPrintModalExam, setQrPrintModalExam] = useState<Exam | null>(null);
+  const [qrScannerModalSession, setQrScannerModalSession] = useState<{ exam: Exam; questions: Question[] } | null>(null);
+  const [exportingPptxExamId, setExportingPptxExamId] = useState<string | null>(null);
 
   // Menu Dropdown ID state (to ensure only 1 menu is open at a time)
   const [activeMenuExamId, setActiveMenuExamId] = useState<string | null>(null);
@@ -459,6 +473,38 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     }
   };
 
+  const handleExportPptx = async (exam: Exam) => {
+    try {
+      setActiveMenuExamId(null);
+      setExportingPptxExamId(exam.id);
+      const qList = await getExamQuestions(exam.id);
+      if (!qList || qList.length === 0) {
+        showError('Đề thi chưa có câu hỏi nào để xuất PowerPoint.');
+        return;
+      }
+      await exportExamToPptx(exam, qList, { includeAnswers: true });
+      showSuccess(`Đã xuất bài trình chiếu PowerPoint (.pptx) cho đề "${exam.title}"!`);
+    } catch (err: any) {
+      showError('Lỗi xuất PowerPoint: ' + (err.message || ''));
+    } finally {
+      setExportingPptxExamId(null);
+    }
+  };
+
+  const handleOpenQRScanner = async (exam: Exam) => {
+    try {
+      setActiveMenuExamId(null);
+      const qList = await getExamQuestions(exam.id);
+      if (!qList || qList.length === 0) {
+        showError('Đề thi chưa có câu hỏi nào để quét phiếu.');
+        return;
+      }
+      setQrScannerModalSession({ exam, questions: qList });
+    } catch (err: any) {
+      showError('Không thể tải câu hỏi: ' + (err.message || ''));
+    }
+  };
+
   // Render 3-dot dropdown menu for a specific exam
   const renderRowDropdownMenu = (exam: Exam) => {
     const isMenuOpen = activeMenuExamId === exam.id;
@@ -473,14 +519,14 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             setActiveMenuExamId(isMenuOpen ? null : exam.id);
           }}
           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-          title="Tùy chọn khác (In đề, Xuất Word, OMR, Google Form, Bảo mật...)"
+          title="Tùy chọn khác (In đề, Xuất Word, PPTX, QR Plickers, OMR, Bảo mật...)"
           aria-label="Tùy chọn khác"
         >
           <MoreVertical className="w-4 h-4" />
         </button>
 
         {isMenuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 animate-in fade-in zoom-in-95 duration-100 text-xs divide-y divide-slate-100">
+          <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 animate-in fade-in zoom-in-95 duration-100 text-xs divide-y divide-slate-100">
             {/* Nhóm 1: Xem & Chia sẻ */}
             <div className="py-1">
               <button
@@ -511,7 +557,38 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               </button>
             </div>
 
-            {/* Nhóm 2: In ấn & Xuất Word & Chấm OMR */}
+            {/* Nhóm 2: PowerPoint & Phiếu trả lời QR Plickers */}
+            <div className="py-1">
+              <button
+                type="button"
+                onClick={() => handleExportPptx(exam)}
+                disabled={exportingPptxExamId === exam.id}
+                className="w-full px-3.5 py-1.5 text-left font-medium text-amber-700 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
+              >
+                <Presentation className={`w-3.5 h-3.5 text-amber-600 ${exportingPptxExamId === exam.id ? 'animate-spin' : ''}`} />
+                <span>Xuất trình chiếu PowerPoint (.pptx)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setActiveMenuExamId(null); setQrPrintModalExam(exam); }}
+                className="w-full px-3.5 py-1.5 text-left font-medium text-teal-700 hover:bg-teal-50 flex items-center gap-2 cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5 text-teal-600" />
+                <span>In phiếu trả lời QR (Plickers A4)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenQRScanner(exam)}
+                className="w-full px-3.5 py-1.5 text-left font-medium text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Quét phiếu trực tiếp (Camera Plickers)</span>
+              </button>
+            </div>
+
+            {/* Nhóm 3: In ấn & Xuất Word & Chấm OMR */}
             <div className="py-1">
               <button
                 type="button"
@@ -571,7 +648,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               </button>
             </div>
 
-            {/* Nhóm 3: Cài đặt đề thi & Trạng thái */}
+            {/* Nhóm 4: Cài đặt đề thi & Trạng thái */}
             <div className="py-1">
               <button
                 type="button"
@@ -699,6 +776,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           >
             <Settings2 className="w-3.5 h-3.5 text-indigo-600" />
             <span>Môn phụ trách</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowTexUploadModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer active:scale-95"
+            title="Nhập đề thi từ mã nguồn hoặc file .tex có công thức Toán KaTeX"
+          >
+            <FileCode className="w-4 h-4" />
+            <span>+ Nhập đề LaTeX (.tex)</span>
           </button>
 
           <button
@@ -1430,6 +1517,42 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           onRefreshExams();
         }}
       />
+
+      {/* LaTeX (.tex) Upload Modal */}
+      <TexExamUploadModal
+        isOpen={showTexUploadModal}
+        onClose={() => setShowTexUploadModal(false)}
+        subjects={subjects}
+        classes={classes}
+        onUploadSuccess={(newExam) => {
+          onRefreshExams();
+          showSuccess(`Đã tạo đề thi từ file LaTeX: "${newExam.title}"!`);
+        }}
+      />
+
+      {/* QR Plickers Response Card Printable Modal */}
+      {qrPrintModalExam && (
+        <QRCardPrintModal
+          isOpen={Boolean(qrPrintModalExam)}
+          classes={classes}
+          onClose={() => setQrPrintModalExam(null)}
+        />
+      )}
+
+      {/* QR Plickers Live Scanner Modal */}
+      {qrScannerModalSession && (
+        <QRExamScannerModal
+          isOpen={Boolean(qrScannerModalSession)}
+          exam={qrScannerModalSession.exam}
+          questions={qrScannerModalSession.questions}
+          classes={classes}
+          onClose={() => setQrScannerModalSession(null)}
+          onSaveResults={() => {
+            showSuccess('Đã lưu kết quả quét phiếu trực tiếp thành công!');
+            onRefreshExams();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -426,8 +426,12 @@ export const ExamResultView: React.FC<ExamResultViewProps> = ({
 
                           <div className="flex items-center gap-1.5 shrink-0">
                             {canShowAnswers && isKeyCorrect && (
-                              <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-100 px-2 py-0.5 rounded-full">
-                                Đáp án đúng
+                              <span 
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-1.5 sm:px-2 py-0.5 rounded-lg shrink-0 shadow-2xs"
+                                title="Đáp án chính xác"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span className="hidden sm:inline">Đáp án đúng</span>
                               </span>
                             )}
                             {isStudentKey && (
