@@ -183,8 +183,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                     setShowAccountMenu(prev => !prev);
                     setMobileMenuOpen(false);
                   }}
-                  className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="Menu tài khoản cá nhân"
+                  className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                  title="Menu tài khoản cá nhân & Đăng xuất"
                   aria-label="Tài khoản người dùng"
                 >
                   {/* User Avatar with status dot */}
@@ -193,10 +193,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                       <img 
                         src={(profile?.photoURL || user?.photoURL) ?? undefined} 
                         alt="" 
-                        className="w-8 h-8 rounded-full border border-slate-300 dark:border-slate-600 object-cover" 
+                        className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-600 object-cover" 
                       />
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">
+                      <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
                         {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
                       </div>
                     )}
@@ -207,7 +207,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
                   {/* Desktop Name & Role Badge */}
                   <div className="hidden sm:block text-left">
-                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight truncate max-w-[120px]">
+                    <p className="text-xs font-bold text-slate-900 dark:text-slate-100 leading-tight truncate max-w-[130px]">
                       {profile?.displayName || user?.displayName || profile?.email}
                     </p>
                     <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 capitalize block">
@@ -234,10 +234,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                           <img 
                             src={(profile?.photoURL || user?.photoURL) ?? undefined} 
                             alt="" 
-                            className="w-11 h-11 rounded-full border border-slate-300 dark:border-slate-600 object-cover shrink-0" 
+                            className="w-12 h-12 rounded-full border border-slate-200 dark:border-slate-700 object-cover shrink-0 shadow-xs" 
                           />
                         ) : (
-                          <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-base shrink-0">
+                          <div className="w-12 h-12 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
                             {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
                           </div>
                         )}
@@ -248,71 +248,73 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                           <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                             {profile?.email || user?.email}
                           </p>
-                          <div className="mt-1">
+                          <div className="mt-1.5">
                             {getRoleBadge(activeRole)}
                           </div>
                         </div>
                       </div>
 
-                      {/* Admin Role Switcher */}
-                      {isAdmin && (
-                        <div className="py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-1">
+                      {/* Admin / Teacher Role Switcher */}
+                      {(isAdmin || profile?.role === 'teacher' || profile?.role === 'admin') && (
+                        <div className="py-3 border-b border-slate-100 dark:border-slate-800 space-y-1.5">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-1">
                             Xem giao diện theo vai trò:
                           </span>
-                          <div className="grid grid-cols-3 gap-1.5 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => setActiveRole('admin')}
-                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
-                                activeRole === 'admin'
-                                  ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200'
-                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-                              }`}
-                            >
-                              <ShieldCheck className="w-4 h-4 text-rose-500" />
-                              <span className="text-[10px] font-bold">Admin</span>
-                            </button>
+                          <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveRole('admin')}
+                                className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                                  activeRole === 'admin'
+                                    ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 font-bold shadow-2xs'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 border border-transparent'
+                                }`}
+                              >
+                                <ShieldCheck className="w-4 h-4 text-rose-500" />
+                                <span className="text-[10px]">Admin</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => setActiveRole('teacher')}
-                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all cursor-pointer ${
                                 activeRole === 'teacher'
-                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200'
-                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-300 font-bold shadow-2xs'
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 border border-transparent'
                               }`}
                             >
                               <GraduationCap className="w-4 h-4 text-indigo-500" />
-                              <span className="text-[10px] font-bold">Giáo viên</span>
+                              <span className="text-[10px]">Giáo viên</span>
                             </button>
                             <button
                               type="button"
                               onClick={() => setActiveRole('student')}
-                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                              className={`py-2 px-2 rounded-xl text-xs font-semibold flex flex-col items-center gap-1 transition-all cursor-pointer ${
                                 activeRole === 'student'
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200'
-                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 font-bold shadow-2xs'
+                                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 border border-transparent'
                               }`}
                             >
                               <UserCheck className="w-4 h-4 text-emerald-500" />
-                              <span className="text-[10px] font-bold">Học sinh</span>
+                              <span className="text-[10px]">Học sinh</span>
                             </button>
                           </div>
                         </div>
                       )}
 
-                      {/* Mobile Quick Options */}
+                      {/* Quick Utility Options */}
                       <div className="py-2.5 border-b border-slate-100 dark:border-slate-800 space-y-1">
                         <button
                           type="button"
                           onClick={toggleDarkMode}
-                          className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         >
                           <div className="flex items-center gap-2">
                             {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
                             <span>Chế độ giao diện</span>
                           </div>
-                          <span className="text-[11px] font-bold text-slate-400">
+                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                             {isDarkMode ? 'Tối' : 'Sáng'}
                           </span>
                         </button>
@@ -323,7 +325,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                             setShowShareModal(true);
                             setShowAccountMenu(false);
                           }}
-                          className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                          className="w-full flex items-center justify-between p-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         >
                           <div className="flex items-center gap-2">
                             <Share2 className="w-4 h-4 text-emerald-600" />
@@ -332,17 +334,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                         </button>
                       </div>
 
-                      {/* Logout Button */}
-                      <div className="pt-2">
+                      {/* Big, Clear Logout Button */}
+                      <div className="pt-3">
                         <button
                           type="button"
                           onClick={() => {
                             setShowAccountMenu(false);
                             logout();
                           }}
-                          className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer border border-rose-200/40"
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 transition-colors cursor-pointer border border-rose-200 dark:border-rose-800 shadow-2xs"
                         >
-                          <LogOut className="w-4 h-4" />
+                          <LogOut className="w-4 h-4 text-rose-600" />
                           <span>Đăng xuất tài khoản</span>
                         </button>
                       </div>
@@ -387,7 +389,121 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
       {/* Mobile Navigation Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 px-4 py-3 space-y-2 animate-in slide-in-from-top-2 shadow-lg">
+        <div className="md:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 space-y-3 animate-in slide-in-from-top-2 shadow-xl max-h-[calc(100vh-64px)] overflow-y-auto">
+          {/* User Profile Card on top of Mobile Drawer */}
+          {(user || profile) ? (
+            <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-3 border border-slate-200 dark:border-slate-700 space-y-2.5">
+              <div className="flex items-center gap-3">
+                {profile?.photoURL || user?.photoURL ? (
+                  <img 
+                    src={(profile?.photoURL || user?.photoURL) ?? undefined} 
+                    alt="" 
+                    className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-600 object-cover shrink-0" 
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {profile?.displayName || user?.displayName || 'Người dùng'}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    {profile?.email || user?.email}
+                  </p>
+                </div>
+                <div>
+                  {getRoleBadge(activeRole)}
+                </div>
+              </div>
+
+              {/* Mobile Role Switcher for Admin/Teacher */}
+              {(isAdmin || profile?.role === 'teacher' || profile?.role === 'admin') && (
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Chuyển vai trò xem:
+                  </span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveRole('admin')}
+                        className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                          activeRole === 'admin'
+                            ? 'bg-rose-500 text-white shadow-2xs'
+                            : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        Admin
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveRole('teacher')}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                        activeRole === 'teacher'
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      Giáo viên
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveRole('student')}
+                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition-all ${
+                        activeRole === 'student'
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      Học sinh
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Logout button in Mobile Drawer */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={toggleDarkMode}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 flex items-center gap-1.5"
+                >
+                  {isDarkMode ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-indigo-600" />}
+                  <span>{isDarkMode ? 'Giao diện Tối' : 'Giao diện Sáng'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    logout();
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Đăng xuất</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Chưa đăng nhập</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setShowLoginModal(true);
+                }}
+                className="px-3 py-1.5 text-xs font-bold bg-teal-600 text-white rounded-xl shadow-xs"
+              >
+                Đăng nhập ngay
+              </button>
+            </div>
+          )}
+
           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2 pt-1">
             Điều hướng chung
           </div>

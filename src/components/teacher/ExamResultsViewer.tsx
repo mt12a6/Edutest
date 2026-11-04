@@ -39,6 +39,9 @@ import { useAuth } from '../../context/AuthContext';
 import { StudentGradingDetailModal } from './StudentGradingDetailModal';
 import { ExamPrintModal } from '../common/ExamPrintModal';
 import { OMRScannerModal } from './OMRScannerModal';
+import { WordExportModal } from './WordExportModal';
+import { PowerPointExportModal } from './PowerPointExportModal';
+import { Presentation } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface ExamResultsViewerProps {
@@ -89,9 +92,11 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   const [isAiGradingAll, setIsAiGradingAll] = useState<boolean>(false);
   const [gradingProgress, setGradingProgress] = useState<string>('');
 
-  // Print & OMR states
+  // Print, Word, PPTX & OMR states
   const [printModeTarget, setPrintModeTarget] = useState<'exam' | 'answer_key' | null>(null);
   const [showOMRScanner, setShowOMRScanner] = useState<boolean>(false);
+  const [showWordExportModal, setShowWordExportModal] = useState<boolean>(false);
+  const [showPptxExportModal, setShowPptxExportModal] = useState<boolean>(false);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -404,26 +409,26 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
           </button>
 
           {/* Export Word (.docx) Buttons */}
+          {/* Export Word (.docx) */}
           <button
             type="button"
-            disabled={isExportingWord}
-            onClick={() => handleExportWord('exam')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40"
-            title="Xuất file Word (.docx) đề thi"
+            onClick={() => setShowWordExportModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="Tùy chọn xuất đề thi và đáp án sang Word (.docx)"
           >
             <FileDown className="w-3.5 h-3.5 text-blue-600" />
-            <span>Xuất Đề (Word)</span>
+            <span>Xuất Word (.docx)</span>
           </button>
 
+          {/* Export PowerPoint (.pptx) */}
           <button
             type="button"
-            disabled={isExportingWord}
-            onClick={() => handleExportWord('answers')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-40"
-            title="Xuất file Word (.docx) bảng đáp án & biểu điểm"
+            onClick={() => setShowPptxExportModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            title="Xuất bài trình chiếu PowerPoint kèm hiệu ứng nhấp chuột (.pptx)"
           >
-            <FileText className="w-3.5 h-3.5 text-blue-600" />
-            <span>Xuất Đáp án (Word)</span>
+            <Presentation className="w-3.5 h-3.5 text-amber-600" />
+            <span>Xuất PowerPoint (.pptx)</span>
           </button>
 
           {/* Print A4 Buttons */}
@@ -1137,6 +1142,23 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
         />
       )}
 
+      {/* Word (.docx) Custom Export Modal */}
+      {showWordExportModal && (
+        <WordExportModal
+          isOpen={showWordExportModal}
+          exam={exam}
+          onClose={() => setShowWordExportModal(false)}
+        />
+      )}
+
+      {/* PowerPoint (.pptx) Presentation Export Modal */}
+      {showPptxExportModal && (
+        <PowerPointExportModal
+          isOpen={showPptxExportModal}
+          exam={exam}
+          onClose={() => setShowPptxExportModal(false)}
+        />
+      )}
     </div>
   );
 };

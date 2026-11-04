@@ -46,7 +46,8 @@ import {
   ShieldAlert,
   ArrowUpDown,
   Presentation,
-  FileCode
+  FileCode,
+  Layers
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, Subject, ExamDisplayMode, HomepageSettings, DEFAULT_HOMEPAGE_SETTINGS } from '../../types';
 import { 
@@ -84,6 +85,8 @@ import { PinnedExamsConfigModal } from '../home/PinnedExamsConfigModal';
 import { QRCardPrintModal } from '../qr-exam/QRCardPrintModal';
 import { QRExamScannerModal } from '../qr-exam/QRExamScannerModal';
 import { TexExamUploadModal } from './TexExamUploadModal';
+import { WordExportModal } from './WordExportModal';
+import { PowerPointExportModal } from './PowerPointExportModal';
 
 interface ExamManagerProps {
   exams: Exam[];
@@ -95,15 +98,65 @@ interface ExamManagerProps {
   onRefreshExams: () => void;
 }
 
-// Helper to choose appropriate subject icon
-export const getSubjectIcon = (subjectName?: string) => {
+// Helper to choose appropriate subject metadata & distinctive styling
+export const getSubjectMeta = (subjectName?: string) => {
   const s = (subjectName || '').toLowerCase();
-  if (s.includes('toán')) return <Calculator className="w-4 h-4 text-teal-600" />;
-  if (s.includes('tin')) return <Laptop className="w-4 h-4 text-blue-600" />;
-  if (s.includes('lí') || s.includes('vật lý') || s.includes('vật lí')) return <Atom className="w-4 h-4 text-indigo-600" />;
-  if (s.includes('hóa')) return <FlaskConical className="w-4 h-4 text-purple-600" />;
-  if (s.includes('anh') || s.includes('ngoại ngữ')) return <Languages className="w-4 h-4 text-emerald-600" />;
-  return <BookOpen className="w-4 h-4 text-slate-600" />;
+  if (s.includes('toán')) {
+    return {
+      icon: <Calculator className="w-4 h-4 text-teal-600" />,
+      boxClass: 'bg-teal-50 border-teal-200/90 text-teal-700',
+      badgeClass: 'bg-teal-50 text-teal-700 border-teal-200',
+      hoverBorder: 'hover:border-teal-300',
+      name: 'Toán học'
+    };
+  }
+  if (s.includes('tin')) {
+    return {
+      icon: <Laptop className="w-4 h-4 text-blue-600" />,
+      boxClass: 'bg-blue-50 border-blue-200/90 text-blue-700',
+      badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+      hoverBorder: 'hover:border-blue-300',
+      name: 'Tin học'
+    };
+  }
+  if (s.includes('lí') || s.includes('vật lý') || s.includes('vật lí')) {
+    return {
+      icon: <Atom className="w-4 h-4 text-indigo-600" />,
+      boxClass: 'bg-indigo-50 border-indigo-200/90 text-indigo-700',
+      badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      hoverBorder: 'hover:border-indigo-300',
+      name: 'Vật lý'
+    };
+  }
+  if (s.includes('hóa')) {
+    return {
+      icon: <FlaskConical className="w-4 h-4 text-purple-600" />,
+      boxClass: 'bg-purple-50 border-purple-200/90 text-purple-700',
+      badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+      hoverBorder: 'hover:border-purple-300',
+      name: 'Hóa học'
+    };
+  }
+  if (s.includes('anh') || s.includes('ngoại ngữ')) {
+    return {
+      icon: <Languages className="w-4 h-4 text-emerald-600" />,
+      boxClass: 'bg-emerald-50 border-emerald-200/90 text-emerald-700',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      hoverBorder: 'hover:border-emerald-300',
+      name: 'Tiếng Anh'
+    };
+  }
+  return {
+    icon: <BookOpen className="w-4 h-4 text-slate-600" />,
+    boxClass: 'bg-slate-50 border-slate-200 text-slate-700',
+    badgeClass: 'bg-slate-50 text-slate-700 border-slate-200',
+    hoverBorder: 'hover:border-slate-300',
+    name: subjectName || 'Chung'
+  };
+};
+
+export const getSubjectIcon = (subjectName?: string) => {
+  return getSubjectMeta(subjectName).icon;
 };
 
 export const ExamManager: React.FC<ExamManagerProps> = ({
@@ -179,6 +232,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [qrPrintModalExam, setQrPrintModalExam] = useState<Exam | null>(null);
   const [qrScannerModalSession, setQrScannerModalSession] = useState<{ exam: Exam; questions: Question[] } | null>(null);
   const [exportingPptxExamId, setExportingPptxExamId] = useState<string | null>(null);
+
+  // Word & PowerPoint Custom Export Modals
+  const [wordExportModalExam, setWordExportModalExam] = useState<Exam | null>(null);
+  const [pptxExportModalExam, setPptxExportModalExam] = useState<Exam | null>(null);
 
   // Menu Dropdown ID state (to ensure only 1 menu is open at a time)
   const [activeMenuExamId, setActiveMenuExamId] = useState<string | null>(null);
@@ -326,6 +383,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   };
 
   const allGrades = ['6', '7', '8', '9', '10', '11', '12'];
+  const availableSubjectNames = Array.from(new Set([
+    ...subjects.map(s => s.name),
+    ...exams.map(e => e.subjectName).filter(Boolean)
+  ]));
 
   const filteredExams = exams.filter(e => {
     // Hidden filter
@@ -482,7 +543,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         showError('Đề thi chưa có câu hỏi nào để xuất PowerPoint.');
         return;
       }
-      await exportExamToPptx(exam, qList, { includeAnswers: true });
+      await exportExamToPptx(exam, qList, { presentationMode: 'click_reveal' });
       showSuccess(`Đã xuất bài trình chiếu PowerPoint (.pptx) cho đề "${exam.title}"!`);
     } catch (err: any) {
       showError('Lỗi xuất PowerPoint: ' + (err.message || ''));
@@ -561,11 +622,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             <div className="py-1">
               <button
                 type="button"
-                onClick={() => handleExportPptx(exam)}
-                disabled={exportingPptxExamId === exam.id}
+                onClick={() => { setActiveMenuExamId(null); setPptxExportModalExam(exam); }}
                 className="w-full px-3.5 py-1.5 text-left font-medium text-amber-700 hover:bg-amber-50 flex items-center gap-2 cursor-pointer"
               >
-                <Presentation className={`w-3.5 h-3.5 text-amber-600 ${exportingPptxExamId === exam.id ? 'animate-spin' : ''}`} />
+                <Presentation className="w-3.5 h-3.5 text-amber-600" />
                 <span>Xuất trình chiếu PowerPoint (.pptx)</span>
               </button>
 
@@ -592,22 +652,11 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             <div className="py-1">
               <button
                 type="button"
-                onClick={() => handleExportWordDirect(exam, 'exam')}
-                disabled={exportingWordExamId === exam.id}
+                onClick={() => { setActiveMenuExamId(null); setWordExportModalExam(exam); }}
                 className="w-full px-3.5 py-1.5 text-left font-medium text-blue-700 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
               >
                 <FileDown className="w-3.5 h-3.5 text-blue-600" />
-                <span>Xuất Đề thi (Word .docx)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExportWordDirect(exam, 'answers')}
-                disabled={exportingWordExamId === exam.id}
-                className="w-full px-3.5 py-1.5 text-left font-medium text-blue-700 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                <span>Xuất Đáp án (Word .docx)</span>
+                <span>Xuất Đề thi &amp; Đáp án (Word .docx)</span>
               </button>
 
               <button
@@ -883,33 +932,67 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           </div>
         </div>
 
-        {/* Second filter row: Search, Subject selector with icon, Status selector, Hidden toggle */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1 border-t border-slate-100">
-          {/* Search box */}
+        {/* Subject quick filter pills with distinctive icons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none pt-2 border-t border-slate-100">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+            <Layers className="w-3 h-3 text-slate-400" />
+            Môn học:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedSubject('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              selectedSubject === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-slate-400" />
+            <span>Tất cả môn</span>
+          </button>
+          {availableSubjectNames.map(subName => {
+            const meta = getSubjectMeta(subName);
+            const isSelected = selectedSubject === subName;
+            return (
+              <button
+                key={`mgr-sub-pill-${subName}`}
+                type="button"
+                onClick={() => setSelectedSubject(isSelected ? 'all' : subName)}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-teal-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                }`}
+              >
+                <span className={isSelected ? 'text-white' : ''}>{meta.icon}</span>
+                <span>{subName}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Second filter row: Search, Status selector, Filter reset, Exam count */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2 border-t border-slate-100">
+          {/* Search box with quick clear button */}
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Tìm kiếm đề thi theo tên hoặc mã đề..."
+              placeholder="Tìm kiếm đề thi theo tên, mã đề hoặc môn học..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-teal-500 focus:outline-none"
+              className="w-full pl-9 pr-8 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-teal-500 focus:outline-none"
             />
-          </div>
-
-          {/* Subject selector with clear icon */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-0.5">
-            {getSubjectIcon(selectedSubject === 'all' ? undefined : selectedSubject)}
-            <select
-              value={selectedSubject}
-              onChange={(e) => setSelectedSubject(e.target.value)}
-              className="py-1 text-xs font-medium bg-transparent border-none focus:outline-none text-slate-700 cursor-pointer"
-            >
-              <option value="all">Tất cả môn học</option>
-              {subjects.map(s => (
-                <option key={s.id || s.code} value={s.name}>{s.name}</option>
-              ))}
-            </select>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                title="Xóa tìm kiếm"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Status selector */}
@@ -919,15 +1002,32 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             className="px-3 py-1.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-slate-700 cursor-pointer"
           >
             <option value="all">Tất cả trạng thái</option>
-            <option value="published">Đang mở thi</option>
-            <option value="draft">Bản nháp / Đang đóng</option>
+            <option value="published">● Đang mở thi</option>
+            <option value="draft">○ Bản nháp / Đang đóng</option>
             <option value="trial">⭐ Đề thi thử tự do</option>
             <option value="hidden">Đề đã bị ẩn</option>
           </select>
 
+          {/* Reset Filters button if any filter is active */}
+          {(selectedGrade !== 'all' || selectedSubject !== 'all' || statusFilter !== 'all' || searchQuery.trim() !== '') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedGrade('all');
+                setSelectedSubject('all');
+                setStatusFilter('all');
+                setSearchQuery('');
+              }}
+              className="px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-xl transition-colors cursor-pointer shrink-0"
+              title="Đặt lại tất cả bộ lọc về mặc định"
+            >
+              Đặt lại lọc
+            </button>
+          )}
+
           {/* Count tag */}
-          <span className="text-xs font-bold text-slate-400 shrink-0 self-center hidden md:inline">
-            {filteredExams.length} đề thi
+          <span className="text-xs font-bold text-slate-500 shrink-0 self-center hidden sm:inline bg-slate-100 px-2.5 py-1 rounded-lg">
+            {filteredExams.length} / {exams.length} đề thi
           </span>
         </div>
 
@@ -942,19 +1042,20 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         <div className="space-y-2.5">
           {filteredExams.map((exam) => {
             const isShuffled = exam.shuffleQuestions || exam.shuffleOptions;
+            const meta = getSubjectMeta(exam.subjectName);
 
             return (
               <div 
                 key={exam.id}
-                className={`group bg-white hover:bg-slate-50/80 rounded-xl border transition-all p-3 sm:px-4 sm:py-3 shadow-2xs hover:shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  exam.isHidden ? 'opacity-60 border-dashed border-slate-300' : 'border-slate-200/90 hover:border-teal-300'
+                className={`group bg-white hover:bg-slate-50/80 rounded-2xl border transition-all p-3 sm:px-4 sm:py-3.5 shadow-2xs hover:shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  exam.isHidden ? 'opacity-60 border-dashed border-slate-300' : `border-slate-200/90 ${meta.hoverBorder}`
                 }`}
               >
                 {/* Left: Subject Icon + Title + Quiet Metadata */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  {/* Subject Icon Box */}
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0 group-hover:border-teal-200 group-hover:bg-teal-50/50 transition-colors">
-                    {getSubjectIcon(exam.subjectName)}
+                  {/* Subject Icon Box with color branding */}
+                  <div className={`w-10 h-10 rounded-xl ${meta.boxClass} flex items-center justify-center shrink-0 border shadow-2xs group-hover:scale-105 transition-transform`}>
+                    {meta.icon}
                   </div>
 
                   {/* Exam Title & Quiet Metadata */}
@@ -962,8 +1063,8 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 
                         onClick={() => setPreviewExam(exam)}
-                        className="text-sm font-bold text-slate-900 truncate hover:text-teal-700 cursor-pointer transition-colors"
-                        title="Bấm để xem chi tiết đề thi"
+                        className="text-sm font-bold text-slate-900 truncate hover:text-teal-700 cursor-pointer transition-colors max-w-sm sm:max-w-md lg:max-w-lg"
+                        title={exam.title}
                       >
                         {exam.title}
                       </h3>
@@ -972,7 +1073,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       <button
                         type="button"
                         onClick={() => handleTogglePublish(exam)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
                           exam.isPublished
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                             : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
@@ -1001,13 +1102,20 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                           Ghim
                         </span>
                       )}
+
+                      {exam.isTrial && (
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                          <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                          Thi thử
+                        </span>
+                      )}
                     </div>
 
                     {/* Metadata line with subtle dot separators */}
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
-                      <span className="font-semibold text-slate-700">{exam.subjectName || 'Chung'}</span>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
+                      <span className="font-semibold text-slate-700">{meta.name}</span>
                       <span aria-hidden="true" className="text-slate-300">·</span>
-                      <span>Khối {exam.grade || '?'}</span>
+                      <span className="font-medium text-slate-600">Khối {exam.grade || '?'}</span>
                       <span aria-hidden="true" className="text-slate-300">·</span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-400" />
@@ -1050,7 +1158,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
                 {/* Right Actions: Important actions stand out, rest in 3-dot menu */}
                 <div className="flex items-center gap-2 justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                  {/* Sửa đề button (Icon) */}
+                  {/* Sửa đề icon button */}
                   {onEditExam && (
                     <button
                       type="button"
@@ -1062,11 +1170,21 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     </button>
                   )}
 
+                  {/* Chia sẻ link & mã QR icon button */}
+                  <button
+                    type="button"
+                    onClick={() => setShareExamTarget(exam)}
+                    className="p-2 rounded-xl text-slate-500 hover:text-teal-600 hover:bg-teal-50 border border-slate-200 hover:border-teal-200 transition-colors cursor-pointer flex items-center justify-center"
+                    title="Chia sẻ đường dẫn & mã QR làm bài thi"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+
                   {/* Nút quan trọng: XEM KẾT QUẢ / BẢNG ĐIỂM (Màu Teal nổi bật) */}
                   <button
                     type="button"
                     onClick={() => onViewResults(exam)}
-                    className="px-3.5 py-2 min-h-[36px] rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                    className="px-3.5 py-2 min-h-[36px] rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs hover:shadow-xs shrink-0"
                     title="Xem chi tiết điểm số, xếp hạng và chấm bài học sinh"
                   >
                     <BarChart3 className="w-3.5 h-3.5" />
@@ -1110,13 +1228,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredExams.map(exam => (
-                  <tr key={`mgr-table-${exam.id}`} className="hover:bg-slate-50/70 border-b border-slate-200/80 transition-colors">
-                    <td className="py-3 px-3.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-                          {getSubjectIcon(exam.subjectName)}
-                        </div>
+                {filteredExams.map(exam => {
+                  const meta = getSubjectMeta(exam.subjectName);
+                  return (
+                    <tr key={`mgr-table-${exam.id}`} className="hover:bg-slate-50/70 border-b border-slate-200/80 transition-colors">
+                      <td className="py-3 px-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg ${meta.boxClass} flex items-center justify-center shrink-0 border`}>
+                            {meta.icon}
+                          </div>
                         <div className="min-w-0 max-w-sm sm:max-w-md">
                           <span 
                             onClick={() => setPreviewExam(exam)}
@@ -1203,7 +1323,8 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>
@@ -1221,107 +1342,124 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
       {/* =================================================================== */}
       {displayMode === 'grid' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filteredExams.map((exam) => (
-            <div 
-              key={`mgr-grid-${exam.id}`}
-              className="group bg-white hover:bg-slate-50/50 rounded-2xl border border-slate-200 p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-3"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
-                    {getSubjectIcon(exam.subjectName)}
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 block leading-tight">
-                      {exam.subjectName || 'Chung'}
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Khối {exam.grade || '?'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleTogglePublish(exam)}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer ${
-                      exam.isPublished
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {exam.isPublished ? 'Mở thi' : 'Nháp'}
-                  </button>
-                  {renderRowDropdownMenu(exam)}
-                </div>
-              </div>
-
-              {/* Title */}
-              <h3 
-                onClick={() => setPreviewExam(exam)}
-                className="font-bold text-sm text-slate-900 group-hover:text-teal-700 cursor-pointer line-clamp-2 leading-snug transition-colors"
-                title={exam.title}
+          {filteredExams.map((exam) => {
+            const meta = getSubjectMeta(exam.subjectName);
+            return (
+              <div 
+                key={`mgr-grid-${exam.id}`}
+                className={`group bg-white hover:bg-slate-50/50 rounded-2xl border p-4 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-3 ${
+                  exam.isHidden ? 'opacity-60 border-dashed border-slate-300' : `border-slate-200/90 ${meta.hoverBorder}`
+                }`}
               >
-                {exam.title}
-              </h3>
+                {/* Header */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-lg ${meta.boxClass} flex items-center justify-center shrink-0 border`}>
+                      {meta.icon}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 block leading-tight">
+                        {meta.name}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        Khối {exam.grade || '?'}
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Route URL & Copy Button */}
-              <div className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-[11px] font-mono text-teal-700">
-                <span className="truncate">/bai-thi/{exam.slug || exam.id}</span>
-                <button
-                  type="button"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    const url = getDynamicRouteUrl('bai-thi', exam.slug || exam.id);
-                    const ok = await copyToClipboard(url);
-                    if (ok) showSuccess(`Đã sao chép: /bai-thi/${exam.slug || exam.id}`);
-                  }}
-                  className="p-0.5 hover:text-teal-900 transition-colors cursor-pointer shrink-0"
-                  title="Sao chép đường dẫn bài thi"
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePublish(exam)}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
+                        exam.isPublished
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
+                      }`}
+                    >
+                      {exam.isPublished ? '● Đang mở' : '○ Nháp'}
+                    </button>
+                    {renderRowDropdownMenu(exam)}
+                  </div>
+                </div>
+
+                {/* Title */}
+                <h3 
+                  onClick={() => setPreviewExam(exam)}
+                  className="font-bold text-sm text-slate-900 group-hover:text-teal-700 cursor-pointer line-clamp-2 leading-snug transition-colors"
+                  title={exam.title}
                 >
-                  <Copy className="w-3 h-3 text-teal-600" />
-                </button>
-              </div>
+                  {exam.title}
+                </h3>
 
-              {/* Metadata */}
-              <div className="flex items-center gap-3 text-xs text-slate-500 pt-1">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{exam.durationMinutes} phút</span>
-                </span>
-                <span aria-hidden="true" className="text-slate-300">·</span>
-                <span className="flex items-center gap-1">
-                  <BookOpen className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{exam.questionCount || 0} câu</span>
-                </span>
-              </div>
-
-              {/* Footer */}
-              <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                {onEditExam && (
+                {/* Route URL & Copy Button */}
+                <div className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-[11px] font-mono text-teal-700">
+                  <span className="truncate">/bai-thi/{exam.slug || exam.id}</span>
                   <button
                     type="button"
-                    onClick={() => onEditExam(exam)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 text-xs font-semibold flex items-center gap-1"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const url = getDynamicRouteUrl('bai-thi', exam.slug || exam.id);
+                      const ok = await copyToClipboard(url);
+                      if (ok) showSuccess(`Đã sao chép: /bai-thi/${exam.slug || exam.id}`);
+                    }}
+                    className="p-0.5 hover:text-teal-900 transition-colors cursor-pointer shrink-0"
+                    title="Sao chép đường dẫn bài thi"
                   >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Sửa</span>
+                    <Copy className="w-3 h-3 text-teal-600" />
                   </button>
-                )}
+                </div>
 
-                <button
-                  type="button"
-                  onClick={() => onViewResults(exam)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 shadow-2xs"
-                >
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  <span>Kết quả &amp; Chấm thi</span>
-                </button>
+                {/* Metadata */}
+                <div className="flex items-center gap-3 text-xs text-slate-500 pt-1">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{exam.durationMinutes} phút</span>
+                  </span>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span className="flex items-center gap-1">
+                    <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{exam.questionCount || 0} câu</span>
+                  </span>
+                </div>
+
+                {/* Footer */}
+                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {onEditExam && (
+                      <button
+                        type="button"
+                        onClick={() => onEditExam(exam)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 text-xs font-semibold flex items-center gap-1"
+                        title="Sửa đề thi"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Sửa</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShareExamTarget(exam)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-teal-600 hover:bg-teal-50 border border-slate-200 text-xs font-semibold flex items-center"
+                      title="Chia sẻ link & mã QR"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onViewResults(exam)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 shadow-2xs hover:shadow-xs active:scale-95"
+                    title="Xem chi tiết kết quả & chấm thi"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    <span>Kết quả &amp; Chấm thi</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {filteredExams.length === 0 && (
             <div className="col-span-full p-10 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
@@ -1551,6 +1689,24 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             showSuccess('Đã lưu kết quả quét phiếu trực tiếp thành công!');
             onRefreshExams();
           }}
+        />
+      )}
+
+      {/* Word (.docx) Custom Export Modal */}
+      {wordExportModalExam && (
+        <WordExportModal
+          isOpen={Boolean(wordExportModalExam)}
+          exam={wordExportModalExam}
+          onClose={() => setWordExportModalExam(null)}
+        />
+      )}
+
+      {/* PowerPoint (.pptx) Presentation Export Modal */}
+      {pptxExportModalExam && (
+        <PowerPointExportModal
+          isOpen={Boolean(pptxExportModalExam)}
+          exam={pptxExportModalExam}
+          onClose={() => setPptxExportModalExam(null)}
         />
       )}
     </div>
