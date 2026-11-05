@@ -66,7 +66,8 @@ import {
   togglePinExam,
   recalculateExamResults,
   getHomepageSettings,
-  saveHomepageSettings
+  saveHomepageSettings,
+  toggleExamShowScore
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { createBackupGoogleForm } from '../../services/googleFormsService';
@@ -566,6 +567,19 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     }
   };
 
+  const handleToggleShowScore = async (exam: Exam) => {
+    setActiveMenuExamId(null);
+    const nextShow = exam.showScoreAfterExam === false;
+    try {
+      await toggleExamShowScore(exam.id, nextShow);
+      showSuccess(nextShow ? `Đã BẬT xem điểm thi trực tiếp cho "${exam.title}". Học sinh sẽ xem được điểm ngay sau khi nộp bài.` : `Đã TẮT xem điểm thi trực tiếp cho "${exam.title}" (chế độ bảo mật điểm).`);
+      onRefreshExams();
+    } catch (err) {
+      console.error('Lỗi cập nhật xem điểm:', err);
+      showError('Không thể cập nhật cấu hình xem điểm thi.');
+    }
+  };
+
   // Render 3-dot dropdown menu for a specific exam
   const renderRowDropdownMenu = (exam: Exam) => {
     const isMenuOpen = activeMenuExamId === exam.id;
@@ -587,7 +601,36 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         </button>
 
         {isMenuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 animate-in fade-in zoom-in-95 duration-100 text-xs divide-y divide-slate-100">
+          <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 animate-in fade-in zoom-in-95 duration-100 text-xs divide-y divide-slate-100">
+            {/* Nhóm 0: Chấm tự luận & Xem điểm thi trực tiếp (Ưu tiên cao nhất) */}
+            <div className="py-1 bg-slate-50/70 rounded-t-xl">
+              <button
+                type="button"
+                onClick={() => { setActiveMenuExamId(null); onViewResults(exam); }}
+                className="w-full px-3.5 py-2 text-left font-bold text-purple-700 hover:bg-purple-100/70 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span>✍️ Chấm đề tự luận (AI &amp; Giáo viên)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleToggleShowScore(exam)}
+                className={`w-full px-3.5 py-2 text-left font-bold flex items-center gap-2 cursor-pointer transition-colors ${
+                  exam.showScoreAfterExam !== false
+                    ? 'text-emerald-700 hover:bg-emerald-100/70'
+                    : 'text-amber-700 hover:bg-amber-100/70'
+                }`}
+              >
+                {exam.showScoreAfterExam !== false ? <Eye className="w-3.5 h-3.5 text-emerald-600" /> : <EyeOff className="w-3.5 h-3.5 text-amber-600" />}
+                <span>
+                  {exam.showScoreAfterExam !== false
+                    ? '👁️ Xem điểm trực tiếp: Đang BẬT'
+                    : '🔒 Xem điểm trực tiếp: Đang TẮT'}
+                </span>
+              </button>
+            </div>
+
             {/* Nhóm 1: Xem & Chia sẻ */}
             <div className="py-1">
               <button
@@ -1083,6 +1126,21 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                         {exam.isPublished ? '● Đang mở' : '○ Bản nháp'}
                       </button>
 
+                      {/* Score Visibility Badge - 1-click toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleShowScore(exam)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-colors flex items-center gap-1 ${
+                          exam.showScoreAfterExam !== false
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                        }`}
+                        title={exam.showScoreAfterExam !== false ? "Xem điểm trực tiếp đang BẬT. Học sinh xem điểm ngay sau khi nộp bài. Bấm để tắt." : "Xem điểm trực tiếp đang TẮT (bảo mật điểm). Bấm để bật."}
+                      >
+                        {exam.showScoreAfterExam !== false ? <Eye className="w-3 h-3 text-emerald-600" /> : <EyeOff className="w-3 h-3 text-amber-600" />}
+                        <span>{exam.showScoreAfterExam !== false ? 'Xem điểm: Bật' : 'Điểm bảo mật'}</span>
+                      </button>
+
                       {exam.examCode && (
                         <span className="text-[10px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded">
                           🔒 {exam.examCode}
@@ -1157,7 +1215,32 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                 </div>
 
                 {/* Right Actions: Important actions stand out, rest in 3-dot menu */}
-                <div className="flex items-center gap-2 justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                <div className="flex items-center gap-1.5 sm:gap-2 justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 flex-wrap sm:flex-nowrap">
+                  {/* Chấm đề tự luận (Giáo viên & AI) - Nổi bật màu tím */}
+                  <button
+                    type="button"
+                    onClick={() => onViewResults(exam)}
+                    className="px-3 py-1.5 min-h-[36px] rounded-xl text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs hover:shadow-xs shrink-0"
+                    title="Mở giao diện chấm bài tự luận học sinh & AI chấm tự động"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Chấm tự luận</span>
+                  </button>
+
+                  {/* Bật/Tắt xem điểm trực tiếp 1-click */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleShowScore(exam)}
+                    className={`p-2 rounded-xl border transition-colors cursor-pointer flex items-center justify-center shrink-0 ${
+                      exam.showScoreAfterExam !== false
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+                        : 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100'
+                    }`}
+                    title={exam.showScoreAfterExam !== false ? "Xem điểm trực tiếp đang BẬT. Bấm để tắt (bảo mật điểm)." : "Xem điểm trực tiếp đang TẮT. Bấm để bật cho học sinh xem điểm ngay."}
+                  >
+                    {exam.showScoreAfterExam !== false ? <Eye className="w-4 h-4 text-emerald-600" /> : <EyeOff className="w-4 h-4 text-amber-600" />}
+                  </button>
+
                   {/* Sửa đề icon button */}
                   {onEditExam && (
                     <button
@@ -1185,10 +1268,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     type="button"
                     onClick={() => onViewResults(exam)}
                     className="px-3.5 py-2 min-h-[36px] rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs hover:shadow-xs shrink-0"
-                    title="Xem chi tiết điểm số, xếp hạng và chấm bài học sinh"
+                    title="Xem chi tiết điểm số, xếp hạng và thống kê"
                   >
                     <BarChart3 className="w-3.5 h-3.5" />
-                    <span>Kết quả &amp; Chấm thi</span>
+                    <span>Kết quả</span>
                   </button>
 
                   {/* 3-dot dropdown menu containing secondary actions */}
@@ -1286,21 +1369,45 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     </td>
 
                     <td className="py-3 px-3 whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePublish(exam)}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer ${
-                          exam.isPublished
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {exam.isPublished ? 'Đang mở' : 'Bản nháp'}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePublish(exam)}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer ${
+                            exam.isPublished
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {exam.isPublished ? 'Đang mở' : 'Bản nháp'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleShowScore(exam)}
+                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded cursor-pointer flex items-center gap-0.5 ${
+                            exam.showScoreAfterExam !== false
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                          title={exam.showScoreAfterExam !== false ? "Xem điểm trực tiếp: BẬT" : "Xem điểm trực tiếp: TẮT"}
+                        >
+                          {exam.showScoreAfterExam !== false ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
+                          <span>{exam.showScoreAfterExam !== false ? 'Điểm: Bật' : 'Điểm: Tắt'}</span>
+                        </button>
+                      </div>
                     </td>
 
                     <td className="py-3 px-3.5 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onViewResults(exam)}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-all flex items-center gap-1 shadow-2xs"
+                          title="Chấm bài tự luận học sinh & AI chấm tự động"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                          <span className="hidden md:inline">Chấm tự luận</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => onViewResults(exam)}
@@ -1379,6 +1486,21 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     >
                       {exam.isPublished ? '● Đang mở' : '○ Nháp'}
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleShowScore(exam)}
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full cursor-pointer transition-colors flex items-center gap-0.5 ${
+                        exam.showScoreAfterExam !== false
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                      }`}
+                      title={exam.showScoreAfterExam !== false ? "Xem điểm trực tiếp: BẬT" : "Xem điểm trực tiếp: TẮT"}
+                    >
+                      {exam.showScoreAfterExam !== false ? <Eye className="w-2.5 h-2.5 text-emerald-600" /> : <EyeOff className="w-2.5 h-2.5 text-amber-600" />}
+                      <span>{exam.showScoreAfterExam !== false ? 'Xem điểm' : 'Bảo mật'}</span>
+                    </button>
+
                     {renderRowDropdownMenu(exam)}
                   </div>
                 </div>
@@ -1444,6 +1566,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       title="Chia sẻ link & mã QR"
                     >
                       <Share2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onViewResults(exam)}
+                      className="p-1.5 rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                      title="Chấm bài tự luận học sinh & AI chấm tự động"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      <span className="hidden sm:inline">Tự luận</span>
                     </button>
                   </div>
 

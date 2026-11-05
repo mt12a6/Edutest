@@ -176,14 +176,14 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
 
             {(user || profile) ? (
               <div className="relative" ref={accountMenuRef}>
-                {/* Unified Account Profile Button - Min 44px touch target */}
+                {/* Unified Account Profile Button - Min 44px touch target, touch-friendly on mobile */}
                 <button
                   type="button"
                   onClick={() => {
                     setShowAccountMenu(prev => !prev);
                     setMobileMenuOpen(false);
                   }}
-                  className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 min-h-[42px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                  className="flex items-center gap-2 p-1 sm:px-3 sm:py-1.5 min-h-[44px] min-w-[44px] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 touch-manipulation justify-center"
                   title="Menu tài khoản cá nhân & Đăng xuất"
                   aria-label="Tài khoản người dùng"
                 >
@@ -215,7 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                     </span>
                   </div>
 
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block ml-0.5" />
                 </button>
 
                 {/* Account Dropdown Popover with Mobile Backdrop */}
@@ -228,30 +228,42 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                     />
 
                     <div className="fixed sm:absolute top-16 right-3 sm:top-full sm:right-0 mt-1.5 w-[calc(100vw-24px)] max-w-sm sm:w-80 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-4 z-50 animate-in fade-in slide-in-from-top-2">
-                      {/* User Info Header */}
-                      <div className="flex items-center gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                        {profile?.photoURL || user?.photoURL ? (
-                          <img 
-                            src={(profile?.photoURL || user?.photoURL) ?? undefined} 
-                            alt="" 
-                            className="w-12 h-12 rounded-full border border-slate-200 dark:border-slate-700 object-cover shrink-0 shadow-xs" 
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
-                            {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                            {profile?.displayName || user?.displayName || 'Người dùng'}
-                          </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                            {profile?.email || user?.email}
-                          </p>
-                          <div className="mt-1.5">
-                            {getRoleBadge(activeRole)}
+                      {/* User Info Header with mobile close button */}
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {profile?.photoURL || user?.photoURL ? (
+                            <img 
+                              src={(profile?.photoURL || user?.photoURL) ?? undefined} 
+                              alt="" 
+                              className="w-12 h-12 rounded-full border border-slate-200 dark:border-slate-700 object-cover shrink-0 shadow-xs" 
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
+                              {(profile?.displayName || user?.displayName || profile?.email || 'U')[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                              {profile?.displayName || user?.displayName || 'Người dùng'}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                              {profile?.email || user?.email}
+                            </p>
+                            <div className="mt-1">
+                              {getRoleBadge(activeRole)}
+                            </div>
                           </div>
                         </div>
+
+                        {/* Mobile close button */}
+                        <button
+                          type="button"
+                          onClick={() => setShowAccountMenu(false)}
+                          className="sm:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          title="Đóng menu"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
 
                       {/* Admin / Teacher Role Switcher */}

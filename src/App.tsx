@@ -540,6 +540,14 @@ function MainApp() {
             });
             setLobbyExam(null);
           }}
+          onViewPastResult={(result) => {
+            setViewingResultSession({
+              exam: lobbyExam.exam,
+              result,
+              questions: lobbyExam.questions
+            });
+            setLobbyExam(null);
+          }}
         />
       )}
 

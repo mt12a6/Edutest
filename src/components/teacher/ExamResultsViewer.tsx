@@ -523,7 +523,7 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
       </div>
 
       {/* AI Essay Grading Notice & Action Banner */}
-      {questions.some(q => q.type === 'essay') && (
+      {(questions.some(q => q.type === 'essay' || q.section === 4) || results.some(r => r.hasEssay || r.status === 'pending_essay_grading' || (r.essayScore !== undefined && r.essayScore > 0))) && (
         <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
           results.some(r => r.status === 'pending_essay_grading')
             ? 'bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-amber-300 shadow-xs'

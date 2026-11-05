@@ -11,11 +11,12 @@ import {
   KeyRound,
   ShieldCheck,
   ShieldAlert,
-  LogIn
+  LogIn,
+  Eye
 } from 'lucide-react';
-import { Exam, Question, SchoolClass } from '../../types';
+import { Exam, Question, SchoolClass, ExamResult } from '../../types';
 import { useAuth } from '../../context/AuthContext';
-import { startOrCreateAttempt, getClasses, logSystemAction } from '../../services/db';
+import { startOrCreateAttempt, getClasses, getStudentResults, logSystemAction } from '../../services/db';
 
 interface ExamLobbyModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ interface ExamLobbyModalProps {
   questions: Question[];
   onStartExam: (attempt: any) => void;
   onOpenLoginModal?: () => void;
+  onViewPastResult?: (result: ExamResult) => void;
 }
 
 export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
@@ -32,7 +34,8 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
   exam,
   questions,
   onStartExam,
-  onOpenLoginModal
+  onOpenLoginModal,
+  onViewPastResult
 }) => {
   const { user, profile } = useAuth();
   const [isStarting, setIsStarting] = useState(false);
@@ -42,6 +45,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
   const [validationError, setValidationError] = useState('');
   const [lockoutRemaining, setLockoutRemaining] = useState<number | null>(null);
   const [systemClasses, setSystemClasses] = useState<SchoolClass[]>([]);
+  const [pastResult, setPastResult] = useState<ExamResult | null>(null);
 
   const hasSecurityCode = Boolean(exam.examCode && exam.examCode.trim().length > 0);
   const isExamSecured = Boolean(exam.isSecure || (exam.classIds && exam.classIds.length > 0));
@@ -51,6 +55,7 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
     setValidationError('');
     setInputCode('');
     setLockoutRemaining(null);
+    setPastResult(null);
 
     getClasses()
       .then(list => {
@@ -60,7 +65,17 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
         }
       })
       .catch(err => console.warn('Could not load classes for lobby:', err));
-  }, [isOpen]);
+
+    const studentId = profile?.id || user?.uid;
+    if (studentId) {
+      getStudentResults(studentId)
+        .then(results => {
+          const match = results.find(r => r.examId === exam.id);
+          if (match) setPastResult(match);
+        })
+        .catch(err => console.warn('Could not load student past result:', err));
+    }
+  }, [isOpen, exam.id, profile?.id, user?.uid]);
 
   // Handle countdown if locked
   useEffect(() => {
@@ -251,6 +266,42 @@ export const ExamLobbyModal: React.FC<ExamLobbyModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Direct Score View Banner (Chức năng xem điểm thi trực tiếp trong đề thi) */}
+          {pastResult && exam.showScoreAfterExam !== false && (
+            <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex flex-col items-center justify-center shrink-0 shadow-2xs">
+                  <span className="text-xs font-black leading-none">{pastResult.score}</span>
+                  <span className="text-[9px] font-bold opacity-80">/{pastResult.maxScore || 10}đ</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                    Điểm thi gần nhất của bạn: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{pastResult.score} điểm</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {pastResult.status === 'pending_essay_grading'
+                      ? 'Đã tính điểm trắc nghiệm (đang chờ chấm tự luận)'
+                      : 'Đã hoàn tất chấm điểm bài thi'}
+                  </p>
+                </div>
+              </div>
+
+              {onViewPastResult && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onViewPastResult(pastResult);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Xem lại bài làm</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Condition 1: Check Registered Student Account */}
           {isExamSecured && !profile ? (

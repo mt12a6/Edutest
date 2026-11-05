@@ -121,6 +121,7 @@ export const TexExamUploadModal: React.FC<TexExamUploadModalProps> = ({
         questionCount: parsedData.questions.length,
         classIds: selectedClassIds,
         isPublished: true,
+        showScoreAfterExam: true,
         showAnswersAfterExam: true,
         allowReview: true,
         createdBy: user?.uid || profile?.id || 'teacher',

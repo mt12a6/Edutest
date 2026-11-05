@@ -1475,6 +1475,27 @@ export async function toggleExamTabWarning(
   }
 }
 
+export async function toggleExamShowScore(
+  examId: string,
+  showScoreAfterExam: boolean
+): Promise<void> {
+  const current = getLocalExams();
+  const found = current.find(e => e.id === examId);
+  if (found) {
+    found.showScoreAfterExam = showScoreAfterExam;
+    saveLocalExams(current);
+  }
+
+  try {
+    await updateDoc(doc(db, 'exams', examId), {
+      showScoreAfterExam,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.warn('Toggle exam show score note:', err);
+  }
+}
+
 // ==================== ATTEMPTS & RESULTS ====================
 
 export async function startExamAttempt(
