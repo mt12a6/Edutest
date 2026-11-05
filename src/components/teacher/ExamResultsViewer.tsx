@@ -41,12 +41,13 @@ import { ExamPrintModal } from '../common/ExamPrintModal';
 import { OMRScannerModal } from './OMRScannerModal';
 import { WordExportModal } from './WordExportModal';
 import { PowerPointExportModal } from './PowerPointExportModal';
-import { Presentation } from 'lucide-react';
+import { MathRenderer } from '../common/MathRenderer';
 import * as XLSX from 'xlsx';
 
 interface ExamResultsViewerProps {
   exam: Exam;
   classes: SchoolClass[];
+  initialTab?: 'by_class' | 'students' | 'questions' | 'essay_grading';
   onBack: () => void;
 }
 
@@ -74,6 +75,7 @@ interface ClassStat {
 export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   exam,
   classes,
+  initialTab,
   onBack
 }) => {
   const [results, setResults] = useState<ExamResult[]>([]);
@@ -84,9 +86,16 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   
-  // Tab: 'by_class' | 'students' | 'questions'
-  const [activeTab, setActiveTab] = useState<'by_class' | 'students' | 'questions'>('by_class');
+  // Tab: 'by_class' | 'students' | 'questions' | 'essay_grading'
+  const [activeTab, setActiveTab] = useState<'by_class' | 'students' | 'questions' | 'essay_grading'>(initialTab || 'by_class');
   const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
+
+  // Essay grading specific filter states
+  const [essayStatusFilter, setEssayStatusFilter] = useState<'all' | 'pending' | 'graded'>('all');
+  const [gradingScoreInputs, setGradingScoreInputs] = useState<Record<string, number>>({});
+  const [gradingFeedbackInputs, setGradingFeedbackInputs] = useState<Record<string, string>>({});
+  const [isGradingSingleId, setIsGradingSingleId] = useState<string | null>(null);
+  const [isAiGradingSingleId, setIsAiGradingSingleId] = useState<string | null>(null);
 
   // AI Essay Grading State
   const [isAiGradingAll, setIsAiGradingAll] = useState<boolean>(false);
@@ -185,6 +194,75 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
     } finally {
       setIsAiGradingAll(false);
       setGradingProgress('');
+    }
+  };
+
+  // Grade single student essay manually
+  const handleGradeSingleEssay = async (res: ExamResult, score: number, feedback: string) => {
+    setIsGradingSingleId(res.id);
+    try {
+      const updated = await gradeEssaySubmission(
+        res.attemptId || res.id,
+        score,
+        feedback || 'Giáo viên đã chấm bài tự luận',
+        false,
+        'Giáo viên phụ trách'
+      );
+      if (updated) {
+        setResults(prev => prev.map(r => r.id === updated.id ? updated : r));
+      }
+      await fetchData();
+    } catch (err) {
+      console.error('Lỗi lưu điểm tự luận:', err);
+    } finally {
+      setIsGradingSingleId(null);
+    }
+  };
+
+  // Ask AI to grade single student essay
+  const handleAiGradeSingle = async (res: ExamResult) => {
+    const essayQ = questions.find(q => q.type === 'essay' || q.section === 4);
+    if (!essayQ) return;
+
+    setIsAiGradingSingleId(res.id);
+    try {
+      const att = attempts.find(a => a.id === res.attemptId || a.id === res.id);
+      const studentAns = att?.answers?.[essayQ.id] || '';
+
+      const apiRes = await fetch('/api/grade-essay', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: essayQ.prompt,
+          sampleAnswer: essayQ.sampleAnswer,
+          rubric: essayQ.rubric,
+          studentAnswer: studentAns,
+          maxPoints: essayQ.points || 2
+        })
+      });
+      const apiJson = await apiRes.json();
+      if (apiJson.success && apiJson.data) {
+        const score = apiJson.data.score || 0;
+        const feedback = apiJson.data.feedback || 'Bài làm đã được chấm bởi AI';
+        setGradingScoreInputs(prev => ({ ...prev, [res.id]: score }));
+        setGradingFeedbackInputs(prev => ({ ...prev, [res.id]: feedback }));
+
+        const updated = await gradeEssaySubmission(
+          res.attemptId || res.id,
+          score,
+          feedback,
+          true,
+          'Trợ lý khảo thí AI (EduTest)'
+        );
+        if (updated) {
+          setResults(prev => prev.map(r => r.id === updated.id ? updated : r));
+        }
+        await fetchData();
+      }
+    } catch (err) {
+      console.error('Lỗi AI chấm câu tự luận:', err);
+    } finally {
+      setIsAiGradingSingleId(null);
     }
   };
 
@@ -596,41 +674,60 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
       )}
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab('by_class')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
             activeTab === 'by_class'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'bg-white text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>Thống kê theo từng Lớp ({classStats.length} lớp)</span>
+          <span>Thống kê theo Lớp ({classStats.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('students')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
             activeTab === 'students'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'bg-white text-slate-600 hover:bg-slate-100'
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Danh sách toàn bộ Học sinh ({filteredResults.length})</span>
+          <span>Danh sách Học sinh ({filteredResults.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('essay_grading')}
+          className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+            activeTab === 'essay_grading'
+              ? 'bg-purple-600 text-white shadow-xs'
+              : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
+          }`}
+        >
+          <PenTool className="w-4 h-4 text-purple-400" />
+          <span>Chấm Tự luận</span>
+          {results.filter(r => r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy && (r.hasEssay || questions.some(q => q.type === 'essay' || q.section === 4)))).length > 0 && (
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              activeTab === 'essay_grading' ? 'bg-amber-300 text-slate-900' : 'bg-amber-100 text-amber-900'
+            }`}>
+              {results.filter(r => r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy && (r.hasEssay || questions.some(q => q.type === 'essay' || q.section === 4)))).length} chờ chấm
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setActiveTab('questions')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
             activeTab === 'questions'
               ? 'bg-indigo-600 text-white shadow-xs'
               : 'bg-white text-slate-600 hover:bg-slate-100'
           }`}
         >
           <BarChart3 className="w-4 h-4" />
-          <span>Phân tích theo từng Câu hỏi ({questions.length})</span>
+          <span>Phân tích Câu hỏi ({questions.length})</span>
         </button>
       </div>
 
@@ -1105,6 +1202,320 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: CHẤM ĐỀ TỰ LUẬN (GIÁO VIÊN & AI) */}
+      {activeTab === 'essay_grading' && (
+        <div className="space-y-4">
+          {/* Header & Filter Controls Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <PenTool className="w-4 h-4 text-purple-600" />
+                  Khu vực Chấm đề Tự luận (Giáo viên chấm hoặc nhờ AI)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Chấm điểm trực tiếp từng học sinh, cho nhận xét chi tiết, hoặc dùng AI trợ giúp chấm tự động theo đáp án mẫu
+                </p>
+              </div>
+
+              {/* Top Action: Batch AI Grading */}
+              <button
+                type="button"
+                disabled={isAiGradingAll || results.length === 0}
+                onClick={handleAiGradeAllEssays}
+                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{isAiGradingAll ? (gradingProgress || 'AI đang chấm bài...') : `AI Chấm tự động toàn bộ (${results.filter(r => r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy)).length} bài)`}</span>
+              </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2 border-t border-slate-100 flex-wrap">
+              {/* Search by Student Name */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Tìm học sinh theo tên..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Filter by Class */}
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="px-3 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl focus:outline-none text-slate-700 cursor-pointer"
+              >
+                <option value="all">Tất cả các lớp</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+
+              {/* Status filter: All / Pending / Graded */}
+              <div className="inline-flex rounded-xl bg-slate-100 p-0.5 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEssayStatusFilter('all')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    essayStatusFilter === 'all'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Tất cả ({results.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEssayStatusFilter('pending')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    essayStatusFilter === 'pending'
+                      ? 'bg-amber-500 text-slate-950 shadow-2xs'
+                      : 'text-amber-800 hover:text-amber-950'
+                  }`}
+                >
+                  Chờ chấm ({results.filter(r => r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy)).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEssayStatusFilter('graded')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    essayStatusFilter === 'graded'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Đã chấm ({results.filter(r => r.status !== 'pending_essay_grading' && (r.isAiGraded || !!r.essayGradedBy || (r.essayScore !== undefined && r.essayScore > 0))).length})
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Submissions List */}
+          {questions.filter(q => q.type === 'essay' || q.section === 4).length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 space-y-2">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+              <h4 className="font-bold text-sm text-slate-800">Đề thi này không có câu hỏi tự luận</h4>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Đề thi trắc nghiệm đã được hệ thống tự động chấm điểm 100% ngay khi học sinh nộp bài.
+              </p>
+            </div>
+          ) : results.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-slate-200">
+              <p className="text-xs text-slate-500">Chưa có bài thi nào được nộp cho đề này.</p>
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {results
+                .filter(r => {
+                  if (selectedClass !== 'all' && r.classId !== selectedClass) return false;
+                  if (searchQuery && !r.studentName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+                  if (essayStatusFilter === 'pending') {
+                    return r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy);
+                  }
+                  if (essayStatusFilter === 'graded') {
+                    return r.status !== 'pending_essay_grading' && (r.isAiGraded || !!r.essayGradedBy || (r.essayScore !== undefined && r.essayScore > 0));
+                  }
+                  return true;
+                })
+                .map((res) => {
+                  const att = attempts.find(a => a.id === res.attemptId || a.id === res.id);
+                  const essayQuestions = questions.filter(q => q.type === 'essay' || q.section === 4);
+                  const isPending = res.status === 'pending_essay_grading' || (!res.isAiGraded && !res.essayGradedBy);
+                  const currentEssayScore = gradingScoreInputs[res.id] !== undefined ? gradingScoreInputs[res.id] : (res.essayScore || 0);
+                  const currentFeedback = gradingFeedbackInputs[res.id] !== undefined ? gradingFeedbackInputs[res.id] : (res.essayFeedback || '');
+
+                  return (
+                    <div 
+                      key={res.id}
+                      className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-2xs transition-all ${
+                        isPending ? 'border-amber-300 ring-1 ring-amber-200/60' : 'border-slate-200'
+                      }`}
+                    >
+                      {/* Student Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm shrink-0">
+                            {res.studentName ? res.studentName[0].toUpperCase() : 'H'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-bold text-sm text-slate-900 truncate">
+                                {res.studentName}
+                              </h4>
+                              {res.classId && (
+                                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  Lớp {res.classId}
+                                </span>
+                              )}
+                              {isPending ? (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                  ⏳ Chờ chấm tự luận
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  ✅ Đã chấm ({res.essayScore ?? 0}đ) {res.isAiGraded ? '· AI' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Nộp bài: {res.submittedAt ? new Date(res.submittedAt).toLocaleString('vi-VN') : 'Vừa xong'} · Tổng điểm hiện tại: <strong className="text-emerald-700">{res.score}/10</strong>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Open Full Sheet Button */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedGradingResult(res)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shrink-0"
+                          title="Xem toàn bộ đề thi và các câu trắc nghiệm của học sinh"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Xem toàn bộ bài làm</span>
+                        </button>
+                      </div>
+
+                      {/* Essay Questions and Student Answers */}
+                      <div className="pt-3.5 space-y-4">
+                        {essayQuestions.map((eq, qIdx) => {
+                          const studentAnswer = att?.answers?.[eq.id] || '';
+                          const maxPts = eq.points || 2;
+
+                          return (
+                            <div key={eq.id} className="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200/80 space-y-2.5">
+                              {/* Question Prompt */}
+                              <div className="flex items-start justify-between gap-2">
+                                <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 shrink-0">
+                                  Câu hỏi tự luận {essayQuestions.length > 1 ? `#${qIdx + 1}` : ''} ({maxPts} điểm)
+                                </span>
+                                {eq.sampleAnswer && (
+                                  <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    Có đáp án mẫu
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-xs text-slate-800 font-medium leading-relaxed pl-1">
+                                <MathRenderer content={eq.prompt} />
+                              </div>
+
+                              {/* Student's Submitted Answer */}
+                              <div className="mt-2 pt-2 border-t border-slate-200/60">
+                                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                                  Bài làm của học sinh:
+                                </span>
+                                {studentAnswer ? (
+                                  <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-900 leading-relaxed font-sans whitespace-pre-wrap select-text shadow-2xs">
+                                    <MathRenderer content={studentAnswer} />
+                                  </div>
+                                ) : (
+                                  <div className="p-3 bg-white/60 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400 italic">
+                                    (Học sinh không điền câu trả lời cho câu này)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Grading Inputs: Score + Quick Buttons + Feedback */}
+                        <div className="bg-purple-50/50 rounded-xl p-3.5 border border-purple-200/70 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <Award className="w-4 h-4 text-purple-600" />
+                              <span>Cho điểm phần tự luận:</span>
+                            </span>
+
+                            {/* Quick Points Buttons */}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-[10px] font-semibold text-slate-400 mr-1 hidden sm:inline">Nhanh:</span>
+                              {[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0].map(pt => (
+                                <button
+                                  key={pt}
+                                  type="button"
+                                  onClick={() => setGradingScoreInputs(prev => ({ ...prev, [res.id]: pt }))}
+                                  className={`px-2 py-0.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                                    currentEssayScore === pt
+                                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-100/60'
+                                  }`}
+                                >
+                                  {pt}đ
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                            {/* Score Input */}
+                            <div className="sm:col-span-1">
+                              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                                Điểm số (0 - 10):
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={10}
+                                step={0.25}
+                                value={currentEssayScore}
+                                onChange={(e) => setGradingScoreInputs(prev => ({ ...prev, [res.id]: Number(e.target.value) }))}
+                                className="w-full px-3 py-1.5 text-sm font-bold bg-white border border-slate-300 rounded-xl focus:border-purple-600 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Feedback Input */}
+                            <div className="sm:col-span-3">
+                              <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                                Lời nhận xét / Phản hồi của giáo viên:
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Nhập nhận xét về lập luận, bài làm của học sinh..."
+                                value={currentFeedback}
+                                onChange={(e) => setGradingFeedbackInputs(prev => ({ ...prev, [res.id]: e.target.value }))}
+                                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:border-purple-600 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Action Buttons: Save & AI Help */}
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-purple-200/50 flex-wrap">
+                            <button
+                              type="button"
+                              disabled={isAiGradingSingleId === res.id}
+                              onClick={() => handleAiGradeSingle(res)}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-purple-100 text-purple-700 border border-purple-300 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs"
+                              title="Yêu cầu AI phân tích bài làm và tự động đề xuất điểm số & nhận xét"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                              <span>{isAiGradingSingleId === res.id ? 'AI đang phân tích...' : '🤖 Nhờ AI chấm câu này'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isGradingSingleId === res.id}
+                              onClick={() => handleGradeSingleEssay(res, currentEssayScore, currentFeedback)}
+                              className="px-4 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-xs"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>{isGradingSingleId === res.id ? 'Đang lưu...' : '💾 Lưu điểm & Nhận xét'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
         </div>
       )}
 

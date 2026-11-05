@@ -33,7 +33,9 @@ const KATEX_MACROS: Record<string, string> = {
   '\\N': '\\mathbb{N}',
   '\\Z': '\\mathbb{Z}',
   '\\Q': '\\mathbb{Q}',
-  '\\C': '\\mathbb{C}'
+  '\\C': '\\mathbb{C}',
+  '\\widehat': '\\widehat{#1}',
+  '\\overarc': '\\overset{\\frown}{#1}'
 };
 
 /**
@@ -87,24 +89,55 @@ function formatTextDecorations(text: string): string {
 }
 
 /**
- * Auto-wrap un-delimited LaTeX expressions if user forgot $...$
+ * Auto-wrap un-delimited LaTeX expressions if user forgot $...$ or uploaded bare LaTeX
  */
 function autoWrapLatexFormulas(text: string): string {
   if (!text) return '';
   
-  // Wrap known environments
-  let processed = text.replace(
+  let processed = text;
+
+  // 1. Handle TikZ / PSTricks diagrams gracefully so they don't break rendering
+  processed = processed.replace(
+    /\\begin\{(tikzpicture|pspicture)\}[\s\S]*?\\end\{\1\}/gi,
+    '<div class="my-2.5 p-3 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-center text-xs font-semibold text-indigo-700 dark:text-indigo-300">📐 [Hình vẽ minh họa LaTeX TikZ / Đồ thị]</div>'
+  );
+
+  // 2. Transform ex_test custom macros \heva and \hoac
+  processed = processed.replace(/\\heva\{([^{}]+)\}/g, '$\\begin{cases} $1 \\end{cases}$');
+  processed = processed.replace(/\\hoac\{([^{}]+)\}/g, '$\\left[ \\begin{array}{l} $1 \\end{array} \\right.$');
+
+  // 3. Multi-letter vectors: \vec{SB} -> \overrightarrow{SB}
+  processed = processed.replace(/\\vec\{([A-Za-z]{2,})\}/g, '\\overrightarrow{$1}');
+
+  // 4. Wrap math environments if not already enclosed in $ or $$
+  processed = processed.replace(
     /(?<!\$)\\begin\{(aligned|cases|matrix|pmatrix|bmatrix|vmatrix|gathered|array)\}([\s\S]*?)\\end\{\1\}(?!\$)/g,
     '$$$$$&$$$$'
   );
 
-  // If text doesn't contain $ at all, but contains typical math commands
-  if (!processed.includes('$') && /\\(dfrac|tfrac|frac|sqrt|vec|mathbb|sin|cos|tan|cot|lim|int|sum|alpha|beta|gamma|theta|pi|partial|subset|in)\b/.test(processed)) {
-    // If the entire string is basically a formula, wrap it in $...$
-    if (/^[\s\\a-zA-Z0-9_\^\{\}\+\-\*\/\=\(\)\[\]\,\.\<\>\;\:\!]+$/.test(processed)) {
-      return `$${processed.trim()}$`;
-    }
-  }
+  // 5. Wrap \left[ ... \right. or \left( ... \right) if outside math mode
+  processed = processed.replace(
+    /(?<!\$)\\left\[([\s\S]+?)\\right\.(?!\$)/g,
+    '$$$$ \\left[ $1 \\right. $$$$'
+  );
+
+  // 6. Wrap inline LaTeX math commands like \sin x = \dfrac{\sqrt{3}}{2}, \vec{...}, \mathbb{Z} if outside $
+  // Find sequences starting with \command followed by math symbols and wrap in $
+  const mathCommandRegex = /(?<!\$|\\)(\\(?:sin|cos|tan|cot|arcsin|arccos|arctan|dfrac|tfrac|frac|sqrt|vec|overrightarrow|mathbb|mathcal|lim|int|sum|alpha|beta|gamma|Delta|theta|pi|in|notin|subset|cap|cup|ge|le|ne|pm|infty)(?:\{[^{}]*\}|[a-zA-Z0-9_\^=+\-*/()\[\]\,\.\s\\])*?)(?=(?:[\s.,;:?!]|$|\$|[\u00C0-\u1EF9]))/g;
+  
+  // Only process if not inside $...$
+  const segments = processed.split(/(\$\$[\s\S]+?\$\$|\$[^\$\n]+?\$)/g);
+  processed = segments.map((seg, i) => {
+    // Odd indexes are already delimited math
+    if (i % 2 === 1) return seg;
+
+    return seg.replace(mathCommandRegex, (match) => {
+      // Avoid wrapping empty or purely whitespace
+      const trimmed = match.trim();
+      if (!trimmed || trimmed.length <= 1) return match;
+      return `$${trimmed}$`;
+    });
+  }).join('');
 
   return processed;
 }

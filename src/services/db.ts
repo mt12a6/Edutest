@@ -3712,3 +3712,103 @@ export async function saveHomepageSettings(
   return updated;
 }
 
+// ==================== CLASS ATTENDANCE & LAB LOGS ====================
+
+export interface StudentAttendanceItem {
+  studentId: string;
+  studentName: string;
+  status: 'present' | 'late' | 'excused' | 'unexcused';
+  labComputerNumber?: string;
+  notes?: string;
+}
+
+export interface ClassAttendanceRecord {
+  id: string;
+  classId: string;
+  className: string;
+  date: string; // YYYY-MM-DD
+  period: number; // 1 -> 5
+  subjectName: string;
+  lessonTitle: string;
+  lessonType: 'theory' | 'practice_lab';
+  rating: 'excellent' | 'good' | 'average' | 'poor';
+  evaluationNotes: string;
+  homeworkNotes: string;
+  teacherName: string;
+  teacherId?: string;
+  students: StudentAttendanceItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+const ATTENDANCE_STORAGE_KEY = 'edutest_class_attendance_records';
+
+function getLocalAttendanceRecords(): ClassAttendanceRecord[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(ATTENDANCE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalAttendanceRecords(list: ClassAttendanceRecord[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ATTENDANCE_STORAGE_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+export async function getClassAttendanceRecords(classId?: string): Promise<ClassAttendanceRecord[]> {
+  const local = getLocalAttendanceRecords();
+  try {
+    let q = query(collection(db, 'classAttendance'));
+    if (classId && classId !== 'all') {
+      q = query(collection(db, 'classAttendance'), where('classId', '==', classId));
+    }
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const remote = snap.docs.map(d => ({ ...d.data(), id: d.id } as ClassAttendanceRecord));
+      const map = new Map<string, ClassAttendanceRecord>();
+      local.forEach(r => map.set(r.id, r));
+      remote.forEach(r => map.set(r.id, r));
+      const merged = Array.from(map.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      saveLocalAttendanceRecords(merged);
+      return classId && classId !== 'all' ? merged.filter(r => r.classId === classId) : merged;
+    }
+  } catch (err) {
+    console.warn('getClassAttendanceRecords fallback to local:', err);
+  }
+  return classId && classId !== 'all' ? local.filter(r => r.classId === classId) : local;
+}
+
+export async function saveClassAttendanceRecord(
+  data: Omit<ClassAttendanceRecord, 'id'> & { id?: string }
+): Promise<ClassAttendanceRecord> {
+  const id = data.id || `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date().toISOString();
+  const record: ClassAttendanceRecord = {
+    ...data,
+    id,
+    createdAt: data.createdAt || now,
+    updatedAt: now
+  };
+
+  const local = getLocalAttendanceRecords();
+  const nextList = [record, ...local.filter(r => r.id !== id)];
+  saveLocalAttendanceRecords(nextList);
+
+  try {
+    await setDoc(doc(db, 'classAttendance', id), sanitizeForFirestore(record), { merge: true });
+  } catch (err) {
+    console.warn('saveClassAttendanceRecord firestore note:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:attendance_saved', { detail: record }));
+  }
+
+  return record;
+}
+

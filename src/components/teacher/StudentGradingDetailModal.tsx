@@ -47,7 +47,7 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
   attempt,
   onGradedSuccess
 }) => {
-  const essayQuestions = questions.filter(q => q.type === 'essay');
+  const essayQuestions = questions.filter(q => q.type === 'essay' || q.section === 4);
   const studentAnswers = attempt?.answers || (result as any)?.answers || {};
 
   // Multiple essay questions score mapping (questionId -> score)
@@ -304,11 +304,11 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-5 overflow-y-auto animate-in fade-in">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto animate-in fade-in">
+      <div className="bg-white rounded-none sm:rounded-3xl shadow-2xl border-0 sm:border border-slate-200 w-full sm:max-w-4xl h-full sm:h-auto sm:max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95">
         
         {/* Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
               <User className="w-5 h-5" />
