@@ -567,58 +567,79 @@ export const PowerPointExportModal: React.FC<PowerPointExportModalProps> = ({
                   )}
                 </div>
 
-                {/* Prompt in Slide */}
+                {/* Prompt & Content in Slide */}
                 <div className="my-auto py-2">
-                  <div className="p-4 bg-slate-800/90 rounded-xl border border-slate-700/80 text-sm sm:text-base font-bold leading-relaxed text-slate-100">
-                    {latexToUnicodeMath(currentPreviewQuestion?.prompt || '')}
-                  </div>
-
-                  {/* Options or Writing Space in Slide */}
-                  <div className="mt-3">
-                    {currentPreviewQuestion?.type === 'multiple_choice' && currentPreviewQuestion.options ? (
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {(['A', 'B', 'C', 'D'] as const).map(optKey => {
-                          const isCorrect = currentPreviewQuestion.correctOption === optKey;
-                          const showGreen = (previewRevealed || selectedMode === 'answers_always') && selectedMode !== 'questions_only' && isCorrect;
-
-                          return (
-                            <div
-                              key={optKey}
-                              className={`p-2.5 rounded-xl border flex items-center gap-2 transition-all ${
-                                showGreen
-                                  ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
-                                  : 'bg-slate-800 border-slate-700 text-slate-300'
-                              }`}
-                            >
-                              <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${
-                                showGreen ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-white'
-                              }`}>
-                                {optKey}
-                              </span>
-                              <span className="font-medium truncate">
-                                {latexToUnicodeMath(currentPreviewQuestion.options?.[optKey] || '')}
-                              </span>
-                              {showGreen && <span className="ml-auto font-black text-emerald-400">✓</span>}
-                            </div>
-                          );
-                        })}
+                  <div className={currentPreviewQuestion?.imageUrl ? 'grid grid-cols-1 md:grid-cols-12 gap-3 items-start' : ''}>
+                    
+                    {/* Left or Full: Prompt + Options */}
+                    <div className={currentPreviewQuestion?.imageUrl ? 'md:col-span-7 space-y-2.5' : 'space-y-2.5'}>
+                      <div className="p-3 sm:p-4 bg-slate-800/90 rounded-xl border border-slate-700/80 text-xs sm:text-sm font-bold leading-relaxed text-slate-100">
+                        {latexToUnicodeMath(currentPreviewQuestion?.prompt || '')}
                       </div>
-                    ) : (
-                      <div className="p-3.5 rounded-xl border border-dashed border-slate-700 bg-slate-800/40 text-xs text-slate-400">
-                        {selectedMode === 'questions_only' ? (
-                          <div className="text-center py-2 italic">
-                            [KHÔNG GIAN LÀM BÀI: Học sinh trình bày lời giải chi tiết vào khung hoặc giấy thi]
+
+                      {/* Options or Writing Space in Slide */}
+                      <div>
+                        {currentPreviewQuestion?.type === 'multiple_choice' && currentPreviewQuestion.options ? (
+                          <div className={currentPreviewQuestion?.imageUrl ? 'grid grid-cols-1 gap-1.5 text-xs' : 'grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs'}>
+                            {(['A', 'B', 'C', 'D'] as const).map(optKey => {
+                              const isCorrect = currentPreviewQuestion.correctOption === optKey;
+                              const showGreen = (previewRevealed || selectedMode === 'answers_always') && selectedMode !== 'questions_only' && isCorrect;
+
+                              return (
+                                <div
+                                  key={optKey}
+                                  className={`p-2 rounded-xl border flex items-center gap-2 transition-all ${
+                                    showGreen
+                                      ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                                      : 'bg-slate-800 border-slate-700 text-slate-300'
+                                  }`}
+                                >
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                    showGreen ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-white'
+                                  }`}>
+                                    {optKey}
+                                  </span>
+                                  <span className="font-medium truncate text-xs">
+                                    {latexToUnicodeMath(currentPreviewQuestion.options?.[optKey] || '')}
+                                  </span>
+                                  {showGreen && <span className="ml-auto font-black text-emerald-400">✓</span>}
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
-                          <div>
-                            <span className="font-bold text-emerald-400 block mb-1">HƯỚNG DẪN CHẤM &amp; ĐÁP ÁN:</span>
-                            <p className="text-slate-200 leading-relaxed">
-                              {latexToUnicodeMath(currentPreviewQuestion?.sampleAnswer || currentPreviewQuestion?.explanation || 'Đáp án theo thang điểm của giáo viên.')}
-                            </p>
+                          <div className="p-3 rounded-xl border border-dashed border-slate-700 bg-slate-800/40 text-xs text-slate-400">
+                            {selectedMode === 'questions_only' ? (
+                              <div className="text-center py-2 italic text-[11px]">
+                                [KHÔNG GIAN LÀM BÀI: Học sinh trình bày lời giải chi tiết vào khung hoặc giấy thi]
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-bold text-emerald-400 block mb-1 text-xs">HƯỚNG DẪN CHẤM &amp; ĐÁP ÁN:</span>
+                                <p className="text-slate-200 leading-relaxed text-xs">
+                                  {latexToUnicodeMath(currentPreviewQuestion?.sampleAnswer || currentPreviewQuestion?.explanation || 'Đáp án theo thang điểm của giáo viên.')}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Right Column: Question Image (if attached) */}
+                    {currentPreviewQuestion?.imageUrl && (
+                      <div className="md:col-span-5 bg-slate-800/90 rounded-xl border border-slate-700/80 p-2 flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Hình vẽ minh họa</span>
+                        <div className="w-full bg-white rounded-lg p-2 flex items-center justify-center overflow-hidden">
+                          <img 
+                            src={currentPreviewQuestion.imageUrl} 
+                            alt="Hình minh họa" 
+                            className="max-h-44 object-contain" 
+                          />
+                        </div>
+                      </div>
                     )}
+
                   </div>
                 </div>
 

@@ -25,7 +25,7 @@ interface FolderViewProps {
   classes: SchoolClass[];
   onBackToHome: () => void;
   onSelectExamToTake: (exam: Exam, questions?: Question[]) => void;
-  onViewResults?: (exam: Exam) => void;
+  onViewResults?: (exam: Exam, targetTab?: 'by_class' | 'students' | 'questions' | 'essay_grading') => void;
 }
 
 export const FolderView: React.FC<FolderViewProps> = ({

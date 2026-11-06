@@ -62,6 +62,7 @@ function MainApp() {
   const [showWordUpload, setShowWordUpload] = useState<boolean>(false);
   const [editingExamSession, setEditingExamSession] = useState<{ exam: Exam; questions: Question[] } | null>(null);
   const [viewingResultsExam, setViewingResultsExam] = useState<Exam | null>(null);
+  const [viewingResultsTab, setViewingResultsTab] = useState<'by_class' | 'students' | 'questions' | 'essay_grading'>('by_class');
 
   const handleStartEditExam = async (exam: Exam) => {
     try {
@@ -353,8 +354,9 @@ function MainApp() {
               onSelectExamToTake={(exam, questions) => {
                 setLobbyExam({ exam, questions: questions || [] });
               }}
-              onViewResults={(exam) => {
+              onViewResults={(exam, targetTab) => {
                 setViewingResultsExam(exam);
+                setViewingResultsTab(targetTab || 'by_class');
                 navigateTo('/teacher-results', 'teacher-results');
               }}
             />
@@ -363,6 +365,7 @@ function MainApp() {
             <ExamResultsViewer
               exam={viewingResultsExam}
               classes={classes}
+              initialTab={viewingResultsTab}
               onBack={() => {
                 setViewingResultsExam(null);
                 navigateTo('/teacher-exams', 'teacher-exams');
@@ -398,8 +401,9 @@ function MainApp() {
                 setShowWordUpload(true);
               }}
               onEditExam={handleStartEditExam}
-              onViewResults={(exam) => {
+              onViewResults={(exam, targetTab) => {
                 setViewingResultsExam(exam);
+                setViewingResultsTab(targetTab || 'by_class');
                 navigateTo('/teacher-results', 'teacher-results');
               }}
               onRefreshExams={reloadData}

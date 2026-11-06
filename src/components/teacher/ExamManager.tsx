@@ -95,7 +95,7 @@ interface ExamManagerProps {
   subjects: Subject[];
   onOpenWordUpload: () => void;
   onEditExam?: (exam: Exam) => void;
-  onViewResults: (exam: Exam) => void;
+  onViewResults: (exam: Exam, targetTab?: 'by_class' | 'students' | 'questions' | 'essay_grading') => void;
   onRefreshExams: () => void;
 }
 
@@ -606,7 +606,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             <div className="py-1 bg-slate-50/70 rounded-t-xl">
               <button
                 type="button"
-                onClick={() => { setActiveMenuExamId(null); onViewResults(exam); }}
+                onClick={() => { setActiveMenuExamId(null); onViewResults(exam, 'essay_grading'); }}
                 className="w-full px-3.5 py-2 text-left font-bold text-purple-700 hover:bg-purple-100/70 flex items-center gap-2 cursor-pointer transition-colors"
               >
                 <Sparkles className="w-3.5 h-3.5 text-purple-600" />
@@ -1219,7 +1219,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   {/* Chấm đề tự luận (Giáo viên & AI) - Nổi bật màu tím */}
                   <button
                     type="button"
-                    onClick={() => onViewResults(exam)}
+                    onClick={() => onViewResults(exam, 'essay_grading')}
                     className="px-3 py-1.5 min-h-[36px] rounded-xl text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs hover:shadow-xs shrink-0"
                     title="Mở giao diện chấm bài tự luận học sinh & AI chấm tự động"
                   >
@@ -1401,7 +1401,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
-                          onClick={() => onViewResults(exam)}
+                          onClick={() => onViewResults(exam, 'essay_grading')}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-all flex items-center gap-1 shadow-2xs"
                           title="Chấm bài tự luận học sinh & AI chấm tự động"
                         >
@@ -1569,7 +1569,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onViewResults(exam)}
+                      onClick={() => onViewResults(exam, 'essay_grading')}
                       className="p-1.5 rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                       title="Chấm bài tự luận học sinh & AI chấm tự động"
                     >

@@ -2243,11 +2243,6 @@ export async function checkAndSeedInitialData(): Promise<void> {
     // Execute in parallel
     await Promise.allSettled(promises);
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('edutest_initial_seeded_done', 'true');
-    }
-    return;
-
     const seededExamsData: any[] = [
       // ================= KHỐI 1 =================
       {
@@ -3604,6 +3599,84 @@ function seedSampleResults() {
   } catch (e) {
     console.warn('Seed results local note:', e);
   }
+}
+
+/**
+ * Creates realistic sample student essay submissions for an exam
+ * Enables teachers to immediately test and use manual & AI essay grading
+ */
+export async function seedSampleEssaySubmissions(examId: string, questions: Question[]): Promise<ExamResult[]> {
+  const essayQuestions = questions.filter(q => q.type === 'essay' || q.section === 4);
+  const sampleStudents = [
+    {
+      name: 'Nguyễn Văn Minh',
+      email: 'minh.nv@edutest.local',
+      classId: '10A1',
+      answers: essayQuestions.reduce((acc, q) => {
+        acc[q.id] = q.sampleAnswer || `Bước 1: Ta có biểu thức theo giả thiết đề bài.
+Bước 2: Biến đổi tương đương và tính toán ta thu được kết quả chính xác theo yêu cầu.
+Bước 3: Kết luận đầy đủ các trường hợp nghiệm của bài toán.`;
+        return acc;
+      }, {} as Record<string, string>)
+    },
+    {
+      name: 'Trần Thị Thu Hà',
+      email: 'ha.ttt@edutest.local',
+      classId: '10A1',
+      answers: essayQuestions.reduce((acc, q) => {
+        acc[q.id] = `Theo bài ra ta có các dữ kiện ban đầu. Em đã phân tích các giả thiết và tìm được một phần kết quả, nhưng chưa hoàn thiện bước chứng minh cuối cùng.`;
+        return acc;
+      }, {} as Record<string, string>)
+    },
+    {
+      name: 'Lê Hoàng Long',
+      email: 'long.lh@edutest.local',
+      classId: '10A2',
+      answers: essayQuestions.reduce((acc, q) => {
+        acc[q.id] = `Em trình bày tóm tắt: Áp dụng công thức và định lý cơ bản, thu được đáp số cần tìm.`;
+        return acc;
+      }, {} as Record<string, string>)
+    }
+  ];
+
+  const createdResults: ExamResult[] = [];
+
+  for (let i = 0; i < sampleStudents.length; i++) {
+    const s = sampleStudents[i];
+    const attemptId = `att_essay_${Date.now()}_${i + 1}`;
+    const result: ExamResult = {
+      id: attemptId,
+      attemptId,
+      examId,
+      studentId: `std_sample_${i + 1}`,
+      studentName: s.name,
+      studentEmail: s.email,
+      classId: s.classId,
+      score: Number((5.5 + i * 1.5).toFixed(2)),
+      maxScore: 10,
+      correctCount: Math.max(1, questions.length - essayQuestions.length - i),
+      wrongCount: i,
+      unattemptedCount: 0,
+      percentage: Math.round((5.5 + i * 1.5) * 10),
+      submittedAt: new Date(Date.now() - (i + 1) * 1800 * 1000).toISOString(),
+      feedback: 'Bài thi có câu tự luận, đang chờ giáo viên hoặc AI chấm điểm.',
+      tabViolations: i === 2 ? 1 : 0,
+      status: 'pending_essay_grading',
+      hasEssay: true,
+      objectiveScore: Number((5.5 + i * 1.5).toFixed(2)),
+      essayScore: 0,
+      answers: s.answers
+    };
+    saveLocalResult(result);
+    createdResults.push(result);
+    try {
+      await setDoc(doc(db, 'results', attemptId), sanitizeForFirestore(result), { merge: true });
+    } catch {
+      // ignore firestore offline
+    }
+  }
+
+  return createdResults;
 }
 
 // ==================== BACKUP & RESTORE DATA ====================
