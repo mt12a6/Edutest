@@ -195,6 +195,8 @@ export const ClassAttendanceManager: React.FC<ClassAttendanceManagerProps> = ({
         homeworkNotes: homeworkNotes.trim(),
         teacherName: teacherName.trim(),
         teacherId: user?.uid || profile?.id || 'teacher',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         students
       };
 

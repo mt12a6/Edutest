@@ -1838,6 +1838,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           isOpen={Boolean(pptxExportModalExam)}
           exam={pptxExportModalExam}
           onClose={() => setPptxExportModalExam(null)}
+          onOpenWordExport={() => {
+            const targetExam = pptxExportModalExam;
+            setPptxExportModalExam(null);
+            setWordExportModalExam(targetExam);
+          }}
+          onOpenPdfPrint={() => {
+            const targetExam = pptxExportModalExam;
+            setPptxExportModalExam(null);
+            setPrintTarget({ exam: targetExam, mode: 'exam' });
+          }}
         />
       )}
     </div>

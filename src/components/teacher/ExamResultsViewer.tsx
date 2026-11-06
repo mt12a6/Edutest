@@ -23,7 +23,9 @@ import {
   Camera,
   FileText,
   RefreshCw,
-  FileDown
+  FileDown,
+  Presentation,
+  Save
 } from 'lucide-react';
 import { Exam, ExamResult, Question, SchoolClass, ExamAttempt } from '../../types';
 import { 
@@ -1568,6 +1570,14 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
           isOpen={showPptxExportModal}
           exam={exam}
           onClose={() => setShowPptxExportModal(false)}
+          onOpenWordExport={() => {
+            setShowPptxExportModal(false);
+            setShowWordExportModal(true);
+          }}
+          onOpenPdfPrint={() => {
+            setShowPptxExportModal(false);
+            setPrintModeTarget('exam');
+          }}
         />
       )}
     </div>

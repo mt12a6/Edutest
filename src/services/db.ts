@@ -2572,14 +2572,14 @@ export async function checkAndSeedInitialData(): Promise<void> {
       // ================= KHỐI 6 (TOÁN 6 & TIN 6) =================
       {
         exam: {
-          title: 'Kiểm tra Giữa kỳ I Môn Toán Lớp 6 - Số tự nhiên & Tính chia hết',
+          title: 'THI THỬ GIỮA KỲ 1 - TOÁN 6 - ĐỀ 02',
           subjectId: 'MATH',
           subjectName: 'Toán học',
           grade: '6',
-          durationMinutes: 45,
+          durationMinutes: 60,
           passScore: 5,
           maxScore: 10,
-          classIds: ['6A2'],
+          classIds: ['6A1', '6A2'],
           isPublished: true,
           shuffleQuestions: true,
           shuffleOptions: true,
@@ -2589,48 +2589,224 @@ export async function checkAndSeedInitialData(): Promise<void> {
           createdByName: 'Thầy Giáo Toán'
         },
         questions: [
+          // ================= PHẦN I: 12 CÂU TRẮC NGHIỆM =================
           {
             questionNumber: 1,
             type: 'multiple_choice',
-            prompt: 'Tập hợp $A = \\{ x \\in \\mathbb{N} \\mid 5 < x \\le 9 \\}$ gồm các phần tử nào sau đây?',
+            prompt: 'Cho tập hợp $M = \\{ x \\in \\mathbb{N} \\mid 10 < x \\le 15 \\}$. Khẳng định nào sau đây là đúng?',
             options: {
-              A: '$\\{ 5; 6; 7; 8; 9 \\}$',
-              B: '$\\{ 6; 7; 8; 9 \\}$',
-              C: '$\\{ 6; 7; 8 \\}$',
-              D: '$\\{ 5; 6; 7; 8 \\}$'
+              A: '$10 \\in M$',
+              B: '$15 \\in M$',
+              C: '$16 \\in M$',
+              D: '$M = \\{ 11; 12; 13; 14 \\}$'
             },
             correctOption: 'B',
-            explanation: '$x > 5$ nên không lấy số 5; $x \\le 9$ nên lấy đến 9. Các phần tử: 6, 7, 8, 9.',
-            points: 2.5
+            explanation: 'Vì $10 < x \\le 15$ nên $M = \\{ 11; 12; 13; 14; 15 \\}$. Do đó phần tử 15 thuộc $M$.',
+            points: 0.33
           },
           {
             questionNumber: 2,
-            type: 'true_false',
-            prompt: 'Xét tính Đúng hay Sai của các khẳng định về dấu hiệu chia hết sau:',
-            subQuestions: [
-              { key: 'a', text: 'Số có chữ số tận cùng là 0 hoặc 5 thì chia hết cho 5.', correct: true },
-              { key: 'b', text: 'Số chia hết cho 3 thì luôn chia hết cho 9.', correct: false },
-              { key: 'c', text: 'Số $135$ vừa chia hết cho 3 vừa chia hết cho 5.', correct: true },
-              { key: 'd', text: 'Mọi số nguyên tố đều là số lẻ.', correct: false }
-            ],
-            explanation: 'Số 2 là số nguyên tố chẵn duy nhất (ý d sai). Số 12 chia hết cho 3 nhưng không chia hết cho 9 (ý b sai).',
-            points: 2.5
+            type: 'multiple_choice',
+            prompt: 'Số tự nhiên 24 được viết dưới dạng số La Mã là:',
+            options: {
+              A: 'XXVI',
+              B: 'XXIV',
+              C: 'XXIIII',
+              D: 'XIV'
+            },
+            correctOption: 'B',
+            explanation: '24 = 20 + 4 = XX + IV = XXIV.',
+            points: 0.33
           },
           {
             questionNumber: 3,
-            type: 'fill_blank',
-            prompt: 'Điền kết quả: Tính giá trị của biểu thức $B = 2^3 \\cdot 5 - 3^2$.',
-            acceptableAnswers: ['31', '=31'],
-            explanation: '$2^3 = 8$, $8 \\times 5 = 40$; $3^2 = 9$. Kết quả: $40 - 9 = 31$.',
-            points: 2.5
+            type: 'multiple_choice',
+            prompt: 'Kết quả của phép tính $3^4 \\cdot 3^2$ dưới dạng một lũy thừa là:',
+            options: {
+              A: '$3^8$',
+              B: '$9^6$',
+              C: '$3^6$',
+              D: '$3^2$'
+            },
+            correctOption: 'C',
+            explanation: 'Áp dụng quy tắc nhân hai lũy thừa cùng cơ số: $a^m \\cdot a^n = a^{m+n}$. Ta có $3^4 \\cdot 3^2 = 3^{4+2} = 3^6$.',
+            points: 0.33
           },
           {
             questionNumber: 4,
+            type: 'multiple_choice',
+            prompt: 'Giá trị của biểu thức $A = 100 - (30 - 2^3 \\cdot 3)$ là:',
+            options: {
+              A: '$94$',
+              B: '$46$',
+              C: '$76$',
+              D: '$106$'
+            },
+            correctOption: 'A',
+            explanation: '$2^3 \\cdot 3 = 8 \\cdot 3 = 24$. Biểu thức trong ngoặc: $30 - 24 = 6$. Vậy $A = 100 - 6 = 94$.',
+            points: 0.33
+          },
+          {
+            questionNumber: 5,
+            type: 'multiple_choice',
+            prompt: 'Trong các số sau, số nào chia hết cho cả 2; 3; 5 và 9?',
+            options: {
+              A: '$145$',
+              B: '$270$',
+              C: '$350$',
+              D: '$189$'
+            },
+            correctOption: 'B',
+            explanation: 'Số 270 có tận cùng là 0 nên chia hết cho cả 2 và 5. Tổng các chữ số là $2 + 7 + 0 = 9$ chia hết cho 9 nên chia hết cho cả 3 và 9.',
+            points: 0.33
+          },
+          {
+            questionNumber: 6,
+            type: 'multiple_choice',
+            prompt: 'Cho $a \\ \\vdots \\ 6$ và $b \\ \\vdots \\ 6$. Khẳng định nào sau đây là sai?',
+            options: {
+              A: '$(a + b) \\ \\vdots \\ 6$',
+              B: '$(a - b) \\ \\vdots \\ 6$',
+              C: '$(a \\cdot b) \\ \\vdots \\ 36$',
+              D: '$(a + b + 1) \\ \\vdots \\ 6$'
+            },
+            correctOption: 'D',
+            explanation: 'Vì $a$ và $b$ cùng chia hết cho 6 nên $(a + b) \\ \\vdots \\ 6$. Do đó $(a + b + 1)$ chia cho 6 sẽ dư 1, khẳng định D sai.',
+            points: 0.33
+          },
+          {
+            questionNumber: 7,
+            type: 'multiple_choice',
+            prompt: 'Khẳng định nào sau đây là đúng về tập hợp các số nguyên tố?',
+            options: {
+              A: 'Mọi số nguyên tố đều là số lẻ.',
+              B: 'Số 0 và số 1 là các số nguyên tố nhỏ nhất.',
+              C: 'Số 2 là số nguyên tố chẵn duy nhất.',
+              D: 'Tất cả các số chẵn đều là hợp số.'
+            },
+            correctOption: 'C',
+            explanation: 'Số 2 là số nguyên tố chẵn duy nhất. Số 0 và 1 không phải là số nguyên tố.',
+            points: 0.33
+          },
+          {
+            questionNumber: 8,
+            type: 'multiple_choice',
+            prompt: 'Phân tích số 120 ra thừa số nguyên tố ta được kết quả là:',
+            options: {
+              A: '$120 = 2^3 \\cdot 3 \\cdot 5$',
+              B: '$120 = 2 \\cdot 3 \\cdot 4 \\cdot 5$',
+              C: '$120 = 2^2 \\cdot 3^2 \\cdot 5$',
+              D: '$120 = 8 \\cdot 15$'
+            },
+            correctOption: 'A',
+            explanation: '$120 = 8 \\cdot 15 = 2^3 \\cdot 3 \\cdot 5$.',
+            points: 0.33
+          },
+          {
+            questionNumber: 9,
+            type: 'multiple_choice',
+            prompt: 'Ước chung lớn nhất của 24 và 36 là:',
+            options: {
+              A: '$6$',
+              B: '$12$',
+              C: '$24$',
+              D: '$72$'
+            },
+            correctOption: 'B',
+            explanation: '$24 = 2^3 \\cdot 3$, $36 = 2^2 \\cdot 3^2$. $\\text{ƯCLN}(24, 36) = 2^2 \\cdot 3 = 12$.',
+            points: 0.33
+          },
+          {
+            questionNumber: 10,
+            type: 'multiple_choice',
+            prompt: 'Bội chung nhỏ nhất của 12 và 18 là:',
+            options: {
+              A: '$6$',
+              B: '$24$',
+              C: '$36$',
+              D: '$216$'
+            },
+            correctOption: 'C',
+            explanation: '$12 = 2^2 \\cdot 3$, $18 = 2 \\cdot 3^2$. $\\text{BCNN}(12, 18) = 2^2 \\cdot 3^2 = 36$.',
+            points: 0.33
+          },
+          {
+            questionNumber: 11,
+            type: 'multiple_choice',
+            prompt: 'Tam giác đều $ABC$ có độ dài cạnh bằng $6\\text{ cm}$. Chu vi của tam giác đều $ABC$ là:',
+            options: {
+              A: '$12\\text{ cm}$',
+              B: '$18\\text{ cm}$',
+              C: '$36\\text{ cm}$',
+              D: '$9\\text{ cm}$',
+            },
+            correctOption: 'B',
+            explanation: 'Tam giác đều có 3 cạnh bằng nhau nên chu vi là: $3 \\cdot 6 = 18\\text{ cm}$.',
+            points: 0.33
+          },
+          {
+            questionNumber: 12,
+            type: 'multiple_choice',
+            prompt: 'Một hình thoi có độ dài hai đường chéo lần lượt là $8\\text{ cm}$ và $10\\text{ cm}$. Diện tích của hình thoi đó là:',
+            options: {
+              A: '$80\\text{ cm}^2$',
+              B: '$40\\text{ cm}^2$',
+              C: '$36\\text{ cm}^2$',
+              D: '$18\\text{ cm}^2$'
+            },
+            correctOption: 'B',
+            explanation: 'Diện tích hình thoi bằng nửa tích hai đường chéo: $S = \\dfrac{1}{2} \\cdot 8 \\cdot 10 = 40\\text{ cm}^2$.',
+            points: 0.37
+          },
+
+          // ================= PHẦN II: 6 CÂU TỰ LUẬN =================
+          {
+            questionNumber: 13,
             type: 'essay',
-            prompt: 'Tự luận: Tìm số tự nhiên $x$ biết: $3 \\cdot (x - 4) + 12 = 36$. Trình bày chi tiết từng bước biến đổi.',
-            sampleAnswer: '3(x - 4) = 36 - 12 => 3(x - 4) = 24 => x - 4 = 8 => x = 12. Vậy x = 12.',
-            explanation: 'Chuyển vế đổi dấu và tìm thừa số chưa biết.',
-            points: 2.5
+            prompt: 'Thực hiện phép tính một cách hợp lý:\n a) $28 \\cdot 76 + 24 \\cdot 28 - 280$\n b) $150 : [25 \\cdot (18 - 2^4)] + 2024^0$',
+            sampleAnswer: 'a) $28 \\cdot 76 + 24 \\cdot 28 - 280 = 28 \\cdot (76 + 24) - 280 = 28 \\cdot 100 - 280 = 2800 - 280 = 2520$.\n\nb) $18 - 2^4 = 18 - 16 = 2$.\n$25 \\cdot 2 = 50$.\n$150 : 50 = 3$.\n$2024^0 = 1$.\nKết quả: $3 + 1 = 4$.',
+            explanation: 'Áp dụng tính chất phân phối của phép nhân đối với phép cộng và thứ tự thực hiện phép tính trong ngoặc.',
+            points: 1.5
+          },
+          {
+            questionNumber: 14,
+            type: 'essay',
+            prompt: 'Tìm số tự nhiên $x$, biết:\n a) $3 \\cdot (x - 4) + 12 = 36$\n b) $2^{x+1} - 2^x = 32$',
+            sampleAnswer: 'a) $3(x - 4) = 36 - 12 = 24$\n$x - 4 = 24 : 3 = 8$\n$x = 8 + 4 = 12$.\n\nb) $2^x \\cdot 2 - 2^x = 32$\n$2^x \\cdot (2 - 1) = 32$\n$2^x = 32 = 2^5 \\Rightarrow x = 5$.',
+            explanation: 'Vận dụng quy tắc tìm thành phần chưa biết của phép tính và lũy thừa cùng cơ số.',
+            points: 1.5
+          },
+          {
+            questionNumber: 15,
+            type: 'essay',
+            prompt: 'Học sinh khối 6 của một trường THCS khi xếp hàng 12, hàng 15, hàng 18 đều vừa đủ hàng. Biết số học sinh khối 6 trong khoảng từ 300 đến 400 em. Tính số học sinh khối 6 của trường đó.',
+            sampleAnswer: 'Gọi số học sinh khối 6 là $x$ ($x \\in \\mathbb{N}^*$, $300 \\le x \\le 400$).\nVì khi xếp hàng 12, hàng 15, hàng 18 đều vừa đủ nên $x \\ \\vdots \\ 12$, $x \\ \\vdots \\ 15$, $x \\ \\vdots \\ 18$.\nDo đó $x \\in \\text{BC}(12, 15, 18)$.\nTa có: $12 = 2^2 \\cdot 3$, $15 = 3 \\cdot 5$, $18 = 2 \\cdot 3^2$.\n$\\text{BCNN}(12, 15, 18) = 2^2 \\cdot 3^2 \\cdot 5 = 180$.\nBội chung của 180 là: $\\text{BC}(12, 15, 18) = \\{ 0; 180; 360; 540; \\dots \\}$.\nVì $300 \\le x \\le 400$ nên $x = 360$.\nVậy số học sinh khối 6 là 360 học sinh.',
+            explanation: 'Quy bài toán thực tế về tìm bội chung thông qua tìm BCNN.',
+            points: 1.0
+          },
+          {
+            questionNumber: 16,
+            type: 'essay',
+            prompt: 'Một nhóm thiện nguyện chuẩn bị 48 quyển vở và 36 chiếc bút để chia đều vào các túi quà tặng học sinh nghèo. Hỏi có thể chia được nhiều nhất bao nhiêu túi quà? Khi đó, mỗi túi quà có bao nhiêu quyển vở và bao nhiêu chiếc bút?',
+            sampleAnswer: 'Gọi số túi quà chia được nhiều nhất là $a$ ($a \\in \\mathbb{N}^*$).\nTheo đề bài, $48 \\ \\vdots \\ a$ và $36 \\ \\vdots \\ a$ và $a$ lớn nhất nên $a = \\text{ƯCLN}(48, 36)$.\nTa có: $48 = 2^4 \\cdot 3$, $36 = 2^2 \\cdot 3^2$.\n$\\text{ƯCLN}(48, 36) = 2^2 \\cdot 3 = 12$.\nVậy chia được nhiều nhất 12 túi quà.\nKhi đó mỗi túi có:\n$48 : 12 = 4$ (quyển vở)\n$36 : 12 = 3$ (chiếc bút).',
+            explanation: 'Quy bài toán thực tế về tìm ước chung lớn nhất (ƯCLN).',
+            points: 1.0
+          },
+          {
+            questionNumber: 17,
+            type: 'essay',
+            prompt: 'Một mảnh sân trường hình chữ nhật có chiều dài $20\\text{ m}$ và chiều rộng $12\\text{ m}$.\n a) Tính diện tích mảnh sân trường.\n b) Nhà trường dự định lát gạch toàn bộ mảnh sân bằng những viên gạch hình vuông có cạnh $40\\text{ cm}$. Hỏi cần dùng bao nhiêu viên gạch (bỏ qua mép vữa)?',
+            sampleAnswer: 'a) Diện tích mảnh sân trường là:\n$S = 20 \\cdot 12 = 240\\text{ (m}^2\\text{)}$.\n\nb) Đổi $40\\text{ cm} = 0,4\\text{ m}$.\nDiện tích một viên gạch là:\n$0,4 \\cdot 0,4 = 0,16\\text{ (m}^2\\text{)}$.\nSố viên gạch cần dùng là:\n$240 : 0,16 = 1500\\text{ (viên gạch)}$.\nĐáp số: a) $240\\text{ m}^2$; b) $1500$ viên gạch.',
+            explanation: 'Áp dụng công thức tính diện tích hình chữ nhật và diện tích hình vuông, lưu ý đổi cùng đơn vị đo.',
+            points: 1.0
+          },
+          {
+            questionNumber: 18,
+            type: 'essay',
+            prompt: 'Chứng minh rằng với mọi số tự nhiên $n$, biểu thức sau chia hết cho 13:\n $A = 3 + 3^2 + 3^3 + 3^4 + \\dots + 3^{60}$.',
+            sampleAnswer: 'Tổng $A$ có $(60 - 1) + 1 = 60$ số hạng.\nNhóm mỗi nhóm 3 số hạng liên tiếp (vì $60 \\ \\vdots \\ 3$ nên chia thành 20 nhóm vừa đủ):\n$A = (3 + 3^2 + 3^3) + (3^4 + 3^5 + 3^6) + \\dots + (3^{58} + 3^{59} + 3^{60})$\n$A = 3 \\cdot (1 + 3 + 3^2) + 3^4 \\cdot (1 + 3 + 3^2) + \\dots + 3^{58} \\cdot (1 + 3 + 3^2)$\n$A = 3 \\cdot 13 + 3^4 \\cdot 13 + \\dots + 3^{58} \\cdot 13$\n$A = 13 \\cdot (3 + 3^4 + \\dots + 3^{58})$.\nVì $13 \\ \\vdots \\ 13$ nên $A \\ \\vdots \\ 13$ (đpcm).',
+            explanation: 'Sử dụng phương pháp nhóm các số hạng để làm xuất hiện thừa số chung chia hết cho 13.',
+            points: 0.5
           }
         ]
       },

@@ -27,6 +27,15 @@ export const LATEX_UNICODE_MAP: Record<string, string> = {
   '\\approx': '≈',
   '\\equiv': '≡',
   '\\sim': '∼',
+  // Divisibility (Crucial for Grade 6 Math)
+  '\\vdots': '⋮',
+  '\\not\\vdots': '∤',
+  '\\nmid': '∤',
+  '\\mid': '∣',
+  '\\dots': '…',
+  '\\ldots': '…',
+  '\\cdots': '⋯',
+  // Sets and logic
   '\\in': '∈',
   '\\notin': '∉',
   '\\ni': '∋',
@@ -36,6 +45,7 @@ export const LATEX_UNICODE_MAP: Record<string, string> = {
   '\\supseteq': '⊇',
   '\\cup': '∪',
   '\\cap': '∩',
+  '\\setminus': '\\',
   '\\emptyset': '∅',
   '\\forall': '∀',
   '\\exists': '∃',
@@ -45,6 +55,7 @@ export const LATEX_UNICODE_MAP: Record<string, string> = {
   '\\degree': '°',
   '\\ang': '°',
   '\\angle': '∠',
+  '\\widehat': '∠',
   '\\triangle': '△',
   '\\rightarrow': '→',
   '\\Rightarrow': '⇒',
@@ -90,11 +101,15 @@ export const LATEX_UNICODE_MAP: Record<string, string> = {
   // Number sets
   '\\mathbb{R}': 'ℝ',
   '\\mathbb{Z}': 'ℤ',
+  '\\mathbb{N}^*': 'ℕ*',
+  '\\mathbb{N}^\\ast': 'ℕ*',
   '\\mathbb{N}': 'ℕ',
   '\\mathbb{Q}': 'ℚ',
   '\\mathbb{C}': 'ℂ',
+  '\\mathbb{P}': 'ℙ',
   '\\R': 'ℝ',
   '\\Z': 'ℤ',
+  '\\N^*': 'ℕ*',
   '\\N': 'ℕ',
   '\\Q': 'ℚ',
   '\\C': 'ℂ'
@@ -153,11 +168,20 @@ export function latexToUnicodeMath(rawText: string): string {
     .replace(/\$\$([\s\S]+?)\$\$/g, ' $1 ')
     .replace(/\$([^\$]+)\$/g, ' $1 ');
 
+  // Remove TikZ / PSTricks blocks
+  text = text.replace(/\\begin\{(tikzpicture|pspicture)\}[\s\S]*?\\end\{\1\}/gi, '[Hình vẽ minh họa]');
+
+  // Vietnamese custom system of equations macros
+  text = text.replace(/\\heva\{([^{}]+)\}/g, '{ $1 }');
+  text = text.replace(/\\hoac\{([^{}]+)\}/g, '[ $1 ]');
+
   // Replace vectors \vec{AB} -> AB⃗ or vectơ AB
   text = text.replace(/\\vec\{([^}]+)\}/g, '$1⃗');
   text = text.replace(/\\overrightarrow\{([^}]+)\}/g, '$1⃗');
 
-  // Fractions \dfrac{a}{b} -> (a)/(b) or a/b
+  // Simple single-char fractions \dfrac{1}{2} -> 1/2
+  text = text.replace(/\\(?:dfrac|tfrac|cfrac|frac)\{([0-9a-zA-Z])\}\{([0-9a-zA-Z])\}/g, '$1/$2');
+  // General fractions \dfrac{a}{b} -> (a)/(b)
   text = text.replace(/\\(?:dfrac|tfrac|cfrac|frac)\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
 
   // Radicals \sqrt[n]{x} -> ⁿ√(x) or \sqrt{x} -> √(x)
@@ -176,8 +200,9 @@ export function latexToUnicodeMath(rawText: string): string {
   });
   text = text.replace(/_([0-9a-zA-Z])/g, (_, char) => SUBSCRIPT_MAP[char] || `_${char}`);
 
-  // Replace mapped symbols
-  for (const [tex, uni] of Object.entries(LATEX_UNICODE_MAP)) {
+  // Replace mapped symbols (sort longest keys first to prevent partial replacements)
+  const sortedEntries = Object.entries(LATEX_UNICODE_MAP).sort((a, b) => b[0].length - a[0].length);
+  for (const [tex, uni] of sortedEntries) {
     // Escape regex specials
     const escaped = tex.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     text = text.replace(new RegExp(escaped, 'g'), uni);

@@ -232,21 +232,30 @@ export const ExamPrintModal: React.FC<ExamPrintModalProps> = ({
                             </div>
                           )}
 
-                          {q.options && (
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pl-3 pt-0.5">
-                              {(['A', 'B', 'C', 'D'] as const).map(k => (
-                                <div key={k} className="flex items-start gap-1">
-                                  <strong>{k}.</strong>
-                                  <div className="space-y-1">
-                                    <MathRenderer content={q.options?.[k] || ''} inline />
-                                    {q.optionImages?.[k] && (
-                                      <img src={q.optionImages[k]} alt="" className="max-h-20 max-w-full border rounded p-0.5 mt-0.5" />
-                                    )}
+                          {q.options && (() => {
+                            const maxLen = Math.max(...(['A', 'B', 'C', 'D'] as const).map(k => (q.options?.[k] || '').length));
+                            const gridClass = maxLen > 60 
+                              ? 'grid grid-cols-1 gap-1.5 pl-3 pt-0.5'
+                              : maxLen > 30 
+                              ? 'grid grid-cols-1 sm:grid-cols-2 gap-2 pl-3 pt-0.5' 
+                              : 'grid grid-cols-2 sm:grid-cols-4 gap-2 pl-3 pt-0.5';
+
+                            return (
+                              <div className={gridClass}>
+                                {(['A', 'B', 'C', 'D'] as const).map(k => (
+                                  <div key={k} className="flex items-start gap-1">
+                                    <strong className="shrink-0">{k}.</strong>
+                                    <div className="space-y-1">
+                                      <MathRenderer content={q.options?.[k] || ''} inline />
+                                      {q.optionImages?.[k] && (
+                                        <img src={q.optionImages[k]} alt="" className="max-h-20 max-w-full border rounded p-0.5 mt-0.5" />
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -339,8 +348,9 @@ export const ExamPrintModal: React.FC<ExamPrintModalProps> = ({
                             </div>
                           )}
 
-                          <div className="h-28 border border-dashed border-slate-300 rounded p-2 text-xs text-slate-400 italic">
-                            (Phần dành cho học sinh trình bày bài làm tự luận)
+                          <div className="h-32 border border-dashed border-slate-300 rounded p-2 text-xs text-slate-500 italic bg-slate-50/40">
+                            <span className="font-bold text-slate-600 block not-italic text-[11px] mb-1">KHÔNG GIAN LÀM BÀI:</span>
+                            Thí sinh trình bày chi tiết các bước biến đổi và kết luận vào khung này hoặc giấy thi.
                           </div>
                         </div>
                       ))}
