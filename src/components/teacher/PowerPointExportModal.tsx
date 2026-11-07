@@ -131,29 +131,29 @@ export const PowerPointExportModal: React.FC<PowerPointExportModalProps> = ({
 
   const modeOptions: { mode: PptxPresentationMode; title: string; desc: string; badge: string; isRecommended?: boolean }[] = [
     {
-      mode: 'click_reveal',
-      title: 'Hiệu ứng nhấp chuột hiện đáp án đúng (Click-to-Reveal)',
-      desc: 'Lúc đầu chỉ xuất hiện câu hỏi và các phương án neutral. Giáo viên nhấp chuột thì đáp án đúng mới đổi nền xanh và hiện dấu tích ✓.',
-      badge: 'KHUYÊN DÙNG',
+      mode: 'questions_only',
+      title: 'Bản trình chiếu học sinh (Chỉ câu hỏi và phương án, không có đáp án)',
+      desc: 'Bản đề an toàn tuyệt đối khi chiếu kiểm tra trên lớp: Không lộ đáp án, câu tự luận hiển thị "KHÔNG GIAN LÀM BÀI" để học sinh làm bài.',
+      badge: 'BẢN HỌC SINH'
+    },
+    {
+      mode: 'with_explanations',
+      title: 'Bản giáo viên (Hiển thị câu hỏi, đáp án đúng và lời giải chi tiết)',
+      desc: 'Bản đầy đủ dành cho giáo viên: Hiển thị nổi bật đáp án đúng màu xanh và slide lời giải chi tiết, barem biểu điểm cho từng câu.',
+      badge: 'BẢN GIÁO VIÊN',
       isRecommended: true
     },
     {
-      mode: 'questions_only',
-      title: 'Đề thi dành cho học sinh (Bản kiểm tra / Chiếu đề)',
-      desc: 'Bản đề tuyệt đối an toàn: Không lộ đáp án, tự luận hiển thị "KHÔNG GIAN LÀM BÀI" để học sinh làm bài.',
-      badge: 'HỌC SINH'
+      mode: 'click_reveal',
+      title: 'Hiệu ứng nhấp chuột mở đáp án (Click-to-Reveal)',
+      desc: 'Lúc đầu chỉ xuất hiện câu hỏi và các phương án neutral. Giáo viên nhấp chuột thì đáp án đúng mới đổi nền xanh và hiện dấu tích ✓.',
+      badge: 'TƯƠNG TÁC'
     },
     {
       mode: 'answers_always',
       title: 'Hiện sẵn đáp án đúng (Chữa bài trên lớp)',
-      desc: 'Mỗi slide câu hỏi đã được đánh dấu sẵn đáp án đúng màu xanh. Thích hợp chữa bài trực tiếp hoặc gửi học sinh tự học.',
+      desc: 'Mỗi slide câu hỏi đã được đánh dấu sẵn đáp án đúng màu xanh. Thích hợp chữa bài nhanh trên máy chiếu hoặc TV.',
       badge: 'CHỮA BÀI'
-    },
-    {
-      mode: 'with_explanations',
-      title: 'Kèm slide lời giải & Hướng dẫn chấm chi tiết',
-      desc: 'Mỗi câu hỏi bổ sung thêm slide hướng dẫn chấm và các bước giải chi tiết từng bước.',
-      badge: 'CHI TIẾT'
     },
     {
       mode: 'answers_only',

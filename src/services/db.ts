@@ -1673,39 +1673,87 @@ export async function submitExamAttempt(
       const list = JSON.parse(rawAttempts);
       if (Array.isArray(list)) {
         const idx = list.findIndex(a => a.id === attemptId);
+        const updatedAttemptEntry = {
+          ...(idx !== -1 ? list[idx] : {}),
+          id: attemptId,
+          examId: exam.id,
+          examTitle: exam.title,
+          subjectName: exam.subjectName,
+          studentId: student.id,
+          studentEmail: student.email,
+          studentName: student.displayName,
+          classId: student.classIds?.[0] || '10A1',
+          status: 'submitted',
+          submittedAt: nowStr,
+          answers,
+          score: breakdown.scaledScore,
+          maxScore: exam.maxScore || 10,
+          answeredCount: Object.keys(answers).length,
+          tabViolations
+        };
         if (idx !== -1) {
-          list[idx] = {
-            ...list[idx],
-            status: 'submitted',
-            submittedAt: nowStr,
-            answers,
-            score: breakdown.scaledScore,
-            answeredCount: Object.keys(answers).length,
-            tabViolations
-          };
-          localStorage.setItem('edutest_custom_attempts', JSON.stringify(list));
+          list[idx] = updatedAttemptEntry;
+        } else {
+          list.unshift(updatedAttemptEntry as any);
         }
+        localStorage.setItem('edutest_custom_attempts', JSON.stringify(list));
       }
+    } else {
+      const newAttemptEntry = {
+        id: attemptId,
+        examId: exam.id,
+        examTitle: exam.title,
+        subjectName: exam.subjectName,
+        studentId: student.id,
+        studentEmail: student.email,
+        studentName: student.displayName,
+        classId: student.classIds?.[0] || '10A1',
+        status: 'submitted',
+        submittedAt: nowStr,
+        answers,
+        score: breakdown.scaledScore,
+        maxScore: exam.maxScore || 10,
+        answeredCount: Object.keys(answers).length,
+        tabViolations
+      };
+      localStorage.setItem('edutest_custom_attempts', JSON.stringify([newAttemptEntry]));
     }
   } catch (e) {
     console.warn('Update local custom attempts note:', e);
   }
 
-  // Save to Firestore
+  // Save to Firestore with setDoc merge: true (never fails with NOT_FOUND)
   try {
-    await updateDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore({
+    await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore({
+      id: attemptId,
+      examId: exam.id,
+      examTitle: exam.title,
+      subjectName: exam.subjectName,
+      studentId: student.id,
+      studentName: student.displayName,
+      studentEmail: student.email,
+      classId: student.classIds?.[0] || '10A1',
       status: 'submitted',
       submittedAt: nowStr,
       answers,
       score: breakdown.scaledScore,
+      maxScore: exam.maxScore || 10,
       answeredCount: Object.keys(answers).length,
       lastSavedAt: nowStr,
       tabViolations
-    }));
+    }), { merge: true });
 
-    await setDoc(doc(db, 'results', attemptId), sanitizeForFirestore(result));
+    await setDoc(doc(db, 'results', attemptId), sanitizeForFirestore(result), { merge: true });
+    invalidateResultsCache();
   } catch (err) {
     console.warn('Submit exam attempt Firestore note:', err);
+  }
+
+  // Dispatch global event so all open views immediately update
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:score_updated', {
+      detail: { result, examId: exam.id }
+    }));
   }
 
   return result;
@@ -2104,14 +2152,92 @@ export async function getStudentAttempts(studentId: string): Promise<ExamAttempt
   }
 }
 
-export async function getAttemptsForExam(examId: string): Promise<ExamAttempt[]> {
-  const collectionPath = 'attempts';
+export async function getAttemptById(attemptId: string): Promise<ExamAttempt | null> {
+  // 1. Check local storage
   try {
-    const q = query(collection(db, collectionPath), where('examId', '==', examId));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ ...d.data(), id: d.id } as ExamAttempt));
+    const raw = localStorage.getItem('edutest_custom_attempts');
+    if (raw) {
+      const list: ExamAttempt[] = JSON.parse(raw);
+      const found = list.find(a => a.id === attemptId);
+      if (found) return found;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // 2. Check Firestore
+  try {
+    const snap = await getDoc(doc(db, 'attempts', attemptId));
+    if (snap.exists()) {
+      return { ...snap.data(), id: snap.id } as ExamAttempt;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return null;
+}
+
+export async function getAllAttempts(): Promise<ExamAttempt[]> {
+  const localList: ExamAttempt[] = [];
+  try {
+    const raw = localStorage.getItem('edutest_custom_attempts');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localList.push(...parsed);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const snap = await getDocs(collection(db, 'attempts'));
+    const firestoreAttempts = snap.docs.map(d => ({ ...d.data(), id: d.id } as ExamAttempt));
+    const map = new Map<string, ExamAttempt>();
+    localList.forEach(a => map.set(a.id, a));
+    firestoreAttempts.forEach(a => {
+      const existing = map.get(a.id);
+      if (!existing || (a.answers && Object.keys(a.answers).length >= Object.keys(existing.answers || {}).length)) {
+        map.set(a.id, a);
+      }
+    });
+    return Array.from(map.values());
   } catch {
-    return [];
+    return localList;
+  }
+}
+
+export async function getAttemptsForExam(examId: string): Promise<ExamAttempt[]> {
+  const localList: ExamAttempt[] = [];
+  try {
+    const raw = localStorage.getItem('edutest_custom_attempts');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        localList.push(...parsed.filter((a: any) => a.examId === examId));
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  try {
+    const q = query(collection(db, 'attempts'), where('examId', '==', examId));
+    const snap = await getDocs(q);
+    const firestoreAttempts = snap.docs.map(d => ({ ...d.data(), id: d.id } as ExamAttempt));
+    const map = new Map<string, ExamAttempt>();
+    localList.forEach(a => map.set(a.id, a));
+    firestoreAttempts.forEach(a => {
+      const existing = map.get(a.id);
+      if (!existing || (a.answers && Object.keys(a.answers).length >= Object.keys(existing.answers || {}).length)) {
+        map.set(a.id, a);
+      }
+    });
+    return Array.from(map.values());
+  } catch {
+    return localList;
   }
 }
 

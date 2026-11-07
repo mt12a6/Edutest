@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Exam, Question, ExamResult, ExamAttempt } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
-import { gradeEssaySubmission, updateExamResultScore, getAllUsers } from '../../services/db';
+import { gradeEssaySubmission, updateExamResultScore, getAllUsers, getAttemptById } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { 
   isMultipleChoiceCorrect as checkMCCorrect, 
@@ -48,7 +48,29 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
   onGradedSuccess
 }) => {
   const essayQuestions = questions.filter(q => q.type === 'essay' || q.section === 4);
-  const studentAnswers = attempt?.answers || (result as any)?.answers || {};
+
+  // Robust student answers loading: attempts, result.answers, or async fallback
+  const [loadedAnswers, setLoadedAnswers] = useState<Record<string, any>>(() => {
+    return attempt?.answers || (result as any)?.answers || {};
+  });
+
+  useEffect(() => {
+    const current = attempt?.answers || (result as any)?.answers;
+    if (current && Object.keys(current).length > 0) {
+      setLoadedAnswers(current);
+    } else {
+      const targetId = result.attemptId || result.id;
+      if (targetId) {
+        getAttemptById(targetId).then(att => {
+          if (att?.answers && Object.keys(att.answers).length > 0) {
+            setLoadedAnswers(att.answers);
+          }
+        }).catch(() => {});
+      }
+    }
+  }, [attempt, result]);
+
+  const studentAnswers = loadedAnswers;
 
   // Multiple essay questions score mapping (questionId -> score)
   const [essayScores, setEssayScores] = useState<Record<string, number>>(() => {
@@ -540,21 +562,21 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
                           <span className="font-bold text-slate-700 block">Bài làm của học sinh:</span>
                           {!hasAnswered ? (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-                              Chưa trả lời
+                              Chưa làm câu này
                             </span>
                           ) : (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              Đã nộp bài ({studentAns.length} ký tự)
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Đã nộp bài ({studentAns.split(/\s+/).filter(Boolean).length} từ • {studentAns.length} ký tự)
                             </span>
                           )}
                         </div>
 
                         {hasAnswered ? (
-                          <div className="p-3.5 bg-slate-50/70 rounded-xl border-2 border-indigo-200 text-slate-900 leading-relaxed font-mono whitespace-pre-line text-xs min-h-[70px]">
+                          <div className="p-4 bg-slate-50/80 rounded-2xl border-2 border-indigo-300 text-slate-900 leading-relaxed font-sans whitespace-pre-wrap text-sm min-h-[90px] shadow-2xs">
                             {studentAns}
                           </div>
                         ) : (
-                          <div className="p-3.5 bg-rose-50/50 rounded-xl border border-dashed border-rose-300 text-rose-700 text-xs italic">
+                          <div className="p-4 bg-rose-50/50 rounded-2xl border border-dashed border-rose-300 text-rose-700 text-xs italic">
                             (Học sinh để trống câu này, không nhập bài làm)
                           </div>
                         )}
@@ -796,7 +818,11 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
 
                       {/* Status badge */}
                       {qType === 'multiple_choice' && (
-                        isMultipleChoiceCorrect(q) ? (
+                        !studentAnswers[q.id] ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            Chưa trả lời (0đ)
+                          </span>
+                        ) : isMultipleChoiceCorrect(q) ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                             <Check className="w-3.5 h-3.5" /> Đúng (+{q.points || 1}đ)
                           </span>
@@ -840,7 +866,7 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
 
                     {/* DẠNG 1: MULTIPLE CHOICE */}
                     {qType === 'multiple_choice' && q.options && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                         {(['A', 'B', 'C', 'D'] as const).map(key => {
                           const text = q.options?.[key];
                           if (!text && text !== '0') return null;
@@ -848,11 +874,16 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
                           const isChosen = studentAnswers[q.id] === key;
 
                           let style = 'bg-slate-50 border-slate-200 text-slate-700';
-                          if (isCorrect) style = 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold';
-                          else if (isChosen && !isCorrect) style = 'bg-rose-50 border-rose-300 text-rose-950 font-semibold';
+                          if (isCorrect && isChosen) {
+                            style = 'bg-emerald-100/80 border-2 border-emerald-500 text-emerald-950 font-bold shadow-2xs';
+                          } else if (isCorrect) {
+                            style = 'bg-emerald-50 border-2 border-emerald-400 text-emerald-950 font-bold';
+                          } else if (isChosen) {
+                            style = 'bg-rose-100/80 border-2 border-rose-500 text-rose-950 font-bold shadow-2xs';
+                          }
 
                           return (
-                            <div key={key} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${style}`}>
+                            <div key={key} className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${style}`}>
                               <div className="flex items-center gap-2">
                                 <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] ${
                                   isCorrect ? 'bg-emerald-600 text-white' : isChosen ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-700'
@@ -861,8 +892,21 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
                                 </span>
                                 <span><MathRenderer content={text} inline /></span>
                               </div>
-                              {isCorrect && <span className="text-[10px] font-bold text-emerald-700 uppercase">Đáp án đúng</span>}
-                              {isChosen && !isCorrect && <span className="text-[10px] font-bold text-rose-600 uppercase">Học sinh chọn</span>}
+                              {isChosen && isCorrect && (
+                                <span className="text-[10px] font-extrabold text-emerald-900 bg-emerald-200 px-2 py-0.5 rounded-full uppercase border border-emerald-400 flex items-center gap-1 shrink-0">
+                                  ✓ Học sinh chọn (ĐÚNG)
+                                </span>
+                              )}
+                              {isChosen && !isCorrect && (
+                                <span className="text-[10px] font-extrabold text-rose-900 bg-rose-200 px-2 py-0.5 rounded-full uppercase border border-rose-400 flex items-center gap-1 shrink-0">
+                                  ✗ Học sinh chọn (SAI)
+                                </span>
+                              )}
+                              {!isChosen && isCorrect && (
+                                <span className="text-[10px] font-bold text-emerald-700 uppercase shrink-0">
+                                  Đáp án đúng
+                                </span>
+                              )}
                             </div>
                           );
                         })}

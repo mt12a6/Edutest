@@ -7,6 +7,7 @@ import { HomeLanding } from './components/home/HomeLanding';
 import { WordExamUploadModal } from './components/teacher/WordExamUploadModal';
 import { ExamManager } from './components/teacher/ExamManager';
 import { ExamResultsViewer } from './components/teacher/ExamResultsViewer';
+import { StudentSubmissionsManager } from './components/teacher/StudentSubmissionsManager';
 import { AnalyticsDashboard } from './components/analytics/AnalyticsDashboard';
 import { LiveExamMonitor } from './components/teacher/LiveExamMonitor';
 
@@ -155,7 +156,7 @@ function MainApp() {
     // 3. Known static tabs (/home, /teacher-exams, etc.)
     const cleanTab = pathname.replace(/^\//, '').replace(/\/+$/, '');
     const validTabs = [
-      'home', 'teacher-exams', 'teacher-results', 'teacher-live', 
+      'home', 'teacher-exams', 'teacher-submissions', 'teacher-results', 'teacher-live', 
       'student-exams', 'student-history', 
       'admin-users', 'admin-classes', 'admin-logs', 'admin-backup'
     ];
@@ -434,6 +435,16 @@ function MainApp() {
                 </button>
               </div>
             )
+          ) : currentTab === 'teacher-submissions' ? (
+            <StudentSubmissionsManager
+              exams={exams}
+              classes={classes}
+              onSelectExam={(exam) => {
+                setViewingResultsExam(exam);
+                setViewingResultsTab('students');
+                navigateTo('/teacher-results', 'teacher-results');
+              }}
+            />
           ) : currentTab === 'teacher-results' ? (
             <AnalyticsDashboard
               exams={exams}

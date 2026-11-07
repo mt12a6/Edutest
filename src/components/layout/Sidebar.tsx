@@ -70,6 +70,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             </button>
 
             <button 
+              onClick={() => onTabChange('teacher-submissions')}
+              className={navItemClass('teacher-submissions')}
+            >
+              <Users className="w-4 h-4 text-indigo-500" />
+              <span>Bài làm Học sinh</span>
+            </button>
+
+            <button 
               onClick={() => {
                 if (onOpenWordUpload) {
                   onOpenWordUpload();

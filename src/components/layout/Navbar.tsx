@@ -544,6 +544,15 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                 <span>Quản lý Đề thi</span>
               </button>
               <button
+                onClick={() => { onTabChange('teacher-submissions'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'teacher-submissions' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Users className="w-4 h-4 text-indigo-500" />
+                <span>Bài làm Học sinh</span>
+              </button>
+              <button
                 onClick={() => { onTabChange('teacher-results'); setMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
                   currentTab === 'teacher-results' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
