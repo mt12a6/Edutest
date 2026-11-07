@@ -89,8 +89,26 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   
-  // Tab: 'by_class' | 'students' | 'questions' | 'essay_grading'
-  const [activeTab, setActiveTab] = useState<'by_class' | 'students' | 'questions' | 'essay_grading'>(initialTab || 'by_class');
+  // View mode customization: 'elementary' (clean, essential, no complex statistics) vs 'advanced' (full secondary/high school metrics)
+  const [viewMode, setViewMode] = useState<'elementary' | 'advanced'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('edutest_results_view_mode');
+      if (saved === 'elementary' || saved === 'advanced') return saved;
+    }
+    const gradeNum = parseInt(String(exam.grade || ''), 10);
+    if (!isNaN(gradeNum) && gradeNum <= 5) return 'elementary';
+    return 'elementary'; // default to elementary / simple mode as requested by user
+  });
+
+  const handleSetViewMode = (mode: 'elementary' | 'advanced') => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('edutest_results_view_mode', mode);
+    }
+  };
+
+  // Tab: 'students' (Bài làm học sinh - mặc định) | 'essay_grading' | 'by_class' | 'questions'
+  const [activeTab, setActiveTab] = useState<'by_class' | 'students' | 'questions' | 'essay_grading'>(initialTab || 'students');
   const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
 
   // Essay grading specific filter states
@@ -748,55 +766,130 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
         </div>
       </div>
 
-      {/* Global Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-slate-500">Số bài đã nộp</span>
-            <Users className="w-4 h-4 text-indigo-500" />
+      {/* View Mode Customization Bar (Tiểu học vs THCS/THPT) */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 sm:p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <p className="text-2xl font-black text-slate-900">{totalSubmissions}</p>
-          <p className="text-[11px] text-slate-500 mt-1">Học sinh hoàn thành</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-xs uppercase tracking-wider text-indigo-300">Tùy biến hiển thị kết quả</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white font-bold">
+                {viewMode === 'elementary' ? 'Đang dùng: Cấp 1 / Cơ bản' : 'Đang dùng: Cấp 2, 3 / Nâng cao'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              {viewMode === 'elementary'
+                ? 'Giao diện tinh gọn, không rối mắt: Ưu tiên xem bài làm học sinh (cả trắc nghiệm & tự luận), ẩn chỉ số phức tạp.'
+                : 'Đầy đủ dữ liệu chuyên sâu: 4 phần thi (TN, Đ/S, Điền khuyết, Tự luận), cảnh báo tab, phổ điểm 4 mức.'}
+            </p>
+          </div>
         </div>
 
-        <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-slate-500">Điểm trung bình</span>
-            <TrendingUp className="w-4 h-4 text-emerald-500" />
-          </div>
-          <p className="text-2xl font-black text-emerald-600">{avgScore} <span className="text-xs font-normal text-slate-400">/ 10</span></p>
-          <p className="text-[11px] text-slate-500 mt-1">Toàn bộ các lớp</p>
-        </div>
-
-        <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-slate-500">Điểm cao nhất / thấp nhất</span>
-            <Award className="w-4 h-4 text-amber-500" />
-          </div>
-          <p className="text-2xl font-black text-slate-900">
-            {maxScoreAchieved} <span className="text-xs text-slate-400">/ {minScoreAchieved}</span>
-          </p>
-          <p className="text-[11px] text-slate-500 mt-1">Khoảng phổ điểm</p>
-        </div>
-
-        <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-slate-500">Tỷ lệ đạt chuẩn</span>
-            <CheckCircle2 className="w-4 h-4 text-teal-500" />
-          </div>
-          <p className="text-2xl font-black text-slate-900">{passRate}%</p>
-          <p className="text-[11px] text-emerald-600 mt-1 font-semibold">{passCount} thí sinh ≥ 5.0đ</p>
-        </div>
-
-        <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-xs font-semibold text-slate-500">Vi phạm chuyển tab</span>
-            <ShieldAlert className="w-4 h-4 text-rose-500" />
-          </div>
-          <p className="text-2xl font-black text-rose-600">{totalTabViolations}</p>
-          <p className="text-[11px] text-slate-500 mt-1">Cảnh báo chống gian lận</p>
+        <div className="flex items-center gap-2 bg-slate-800/80 p-1 rounded-xl border border-slate-700/80 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleSetViewMode('elementary')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              viewMode === 'elementary'
+                ? 'bg-amber-400 text-slate-950 shadow-sm'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            <span>🎒</span>
+            <span>Chế độ Tiểu học (Cơ bản)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetViewMode('advanced')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              viewMode === 'advanced'
+                ? 'bg-indigo-500 text-white shadow-sm'
+                : 'text-slate-300 hover:text-white'
+            }`}
+          >
+            <span>📊</span>
+            <span>Chế độ Nâng cao (THCS - THPT)</span>
+          </button>
         </div>
       </div>
+
+      {/* Global Metrics Row - Adaptive according to viewMode */}
+      {viewMode === 'elementary' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-slate-500 block mb-1">Số bài thi đã nộp</span>
+              <p className="text-3xl font-black text-slate-900">{totalSubmissions} <span className="text-sm font-normal text-slate-400">học sinh</span></p>
+              <p className="text-xs text-slate-500 mt-1">Đã hoàn thành và nộp bài</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Users className="w-6 h-6" />
+            </div>
+          </div>
+
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+            <div>
+              <span className="text-xs font-semibold text-slate-500 block mb-1">Điểm trung bình toàn bài</span>
+              <p className="text-3xl font-black text-emerald-600">{avgScore} <span className="text-sm font-normal text-slate-400">/ 10</span></p>
+              <p className="text-xs text-emerald-700 font-semibold mt-1">Tỷ lệ đạt chuẩn: {passRate}% ({passCount}/{totalSubmissions} em)</p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-xs font-semibold text-slate-500">Số bài đã nộp</span>
+              <Users className="w-4 h-4 text-indigo-500" />
+            </div>
+            <p className="text-2xl font-black text-slate-900">{totalSubmissions}</p>
+            <p className="text-[11px] text-slate-500 mt-1">Học sinh hoàn thành</p>
+          </div>
+
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-xs font-semibold text-slate-500">Điểm trung bình</span>
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+            </div>
+            <p className="text-2xl font-black text-emerald-600">{avgScore} <span className="text-xs font-normal text-slate-400">/ 10</span></p>
+            <p className="text-[11px] text-slate-500 mt-1">Toàn bộ các lớp</p>
+          </div>
+
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-xs font-semibold text-slate-500">Điểm cao nhất / thấp nhất</span>
+              <Award className="w-4 h-4 text-amber-500" />
+            </div>
+            <p className="text-2xl font-black text-slate-900">
+              {maxScoreAchieved} <span className="text-xs text-slate-400">/ {minScoreAchieved}</span>
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">Khoảng phổ điểm</p>
+          </div>
+
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-xs font-semibold text-slate-500">Tỷ lệ đạt chuẩn</span>
+              <CheckCircle2 className="w-4 h-4 text-teal-500" />
+            </div>
+            <p className="text-2xl font-black text-slate-900">{passRate}%</p>
+            <p className="text-[11px] text-emerald-600 mt-1 font-semibold">{passCount} thí sinh ≥ 5.0đ</p>
+          </div>
+
+          <div className="p-5 bg-white rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center justify-between text-slate-400 mb-2">
+              <span className="text-xs font-semibold text-slate-500">Vi phạm chuyển tab</span>
+              <ShieldAlert className="w-4 h-4 text-rose-500" />
+            </div>
+            <p className="text-2xl font-black text-rose-600">{totalTabViolations}</p>
+            <p className="text-[11px] text-slate-500 mt-1">Cảnh báo chống gian lận</p>
+          </div>
+        </div>
+      )}
 
       {/* AI Essay Grading Notice & Action Banner */}
       {(questions.some(q => q.type === 'essay' || q.section === 4) || results.some(r => r.hasEssay || r.status === 'pending_essay_grading' || (r.essayScore !== undefined && r.essayScore > 0))) && (
@@ -865,27 +958,15 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
       {/* Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-none">
         <button
-          onClick={() => setActiveTab('by_class')}
-          className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
-            activeTab === 'by_class'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Thống kê theo Lớp ({classStats.length})</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('students')}
           className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
             activeTab === 'students'
               ? 'bg-indigo-600 text-white shadow-xs'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
+              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Danh sách Học sinh ({filteredResults.length})</span>
+          <span>📄 Danh sách Học sinh & Bài làm ({filteredResults.length})</span>
         </button>
 
         <button
@@ -897,7 +978,7 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
           }`}
         >
           <PenTool className="w-4 h-4 text-purple-400" />
-          <span>Chấm Tự luận</span>
+          <span>✍️ Chấm Tự luận</span>
           {results.filter(r => r.status === 'pending_essay_grading' || (!r.isAiGraded && !r.essayGradedBy && (r.hasEssay || questions.some(q => q.type === 'essay' || q.section === 4)))).length > 0 && (
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
               activeTab === 'essay_grading' ? 'bg-amber-300 text-slate-900' : 'bg-amber-100 text-amber-900'
@@ -908,15 +989,27 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveTab('by_class')}
+          className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+            activeTab === 'by_class'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>📊 Thống kê theo Lớp ({classStats.length})</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('questions')}
           className={`px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
             activeTab === 'questions'
               ? 'bg-indigo-600 text-white shadow-xs'
-              : 'bg-white text-slate-600 hover:bg-slate-100'
+              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
           }`}
         >
           <BarChart3 className="w-4 h-4" />
-          <span>Phân tích Câu hỏi ({questions.length})</span>
+          <span>📈 Phân tích Câu hỏi ({questions.length})</span>
         </button>
       </div>
 
@@ -1015,69 +1108,86 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                       </div>
                     </div>
 
-                    {/* Phổ điểm thanh tỷ lệ */}
-                    {stat.totalSubmissions > 0 ? (
-                      <div className="space-y-1.5 pt-1">
-                        <div className="flex items-center justify-between text-[11px] text-slate-600 font-semibold">
-                          <span>Phổ điểm lớp:</span>
-                          <span className="text-slate-400">
-                            Giỏi: {stat.goodCount} • Khá: {stat.fairCount} • TB: {stat.averageCount} • Yếu: {stat.poorCount}
-                          </span>
-                        </div>
-                        {/* Progress Bar with 4 buckets */}
-                        <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
-                          {stat.goodCount > 0 && (
-                            <div 
-                              style={{ width: `${(stat.goodCount / stat.totalSubmissions) * 100}%` }} 
-                              className="bg-emerald-500 hover:opacity-90"
-                              title={`Giỏi (≥8đ): ${stat.goodCount} em`}
-                            />
-                          )}
-                          {stat.fairCount > 0 && (
-                            <div 
-                              style={{ width: `${(stat.fairCount / stat.totalSubmissions) * 100}%` }} 
-                              className="bg-sky-500 hover:opacity-90"
-                              title={`Khá (6.5-7.9đ): ${stat.fairCount} em`}
-                            />
-                          )}
-                          {stat.averageCount > 0 && (
-                            <div 
-                              style={{ width: `${(stat.averageCount / stat.totalSubmissions) * 100}%` }} 
-                              className="bg-amber-400 hover:opacity-90"
-                              title={`Trung bình (5-6.4đ): ${stat.averageCount} em`}
-                            />
-                          )}
-                          {stat.poorCount > 0 && (
-                            <div 
-                              style={{ width: `${(stat.poorCount / stat.totalSubmissions) * 100}%` }} 
-                              className="bg-rose-500 hover:opacity-90"
-                              title={`Yếu (<5đ): ${stat.poorCount} em`}
-                            />
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Giỏi (≥8)
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-sky-500 inline-block"></span> Khá (6.5-7.9)
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> TB (5-6.4)
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Yếu (&lt;5)
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 italic text-center py-2">
-                        Chưa có học sinh nào của lớp nộp bài thi này.
-                      </p>
+                    {/* Direct Button to View Student Exam Papers for this Class */}
+                    {stat.totalSubmissions > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedClass(stat.className);
+                          setActiveTab('students');
+                        }}
+                        className="w-full py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Xem toàn bộ bài làm lớp {stat.className} ({stat.totalSubmissions} bài)</span>
+                      </button>
                     )}
 
-                    {/* Tab Violations alert */}
-                    {stat.tabViolationsCount > 0 && (
+                    {/* Phổ điểm thanh tỷ lệ - Only shown in advanced mode */}
+                    {viewMode === 'advanced' && (
+                      stat.totalSubmissions > 0 ? (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-600 font-semibold">
+                            <span>Phổ điểm lớp:</span>
+                            <span className="text-slate-400">
+                              Giỏi: {stat.goodCount} • Khá: {stat.fairCount} • TB: {stat.averageCount} • Yếu: {stat.poorCount}
+                            </span>
+                          </div>
+                          {/* Progress Bar with 4 buckets */}
+                          <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                            {stat.goodCount > 0 && (
+                              <div 
+                                style={{ width: `${(stat.goodCount / stat.totalSubmissions) * 100}%` }} 
+                                className="bg-emerald-500 hover:opacity-90"
+                                title={`Giỏi (≥8đ): ${stat.goodCount} em`}
+                              />
+                            )}
+                            {stat.fairCount > 0 && (
+                              <div 
+                                style={{ width: `${(stat.fairCount / stat.totalSubmissions) * 100}%` }} 
+                                className="bg-sky-500 hover:opacity-90"
+                                title={`Khá (6.5-7.9đ): ${stat.fairCount} em`}
+                              />
+                            )}
+                            {stat.averageCount > 0 && (
+                              <div 
+                                style={{ width: `${(stat.averageCount / stat.totalSubmissions) * 100}%` }} 
+                                className="bg-amber-400 hover:opacity-90"
+                                title={`Trung bình (5-6.4đ): ${stat.averageCount} em`}
+                              />
+                            )}
+                            {stat.poorCount > 0 && (
+                              <div 
+                                style={{ width: `${(stat.poorCount / stat.totalSubmissions) * 100}%` }} 
+                                className="bg-rose-500 hover:opacity-90"
+                                title={`Yếu (<5đ): ${stat.poorCount} em`}
+                              />
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Giỏi (≥8)
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-sky-500 inline-block"></span> Khá (6.5-7.9)
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> TB (5-6.4)
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Yếu (&lt;5)
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic text-center py-2">
+                          Chưa có học sinh nào của lớp nộp bài thi này.
+                        </p>
+                      )
+                    )}
+
+                    {/* Tab Violations alert - Only in advanced mode */}
+                    {viewMode === 'advanced' && stat.tabViolationsCount > 0 && (
                       <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 flex items-center gap-2">
                         <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
                         <span>Phát hiện {stat.tabViolationsCount} lần rời tab thi cử ở lớp này.</span>
@@ -1214,25 +1324,57 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
             </span>
           </div>
 
+          {/* Guide Banner for Teachers */}
+          <div className="p-3.5 mx-4 sm:mx-5 mt-4 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-indigo-950">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-bold text-slate-900">
+                  Xem bài thi học sinh: Bấm nút <span className="text-indigo-700 underline font-black">"Xem bài làm đầy đủ"</span> hoặc bấm trực tiếp vào tên học sinh.
+                </p>
+                <p className="text-[11px] text-slate-600">
+                  Hiển thị đầy đủ <strong>cả câu hỏi trắc nghiệm</strong> (đáp án học sinh chọn, đúng/sai, đáp án chuẩn) và <strong>câu hỏi tự luận</strong> kèm công cụ chấm điểm AI / giáo viên.
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-bold text-indigo-700 bg-white px-3 py-1 rounded-xl border border-indigo-200 w-fit shrink-0 shadow-2xs">
+              Tổng {filteredResults.length} bài làm
+            </span>
+          </div>
+
           {/* Table Content */}
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto p-4 sm:p-5 pt-3">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-3">Học sinh</th>
-                  <th className="py-3 px-2">Lớp</th>
-                  <th className="py-3 px-2 text-center" title="Phần I: Trắc nghiệm 4 lựa chọn">Phần I (TN)</th>
-                  <th className="py-3 px-2 text-center" title="Phần II: Đúng / Sai">Phần II (Đ/S)</th>
-                  <th className="py-3 px-2 text-center" title="Phần III: Trả lời ngắn / Điền khuyết">Phần III (TLN)</th>
-                  <th className="py-3 px-2 text-center" title="Phần IV: Tự luận">Phần IV (TL)</th>
-                  <th className="py-3 px-3 text-center bg-indigo-50/70 text-indigo-950 font-bold">Tổng điểm</th>
-                  <th className="py-3 px-2 text-center">Đúng / Sai</th>
-                  <th className="py-3 px-2 text-center">Tỷ lệ</th>
-                  <th className="py-3 px-2 text-center">Tab</th>
-                  <th className="py-3 px-3">Thời gian nộp bài</th>
-                  <th className="py-3 px-2 text-center">Đánh giá</th>
-                  <th className="py-3 px-3 text-right">Thao tác</th>
-                </tr>
+                {viewMode === 'elementary' ? (
+                  <tr>
+                    <th className="py-3 px-3">Học sinh</th>
+                    <th className="py-3 px-2">Lớp</th>
+                    <th className="py-3 px-3 text-center bg-indigo-50/70 text-indigo-950 font-bold">Điểm bài thi</th>
+                    <th className="py-3 px-2 text-center">Số câu đúng / sai</th>
+                    <th className="py-3 px-3">Thời gian nộp</th>
+                    <th className="py-3 px-2 text-center">Đánh giá</th>
+                    <th className="py-3 px-3 text-right">Bài làm chi tiết</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th className="py-3 px-3">Học sinh</th>
+                    <th className="py-3 px-2">Lớp</th>
+                    <th className="py-3 px-2 text-center" title="Phần I: Trắc nghiệm 4 lựa chọn">Phần I (TN)</th>
+                    <th className="py-3 px-2 text-center" title="Phần II: Đúng / Sai">Phần II (Đ/S)</th>
+                    <th className="py-3 px-2 text-center" title="Phần III: Trả lời ngắn / Điền khuyết">Phần III (TLN)</th>
+                    <th className="py-3 px-2 text-center" title="Phần IV: Tự luận">Phần IV (TL)</th>
+                    <th className="py-3 px-3 text-center bg-indigo-50/70 text-indigo-950 font-bold">Tổng điểm</th>
+                    <th className="py-3 px-2 text-center">Đúng / Sai</th>
+                    <th className="py-3 px-2 text-center">Tỷ lệ</th>
+                    <th className="py-3 px-2 text-center">Tab</th>
+                    <th className="py-3 px-3">Thời gian nộp bài</th>
+                    <th className="py-3 px-2 text-center">Đánh giá</th>
+                    <th className="py-3 px-3 text-right">Thao tác</th>
+                  </tr>
+                )}
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredResults.length > 0 ? (
@@ -1240,9 +1382,13 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                     const passed = r.score >= (exam.passScore || 5);
                     const p = extractResultPartScores(r, questions);
                     return (
-                      <tr key={r.id || i} className="hover:bg-slate-50/70 transition-colors">
+                      <tr 
+                        key={r.id || i} 
+                        onClick={() => setSelectedGradingResult(r)}
+                        className="hover:bg-indigo-50/40 transition-colors cursor-pointer group"
+                      >
                         <td className="py-3 px-3 font-semibold text-slate-900">
-                          {r.studentName}
+                          <span className="group-hover:text-indigo-600 transition-colors">{r.studentName}</span>
                           <span className="block text-[11px] text-slate-400 font-normal">{r.studentEmail}</span>
                         </td>
                         <td className="py-3 px-2">
@@ -1250,38 +1396,45 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                             {r.classId || '10A1'}
                           </span>
                         </td>
-                        {/* Part 1 Score */}
-                        <td className="py-3 px-2 text-center font-bold text-slate-700">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
-                            {p.part1}đ
-                          </span>
-                        </td>
-                        {/* Part 2 Score */}
-                        <td className="py-3 px-2 text-center font-bold text-slate-700">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
-                            {p.part2}đ
-                          </span>
-                        </td>
-                        {/* Part 3 Score */}
-                        <td className="py-3 px-2 text-center font-bold text-slate-700">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
-                            {p.part3}đ
-                          </span>
-                        </td>
-                        {/* Part 4 Score */}
-                        <td className="py-3 px-2 text-center font-bold">
-                          {p.part4 > 0 || r.hasEssayGraded ? (
-                            <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
-                              {p.part4}đ
-                            </span>
-                          ) : r.status === 'pending_essay_grading' ? (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 text-[10px]">
-                              Chờ chấm
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">0đ</span>
-                          )}
-                        </td>
+
+                        {/* If advanced mode, show component parts I to IV */}
+                        {viewMode === 'advanced' && (
+                          <>
+                            {/* Part 1 Score */}
+                            <td className="py-3 px-2 text-center font-bold text-slate-700">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
+                                {p.part1}đ
+                              </span>
+                            </td>
+                            {/* Part 2 Score */}
+                            <td className="py-3 px-2 text-center font-bold text-slate-700">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
+                                {p.part2}đ
+                              </span>
+                            </td>
+                            {/* Part 3 Score */}
+                            <td className="py-3 px-2 text-center font-bold text-slate-700">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-800">
+                                {p.part3}đ
+                              </span>
+                            </td>
+                            {/* Part 4 Score */}
+                            <td className="py-3 px-2 text-center font-bold">
+                              {p.part4 > 0 || r.hasEssayGraded ? (
+                                <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                                  {p.part4}đ
+                                </span>
+                              ) : r.status === 'pending_essay_grading' ? (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 text-[10px]">
+                                  Chờ chấm
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">0đ</span>
+                              )}
+                            </td>
+                          </>
+                        )}
+
                         {/* Total Score */}
                         <td className="py-3 px-3 text-center bg-indigo-50/40 font-extrabold text-sm text-slate-900">
                           <span className="text-indigo-900 font-black text-base">{r.score}</span>
@@ -1291,23 +1444,34 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                               🤖 AI Chấm
                             </span>
                           )}
+                          {r.status === 'pending_essay_grading' && viewMode === 'elementary' && (
+                            <span className="block text-[8px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200 mt-0.5 mx-auto w-max">
+                              Chờ chấm tự luận
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-2 text-center text-slate-500">
                           <span className="text-emerald-600 font-semibold">{r.correctCount}</span> / <span className="text-rose-500">{r.wrongCount}</span>
                         </td>
-                        <td className="py-3 px-2 text-center font-semibold text-slate-600">
-                          {r.percentage}%
-                        </td>
-                        <td className="py-3 px-2 text-center">
-                          {r.tabViolations ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
-                              <ShieldAlert className="w-3 h-3 text-rose-600" />
-                              {r.tabViolations}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 text-[11px]">0</span>
-                          )}
-                        </td>
+
+                        {viewMode === 'advanced' && (
+                          <>
+                            <td className="py-3 px-2 text-center font-semibold text-slate-600">
+                              {r.percentage}%
+                            </td>
+                            <td className="py-3 px-2 text-center">
+                              {r.tabViolations ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                  <ShieldAlert className="w-3 h-3 text-rose-600" />
+                                  {r.tabViolations}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300 text-[11px]">0</span>
+                              )}
+                            </td>
+                          </>
+                        )}
+
                         <td className="py-3 px-3 text-slate-500 text-[11px]">
                           {new Date(r.submittedAt).toLocaleString('vi-VN')}
                         </td>
@@ -1320,16 +1484,20 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                         </td>
                         <td className="py-3 px-3 text-right">
                           <button
-                            onClick={() => setSelectedGradingResult(r)}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedGradingResult(r);
+                            }}
                             className={`px-3 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all ${
                               r.status === 'pending_essay_grading'
                                 ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
                                 : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                             }`}
-                            title="Xem chi tiết các phần thi và chấm điểm"
+                            title="Mở toàn bộ bài thi của học sinh gồm trắc nghiệm và tự luận"
                           >
-                            <PenTool className="w-3.5 h-3.5" />
-                            <span>{r.status === 'pending_essay_grading' ? 'Chấm tự luận ngay' : 'Xem & Sửa điểm'}</span>
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>{r.status === 'pending_essay_grading' ? 'Chấm tự luận ngay' : 'Xem bài làm đầy đủ'}</span>
                           </button>
                         </td>
                       </tr>
@@ -1337,7 +1505,7 @@ export const ExamResultsViewer: React.FC<ExamResultsViewerProps> = ({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={13} className="py-12 text-center text-slate-400">
+                    <td colSpan={viewMode === 'elementary' ? 7 : 13} className="py-12 text-center text-slate-400">
                       Chưa có kết quả nộp bài nào thỏa mãn điều kiện lọc.
                     </td>
                   </tr>

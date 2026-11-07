@@ -602,8 +602,18 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
         {isMenuOpen && (
           <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 animate-in fade-in zoom-in-95 duration-100 text-xs divide-y divide-slate-100">
-            {/* Nhóm 0: Chấm tự luận & Xem điểm thi trực tiếp (Ưu tiên cao nhất) */}
+            {/* Nhóm 0: Chấm tự luận, Xem bài làm & Xem điểm thi trực tiếp (Ưu tiên cao nhất) */}
             <div className="py-1 bg-slate-50/70 rounded-t-xl">
+              <button
+                type="button"
+                onClick={() => { setActiveMenuExamId(null); onViewResults(exam, 'students'); }}
+                className="w-full px-3.5 py-2 text-left font-bold text-indigo-700 hover:bg-indigo-100/70 flex items-center gap-2 cursor-pointer transition-colors"
+                title="Xem bài làm của học sinh gồm cả câu trắc nghiệm lẫn tự luận"
+              >
+                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                <span>📄 Xem bài làm học sinh (cả TN &amp; TL)</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => { setActiveMenuExamId(null); onViewResults(exam, 'essay_grading'); }}
@@ -1263,15 +1273,26 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     <Share2 className="w-4 h-4" />
                   </button>
 
-                  {/* Nút quan trọng: XEM KẾT QUẢ / BẢNG ĐIỂM (Màu Teal nổi bật) */}
+                  {/* Xem bài làm học sinh (cả trắc nghiệm lẫn tự luận) */}
                   <button
                     type="button"
-                    onClick={() => onViewResults(exam)}
+                    onClick={() => onViewResults(exam, 'students')}
+                    className="px-3 py-1.5 min-h-[36px] rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs hover:shadow-xs shrink-0"
+                    title="Xem chi tiết toàn bộ bài làm của học sinh (gồm cả trắc nghiệm và tự luận)"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Xem bài làm</span>
+                  </button>
+
+                  {/* Nút: XEM KẾT QUẢ / BẢNG ĐIỂM (Màu Teal nổi bật) */}
+                  <button
+                    type="button"
+                    onClick={() => onViewResults(exam, 'by_class')}
                     className="px-3.5 py-2 min-h-[36px] rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs hover:shadow-xs shrink-0"
                     title="Xem chi tiết điểm số, xếp hạng và thống kê"
                   >
                     <BarChart3 className="w-3.5 h-3.5" />
-                    <span>Kết quả</span>
+                    <span>Thống kê</span>
                   </button>
 
                   {/* 3-dot dropdown menu containing secondary actions */}
@@ -1401,6 +1422,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           type="button"
+                          onClick={() => onViewResults(exam, 'students')}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all flex items-center gap-1 shadow-2xs"
+                          title="Xem bài làm đầy đủ của học sinh (gồm cả trắc nghiệm và tự luận)"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                          <span className="hidden md:inline">Bài làm</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => onViewResults(exam, 'essay_grading')}
                           className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 transition-all flex items-center gap-1 shadow-2xs"
                           title="Chấm bài tự luận học sinh & AI chấm tự động"
@@ -1410,11 +1440,12 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => onViewResults(exam)}
+                          onClick={() => onViewResults(exam, 'by_class')}
                           className="px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1 shadow-2xs"
+                          title="Xem chi tiết thống kê và phổ điểm"
                         >
                           <BarChart3 className="w-3.5 h-3.5" />
-                          <span>Kết quả</span>
+                          <span>Thống kê</span>
                         </button>
                         {onEditExam && (
                           <button
@@ -1569,6 +1600,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     </button>
                     <button
                       type="button"
+                      onClick={() => onViewResults(exam, 'students')}
+                      className="p-1.5 rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                      title="Xem bài làm học sinh (gồm cả trắc nghiệm lẫn tự luận)"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="hidden sm:inline">Bài làm</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onViewResults(exam, 'essay_grading')}
                       className="p-1.5 rounded-lg text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                       title="Chấm bài tự luận học sinh & AI chấm tự động"
@@ -1580,12 +1620,12 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => onViewResults(exam)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 shadow-2xs hover:shadow-xs active:scale-95"
-                    title="Xem chi tiết kết quả & chấm thi"
+                    onClick={() => onViewResults(exam, 'students')}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all flex items-center gap-1.5 shadow-2xs hover:shadow-xs active:scale-95"
+                    title="Xem chi tiết bài làm & điểm thi"
                   >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    <span>Kết quả &amp; Chấm thi</span>
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Xem bài làm</span>
                   </button>
                 </div>
               </div>

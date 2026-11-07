@@ -314,10 +314,13 @@ export const StudentGradingDetailModal: React.FC<StudentGradingDetailModalProps>
               <User className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-extrabold text-base leading-tight">
                   Chi tiết bài làm: {result.studentName}
                 </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  Đầy đủ Trắc nghiệm & Tự luận
+                </span>
                 {result.classId && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
                     Lớp {result.classId}

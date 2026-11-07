@@ -425,39 +425,51 @@ export async function exportExamToPptx(
 
   // Helper to add unified slide header
   const addHeader = (slide: PptxGenJS.Slide, qNum: number, continuationTag?: string, isAnswerState?: boolean) => {
-    // Top Left: Question Number + Section + Continuation
+    // Top Left Question Number Pill
     const qBadgeText = continuationTag ? `CÂU ${qNum} (${continuationTag})` : `CÂU ${qNum}`;
     
+    slide.addShape(pptx.ShapeType.roundRect, {
+      x: 0.8,
+      y: 0.40,
+      w: continuationTag ? 3.6 : 2.0,
+      h: 0.44,
+      fill: { color: theme.accentColor },
+      line: { color: theme.accentColor, width: 1 }
+    });
+
     slide.addText(qBadgeText, {
       x: 0.8,
       y: 0.42,
-      w: 3.5,
-      h: 0.45,
-      fontSize: 16,
+      w: continuationTag ? 3.6 : 2.0,
+      h: 0.40,
+      fontSize: 15,
       fontFace,
-      color: theme.accentColor,
-      bold: true
+      color: 'FFFFFF',
+      bold: true,
+      align: 'center'
     });
 
-    // Subject + Grade + Duration Subtext
-    const subheaderText = `${(exam.subjectName || 'Toán học').toUpperCase()}   •   Khối ${exam.grade || '6'}   •   ${exam.durationMinutes || 45} phút`;
+    // Subject + Grade + Duration Pill
+    const subheaderText = `${(exam.subjectName || 'Toán học').toUpperCase()}  •  Khối ${exam.grade || '6'}  •  ${exam.durationMinutes || 45} phút`;
+    const subheaderX = 0.8 + (continuationTag ? 3.75 : 2.15);
     slide.addText(subheaderText, {
-      x: 4.4,
-      y: 0.45,
-      w: slideW - 8.0,
-      h: 0.4,
-      fontSize: 12,
+      x: subheaderX,
+      y: 0.44,
+      w: slideW - subheaderX - 3.6,
+      h: 0.38,
+      fontSize: 13,
       fontFace,
-      color: theme.subtextColor
+      color: theme.subtextColor,
+      bold: true
     });
 
     // Top Right Status Badge
     if (isStudentVersion) {
       slide.addShape(pptx.ShapeType.roundRect, {
         x: slideW - 3.4,
-        y: 0.4,
+        y: 0.40,
         w: 2.6,
-        h: 0.4,
+        h: 0.44,
         fill: { color: theme.headerBg },
         line: { color: theme.headerBorder, width: 1 }
       });
@@ -465,8 +477,8 @@ export async function exportExamToPptx(
         x: slideW - 3.4,
         y: 0.42,
         w: 2.6,
-        h: 0.35,
-        fontSize: 10,
+        h: 0.38,
+        fontSize: 12,
         fontFace,
         bold: true,
         color: theme.subtextColor,
@@ -474,19 +486,19 @@ export async function exportExamToPptx(
       });
     } else if (isAnswerState) {
       slide.addShape(pptx.ShapeType.roundRect, {
-        x: slideW - 3.4,
-        y: 0.4,
-        w: 2.6,
-        h: 0.4,
+        x: slideW - 3.5,
+        y: 0.40,
+        w: 2.7,
+        h: 0.44,
         fill: { color: 'DCFCE7' },
-        line: { color: '16A34A', width: 1 }
+        line: { color: '16A34A', width: 1.5 }
       });
-      slide.addText('✓ HƯỚNG DẪN CHẤM', {
-        x: slideW - 3.4,
+      slide.addText('✓ ĐÁP ÁN & LỜI GIẢI', {
+        x: slideW - 3.5,
         y: 0.42,
-        w: 2.6,
-        h: 0.35,
-        fontSize: 11,
+        w: 2.7,
+        h: 0.38,
+        fontSize: 12,
         fontFace,
         bold: true,
         color: '15803D',
@@ -754,9 +766,9 @@ export async function exportExamToPptx(
               console.warn('PPTX addImage note:', imgErr);
             }
 
-            // Left Column: Question Prompt
-            const promptFontSize = cleanPrompt.length > 180 ? 13 : cleanPrompt.length > 100 ? 14 : 15;
-            const promptH = Math.min(2.10, Math.max(1.15, promptMetrics.heightInches + 0.15));
+            // Left Column: Question Prompt (Font clearly readable from afar)
+            const promptFontSize = cleanPrompt.length > 180 ? 15 : cleanPrompt.length > 100 ? 17 : 18;
+            const promptH = Math.min(2.15, Math.max(1.20, promptMetrics.heightInches + 0.20));
 
             slide.addShape(pptx.ShapeType.roundRect, {
               x: 0.8,
@@ -777,7 +789,7 @@ export async function exportExamToPptx(
               color: theme.titleColor,
               bold: true,
               wrap: true,
-              lineSpacingMultiple: 1.15
+              lineSpacingMultiple: 1.20
             });
 
             // Left Column: Options / Answers below prompt
@@ -786,8 +798,93 @@ export async function exportExamToPptx(
 
           } else {
             // ================= FULL WIDTH LAYOUT (NO IMAGE) =================
-            const promptFontSize = cleanPrompt.length > 200 ? 15 : cleanPrompt.length > 120 ? 17 : 19;
-            const promptH = Math.min(2.15, Math.max(1.15, promptMetrics.heightInches + 0.2));
+            // Check if this is an Essay question with answer reveal
+            if (q.type === 'essay' && revealAnswer && !isStudentVersion) {
+              // DEDICATED FULL-SPACE ESSAY SOLUTION SLIDE
+              addHeader(slide, qNum, 'Lời giải & Hướng dẫn chấm', true);
+
+              // 1. Top Prompt Recap Strip
+              slide.addShape(pptx.ShapeType.roundRect, {
+                x: 0.8,
+                y: 1.00,
+                w: contentW,
+                h: 0.85,
+                fill: { color: theme.headerBg },
+                line: { color: theme.headerBorder, width: 1 }
+              });
+
+              const recap = cleanPrompt.length > 140 ? `${cleanPrompt.slice(0, 137)}...` : cleanPrompt;
+              slide.addText(`Đề bài: ${recap}`, {
+                x: 1.05,
+                y: 1.12,
+                w: contentW - 0.5,
+                h: 0.60,
+                fontSize: 14,
+                fontFace,
+                color: theme.subtextColor,
+                italic: true,
+                wrap: true
+              });
+
+              // 2. Full Solution & Rubric Workspace Card (Generous 4.75 inch height!)
+              const solH = 4.80;
+              slide.addShape(pptx.ShapeType.roundRect, {
+                x: 0.8,
+                y: 1.95,
+                w: contentW,
+                h: solH,
+                fill: { color: theme.cardBg },
+                line: { color: '16A34A', width: 2 }
+              });
+
+              slide.addText('✓ HƯỚNG DẪN GIẢI CHI TIẾT & BIỂU ĐIỂM BAREM:', {
+                x: 1.1,
+                y: 2.12,
+                w: contentW - 0.6,
+                h: 0.40,
+                fontSize: 16,
+                fontFace,
+                bold: true,
+                color: '15803D'
+              });
+
+              const rawAnswer = q.sampleAnswer || q.explanation || 'Giáo viên chấm điểm theo các bước lập luận đúng và kết quả chính xác.';
+              const cleanAnswer = latexToUnicodeMath(rawAnswer);
+              const ansFontSize = cleanAnswer.length > 350 ? 14 : cleanAnswer.length > 180 ? 15 : 16;
+
+              slide.addText(cleanAnswer, {
+                x: 1.1,
+                y: 2.60,
+                w: contentW - 0.6,
+                h: q.rubric ? solH - 1.25 : solH - 0.85,
+                fontSize: ansFontSize,
+                fontFace,
+                color: theme.textColor,
+                wrap: true,
+                lineSpacingMultiple: 1.30
+              });
+
+              if (q.rubric) {
+                slide.addText(`Thang điểm barem: ${latexToUnicodeMath(q.rubric)}`, {
+                  x: 1.1,
+                  y: 1.95 + solH - 0.55,
+                  w: contentW - 0.6,
+                  h: 0.40,
+                  fontSize: 13,
+                  fontFace,
+                  bold: true,
+                  color: '166534',
+                  italic: true
+                });
+              }
+
+              addFooter(slide);
+              return;
+            }
+
+            // Standard Question Prompt (Clear, bold, easy to read from afar)
+            const promptFontSize = cleanPrompt.length > 200 ? 17 : cleanPrompt.length > 100 ? 19 : 21;
+            const promptH = Math.min(2.20, Math.max(1.20, promptMetrics.heightInches + 0.25));
 
             slide.addShape(pptx.ShapeType.roundRect, {
               x: 0.8,
@@ -802,13 +899,13 @@ export async function exportExamToPptx(
               x: 1.1,
               y: 1.15,
               w: contentW - 0.6,
-              h: promptH - 0.25,
+              h: promptH - 0.30,
               fontSize: promptFontSize,
               fontFace,
               color: theme.titleColor,
               bold: true,
               wrap: true,
-              lineSpacingMultiple: 1.2
+              lineSpacingMultiple: 1.25
             });
 
             const optionsY = 1.00 + promptH + 0.18;
@@ -819,7 +916,7 @@ export async function exportExamToPptx(
         }
       };
 
-      // Helper to render the options/answers area with guaranteed boundary compliance
+      // Helper to render the options/answers area with guaranteed boundary compliance & classroom visibility
       const renderOptionsArea = (
         slide: PptxGenJS.Slide,
         currQ: Question,
@@ -830,16 +927,16 @@ export async function exportExamToPptx(
         is1Col: boolean,
         optStrings: Record<'A' | 'B' | 'C' | 'D', string>
       ) => {
-        const availableH = Math.max(1.5, maxBottomLimit - startY);
+        const availableH = Math.max(1.8, maxBottomLimit - startY);
 
         if (currQ.type === 'multiple_choice') {
           const keys: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
 
           if (is1Col) {
-            // 1-column x 4-row layout: strictly fit in availableH
-            const gap = 0.08;
-            const rowH = Math.min(0.90, Math.max(0.60, (availableH - 3 * gap) / 4));
-            const optFontSize = rowH < 0.72 ? 12 : 14;
+            // 1-column x 4-row layout: strictly fit in availableH with large, readable text
+            const gap = 0.09;
+            const rowH = Math.min(0.95, Math.max(0.68, (availableH - 3 * gap) / 4));
+            const optFontSize = rowH < 0.75 ? 14 : 16;
 
             keys.forEach((key, kIdx) => {
               const yPos = startY + kIdx * (rowH + gap);
@@ -860,9 +957,9 @@ export async function exportExamToPptx(
               });
 
               // Letter pill
-              const pillSize = Math.min(0.50, rowH - 0.15);
+              const pillSize = Math.min(0.52, rowH - 0.16);
               slide.addShape(pptx.ShapeType.roundRect, {
-                x: startX + 0.15,
+                x: startX + 0.18,
                 y: yPos + (rowH - pillSize) / 2,
                 w: pillSize,
                 h: pillSize,
@@ -871,22 +968,22 @@ export async function exportExamToPptx(
               });
 
               slide.addText(key, {
-                x: startX + 0.15,
+                x: startX + 0.18,
                 y: yPos + (rowH - pillSize) / 2 + 0.02,
                 w: pillSize,
                 h: pillSize - 0.04,
-                fontSize: 14,
+                fontSize: 16,
                 fontFace,
                 bold: true,
                 color: isHighlighted ? 'FFFFFF' : theme.titleColor,
                 align: 'center'
               });
 
-              // Option Text
+              // Option Text (15-16pt font clearly visible from afar)
               slide.addText(optContent, {
-                x: startX + pillSize + 0.30,
+                x: startX + pillSize + 0.35,
                 y: yPos + 0.06,
-                w: areaWidth - pillSize - 0.90,
+                w: areaWidth - pillSize - 0.95,
                 h: rowH - 0.12,
                 fontSize: optFontSize,
                 fontFace,
@@ -897,11 +994,11 @@ export async function exportExamToPptx(
 
               if (isHighlighted) {
                 slide.addText('✓', {
-                  x: startX + areaWidth - 0.55,
-                  y: yPos + (rowH - 0.45) / 2,
-                  w: 0.45,
-                  h: 0.45,
-                  fontSize: 18,
+                  x: startX + areaWidth - 0.60,
+                  y: yPos + (rowH - 0.50) / 2,
+                  w: 0.50,
+                  h: 0.50,
+                  fontSize: 20,
                   fontFace,
                   bold: true,
                   color: '16A34A',
@@ -911,17 +1008,17 @@ export async function exportExamToPptx(
             });
 
           } else {
-            // 2-column x 2-row layout: Balanced Grid
-            const colW = (areaWidth - 0.30) / 2;
-            const gap = 0.14;
-            const cardH = Math.min(1.05, Math.max(0.75, (availableH - gap) / 2));
-            const optFontSize = cardH < 0.85 ? 13 : 15;
+            // 2-column x 2-row layout: Balanced Grid with generous 16pt font
+            const colW = (areaWidth - 0.32) / 2;
+            const gap = 0.15;
+            const cardH = Math.min(1.15, Math.max(0.85, (availableH - gap) / 2));
+            const optFontSize = cardH < 0.90 ? 15 : 17;
 
             const positions = [
               { key: 'A' as const, x: startX, y: startY },
-              { key: 'B' as const, x: startX + colW + 0.30, y: startY },
+              { key: 'B' as const, x: startX + colW + 0.32, y: startY },
               { key: 'C' as const, x: startX, y: startY + cardH + gap },
-              { key: 'D' as const, x: startX + colW + 0.30, y: startY + cardH + gap }
+              { key: 'D' as const, x: startX + colW + 0.32, y: startY + cardH + gap }
             ];
 
             positions.forEach(pos => {
@@ -942,9 +1039,9 @@ export async function exportExamToPptx(
               });
 
               // Letter pill
-              const pillSize = Math.min(0.50, cardH - 0.20);
+              const pillSize = Math.min(0.52, cardH - 0.20);
               slide.addShape(pptx.ShapeType.roundRect, {
-                x: pos.x + 0.15,
+                x: pos.x + 0.18,
                 y: pos.y + (cardH - pillSize) / 2,
                 w: pillSize,
                 h: pillSize,
@@ -953,11 +1050,11 @@ export async function exportExamToPptx(
               });
 
               slide.addText(pos.key, {
-                x: pos.x + 0.15,
+                x: pos.x + 0.18,
                 y: pos.y + (cardH - pillSize) / 2 + 0.02,
                 w: pillSize,
                 h: pillSize - 0.04,
-                fontSize: 14,
+                fontSize: 16,
                 fontFace,
                 bold: true,
                 color: isHighlighted ? 'FFFFFF' : theme.titleColor,
@@ -965,10 +1062,10 @@ export async function exportExamToPptx(
               });
 
               slide.addText(optContent, {
-                x: pos.x + pillSize + 0.30,
-                y: pos.y + 0.06,
-                w: colW - pillSize - 0.85,
-                h: cardH - 0.12,
+                x: pos.x + pillSize + 0.32,
+                y: pos.y + 0.08,
+                w: colW - pillSize - 0.90,
+                h: cardH - 0.16,
                 fontSize: optFontSize,
                 fontFace,
                 bold: isHighlighted,
@@ -978,11 +1075,11 @@ export async function exportExamToPptx(
 
               if (isHighlighted) {
                 slide.addText('✓', {
-                  x: pos.x + colW - 0.50,
-                  y: pos.y + (cardH - 0.45) / 2,
-                  w: 0.45,
-                  h: 0.45,
-                  fontSize: 18,
+                  x: pos.x + colW - 0.55,
+                  y: pos.y + (cardH - 0.50) / 2,
+                  w: 0.50,
+                  h: 0.50,
+                  fontSize: 20,
                   fontFace,
                   bold: true,
                   color: '16A34A',
@@ -994,9 +1091,9 @@ export async function exportExamToPptx(
 
         } else if (currQ.type === 'true_false' && currQ.subQuestions) {
           // 4 True/False subquestions
-          const gap = 0.08;
-          const subH = Math.min(0.78, Math.max(0.55, (availableH - 3 * gap) / 4));
-          const tfFontSize = subH < 0.65 ? 12 : 14;
+          const gap = 0.09;
+          const subH = Math.min(0.85, Math.max(0.65, (availableH - 3 * gap) / 4));
+          const tfFontSize = subH < 0.70 ? 14 : 16;
 
           currQ.subQuestions.forEach((sub, sIdx) => {
             const yPos = startY + sIdx * (subH + gap);
@@ -1012,20 +1109,20 @@ export async function exportExamToPptx(
             });
 
             slide.addText(`${sub.key})`, {
-              x: startX + 0.15,
+              x: startX + 0.18,
               y: yPos + 0.08,
-              w: 0.45,
+              w: 0.50,
               h: subH - 0.16,
-              fontSize: 14,
+              fontSize: 15,
               fontFace,
               bold: true,
               color: theme.accentColor
             });
 
             slide.addText(latexToUnicodeMath(sub.text), {
-              x: startX + 0.65,
+              x: startX + 0.72,
               y: yPos + 0.06,
-              w: areaWidth - 2.2,
+              w: areaWidth - 2.4,
               h: subH - 0.12,
               fontSize: tfFontSize,
               fontFace,
@@ -1035,20 +1132,20 @@ export async function exportExamToPptx(
 
             if (reveal) {
               slide.addShape(pptx.ShapeType.roundRect, {
-                x: startX + areaWidth - 1.45,
-                y: yPos + (subH - 0.42) / 2,
-                w: 1.30,
-                h: 0.42,
+                x: startX + areaWidth - 1.50,
+                y: yPos + (subH - 0.44) / 2,
+                w: 1.35,
+                h: 0.44,
                 fill: { color: isCorrect ? 'DCFCE7' : 'FEE2E2' },
                 line: { color: isCorrect ? '16A34A' : 'EF4444', width: 1 }
               });
 
               slide.addText(isCorrect ? 'ĐÚNG' : 'SAI', {
-                x: startX + areaWidth - 1.45,
-                y: yPos + (subH - 0.42) / 2 + 0.02,
-                w: 1.30,
-                h: 0.38,
-                fontSize: 12,
+                x: startX + areaWidth - 1.50,
+                y: yPos + (subH - 0.44) / 2 + 0.02,
+                w: 1.35,
+                h: 0.40,
+                fontSize: 13,
                 fontFace,
                 bold: true,
                 color: isCorrect ? '15803D' : '991B1B',
@@ -1058,7 +1155,7 @@ export async function exportExamToPptx(
           });
 
         } else {
-          // ESSAY OR FILL-IN-THE-BLANK
+          // ESSAY OR FILL-IN-THE-BLANK (Writing space or Explanation)
           const boxH = availableH;
 
           if (isStudentVersion || !reveal) {
@@ -1071,25 +1168,25 @@ export async function exportExamToPptx(
               line: { color: theme.writingSpaceBorder, width: 1.5, dashType: 'dash' }
             });
 
-            slide.addText('KHÔNG GIAN LÀM BÀI', {
+            slide.addText('KHÔNG GIAN LÀM BÀI TỰ LUẬN CỦA HỌC SINH', {
               x: startX + 0.25,
-              y: startY + 0.15,
+              y: startY + 0.18,
               w: areaWidth - 0.50,
-              h: 0.35,
-              fontSize: 13,
+              h: 0.38,
+              fontSize: 14,
               fontFace,
               bold: true,
               color: theme.writingSpaceText
             });
 
             slide.addText(
-              'Học sinh trình bày chi tiết các bước biến đổi và kết luận vào giấy thi hoặc khung trên.',
+              'Học sinh trình bày chi tiết các bước biến đổi, lập luận và kết luận vào giấy thi hoặc bảng.',
               {
                 x: startX + 0.25,
                 y: startY + boxH / 2 - 0.25,
                 w: areaWidth - 0.50,
                 h: 0.50,
-                fontSize: 13,
+                fontSize: 14,
                 fontFace,
                 color: theme.subtextColor,
                 italic: true,
@@ -1107,12 +1204,12 @@ export async function exportExamToPptx(
               line: { color: '16A34A', width: 1.5 }
             });
 
-            slide.addText('HƯỚNG DẪN CHẤM & BAREM ĐIỂM:', {
+            slide.addText('HƯỚNG DẪN CHẤM & BIỂU ĐIỂM BAREM:', {
               x: startX + 0.25,
-              y: startY + 0.15,
+              y: startY + 0.18,
               w: areaWidth - 0.50,
-              h: 0.35,
-              fontSize: 13,
+              h: 0.38,
+              fontSize: 15,
               fontFace,
               bold: true,
               color: '15803D'
@@ -1121,18 +1218,18 @@ export async function exportExamToPptx(
             const answerContent = currQ.sampleAnswer || currQ.explanation || 
               (currQ.acceptableAnswers?.length ? `Đáp án chấp nhận: ${currQ.acceptableAnswers.join(' hoặc ')}` : 'Giáo viên chấm điểm theo barem hướng dẫn.');
             const cleanAnswer = latexToUnicodeMath(answerContent);
-            const ansFontSize = cleanAnswer.length > 250 ? 12 : cleanAnswer.length > 150 ? 13 : 14;
+            const ansFontSize = cleanAnswer.length > 250 ? 14 : cleanAnswer.length > 120 ? 15 : 16;
 
             slide.addText(cleanAnswer, {
               x: startX + 0.25,
-              y: startY + 0.55,
+              y: startY + 0.60,
               w: areaWidth - 0.50,
-              h: boxH - 0.70,
+              h: boxH - 0.75,
               fontSize: ansFontSize,
               fontFace,
               color: theme.textColor,
               wrap: true,
-              lineSpacingMultiple: 1.2
+              lineSpacingMultiple: 1.25
             });
           }
         }

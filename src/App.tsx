@@ -356,7 +356,7 @@ function MainApp() {
               }}
               onViewResults={(exam, targetTab) => {
                 setViewingResultsExam(exam);
-                setViewingResultsTab(targetTab || 'by_class');
+                setViewingResultsTab(targetTab || 'students');
                 navigateTo('/teacher-results', 'teacher-results');
               }}
             />
