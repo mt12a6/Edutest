@@ -410,7 +410,7 @@ function MainApp() {
               onRefreshExams={reloadData}
             />
           ) : (currentTab === 'teacher-live' || currentTab === 'admin-live') ? (
-            isAdmin ? (
+            (isAdmin || activeRole === 'teacher' || activeRole === 'admin' || profile?.role === 'teacher' || profile?.role === 'admin') ? (
               <LiveExamMonitor
                 exams={exams}
                 classes={classes}
@@ -424,7 +424,7 @@ function MainApp() {
                 <div>
                   <h3 className="text-base font-bold text-slate-900">Giới hạn quyền truy cập</h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Chức năng <strong>Giám sát trực tiếp (LIVE)</strong> chỉ được phép truy cập bởi tài khoản <strong>Quản trị viên (Admin)</strong>.
+                    Chức năng <strong>Giám sát trực tiếp (LIVE)</strong> dành cho <strong>Giáo viên</strong> và <strong>Quản trị viên (Admin)</strong>.
                   </p>
                 </div>
                 <button

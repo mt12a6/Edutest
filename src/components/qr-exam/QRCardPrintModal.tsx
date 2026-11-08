@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles } from 'lucide-react';
-import { SchoolClass, UserProfile } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles, QrCode, FileText, UserPlus } from 'lucide-react';
+import QRCode from 'qrcode';
+import { SchoolClass, UserProfile, Exam } from '../../types';
 
 interface QRCardPrintModalProps {
   isOpen: boolean;
   onClose: () => void;
+  exam?: Exam | null;
   classes?: SchoolClass[];
   students?: UserProfile[];
 }
@@ -12,31 +14,107 @@ interface QRCardPrintModalProps {
 export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   isOpen,
   onClose,
+  exam,
   classes = [],
   students = []
 }) => {
-  const [cardCount, setCardCount] = useState<number>(40);
+  // Mode: 'class' (Thi theo lớp) | 'free' (Thi tự do)
+  const [organizationMode, setOrganizationMode] = useState<'class' | 'free'>('class');
+  const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || 'all');
+  const [freeStudentText, setFreeStudentText] = useState<string>(
+    'Nguyễn Văn An\nTrần Thị Bình\nLê Hoàng Cường\nPhạm Thị Dung\nVũ Minh Đức\nĐặng Thúy Hằng\nBùi Quốc Huy\nHoàng Mai Linh'
+  );
+  const [cardCount, setCardCount] = useState<number>(30);
   const [cardsPerPage, setCardsPerPage] = useState<2 | 4>(2);
-  const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const [templateType, setTemplateType] = useState<'plickers' | 'answer_sheet'>('plickers');
   const [showInstructions, setShowInstructions] = useState<boolean>(true);
+  const [qrCodeDataUrls, setQrCodeDataUrls] = useState<Record<string, string>>({});
 
   if (!isOpen) return null;
 
-  // Generate card list: if class selected with students, map students; otherwise generate 1 to cardCount
-  const filteredStudents = selectedClassId === 'all' 
-    ? students 
-    : students.filter(s => s.classIds?.includes(selectedClassId));
+  // Build student list according to selected mode
+  let cardItems: { cardId: number; studentName: string; studentCode: string; className: string }[] = [];
 
-  const totalCards = filteredStudents.length > 0 ? filteredStudents.length : cardCount;
+  if (organizationMode === 'class') {
+    const classStudents = selectedClassId === 'all'
+      ? students
+      : students.filter(s => s.classIds?.includes(selectedClassId));
 
-  const cardItems = Array.from({ length: totalCards }, (_, i) => {
-    const student = filteredStudents[i];
-    return {
-      cardId: i + 1,
-      studentName: student?.displayName || `Học sinh số ${i + 1}`,
-      studentCode: student?.email?.split('@')[0] || `HS${String(i + 1).padStart(2, '0')}`
+    if (classStudents.length > 0) {
+      cardItems = classStudents.map((s, idx) => ({
+        cardId: idx + 1,
+        studentName: s.displayName || `Học sinh ${idx + 1}`,
+        studentCode: s.username || s.email?.split('@')[0] || `HS${String(idx + 1).padStart(2, '0')}`,
+        className: classes.find(c => c.id === selectedClassId)?.name || s.className || 'Lớp khảo thí'
+      }));
+    } else {
+      // Fallback if class has no student records yet
+      const className = classes.find(c => c.id === selectedClassId)?.name || 'Lớp 10A1';
+      cardItems = Array.from({ length: cardCount }, (_, i) => ({
+        cardId: i + 1,
+        studentName: `Học sinh số ${i + 1}`,
+        studentCode: `HS${String(i + 1).padStart(2, '0')}`,
+        className
+      }));
+    }
+  } else {
+    // Free mode
+    const lines = freeStudentText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    if (lines.length > 0) {
+      cardItems = lines.map((name, idx) => {
+        const parts = name.split(',').map(p => p.trim());
+        const studentName = parts[0] || `Học sinh ${idx + 1}`;
+        const studentCode = parts[1] || `TD${String(idx + 1).padStart(2, '0')}`;
+        return {
+          cardId: idx + 1,
+          studentName,
+          studentCode,
+          className: 'Thí sinh tự do'
+        };
+      });
+    } else {
+      cardItems = Array.from({ length: cardCount }, (_, i) => ({
+        cardId: i + 1,
+        studentName: `Thí sinh tự do số ${i + 1}`,
+        studentCode: `TD${String(i + 1).padStart(2, '0')}`,
+        className: 'Thí sinh tự do'
+      }));
+    }
+  }
+
+  // Generate QR codes for all students
+  useEffect(() => {
+    let isMounted = true;
+    const generateAllQrs = async () => {
+      const urls: Record<string, string> = {};
+      for (const item of cardItems) {
+        // Safe identifier payload: Exam ID + Student Code + Card ID
+        const payload = `EDUTEST-QR:EXAM=${exam?.id || 'exam'}:STUDENT=${item.studentCode}:CARD=${item.cardId}`;
+        try {
+          const url = await QRCode.toDataURL(payload, {
+            margin: 1,
+            width: 256,
+            color: { dark: '#090D16', light: '#FFFFFF' }
+          });
+          urls[item.cardId] = url;
+        } catch (e) {
+          console.warn('QR gen note:', e);
+        }
+      }
+      if (isMounted) {
+        setQrCodeDataUrls(urls);
+      }
     };
-  });
+
+    generateAllQrs();
+    return () => {
+      isMounted = false;
+    };
+  }, [organizationMode, selectedClassId, freeStudentText, cardCount, exam?.id]);
 
   const handlePrint = () => {
     window.print();
@@ -45,16 +123,16 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
       
-      {/* Print Stylesheet injected into DOM */}
+      {/* Print Stylesheet */}
       <style>{`
         @media print {
           body * {
             visibility: hidden;
           }
-          #plickers-print-container, #plickers-print-container * {
+          #edutest-qr-print-container, #edutest-qr-print-container * {
             visibility: visible;
           }
-          #plickers-print-container {
+          #edutest-qr-print-container {
             position: absolute;
             left: 0;
             top: 0;
@@ -80,17 +158,17 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
         <div className="p-4 sm:px-6 sm:py-4 bg-slate-900 text-white flex items-center justify-between no-print shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-teal-400">
-              <Printer className="w-5 h-5" />
+              <QrCode className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold flex items-center gap-2">
-                In Phiếu Trả Lời Trắc Nghiệm QR (Mô hình Plickers)
+                In Phiếu Trả Lời & Thẻ Khảo Thí QR
                 <span className="text-[10px] bg-teal-500 text-slate-900 px-2 py-0.5 rounded-full font-black">
                   A4 CHUẨN
                 </span>
               </h2>
               <p className="text-xs text-slate-300">
-                Mỗi học sinh 1 phiếu tương tác 4 chiều (A, B, C, D) - Quét camera điện thoại nhận diện tức thì
+                Hỗ trợ cả 2 hình thức: Thi theo lớp hoặc Thi tự do • Quét tức thì bằng camera điện thoại
               </p>
             </div>
           </div>
@@ -104,71 +182,124 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
         </div>
 
         {/* Toolbar & Config (No print) */}
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 no-print shrink-0 text-xs">
-          <div className="flex items-center gap-3 flex-wrap">
-            {classes.length > 0 && (
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-slate-600">Lớp:</span>
-                <select
-                  value={selectedClassId}
-                  onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl font-medium"
-                >
-                  <option value="all">Tất cả (In số lượng tự do)</option>
-                  {classes.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {selectedClassId === 'all' && (
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-slate-600">Số lượng thẻ:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={cardCount}
-                  onChange={(e) => setCardCount(parseInt(e.target.value, 10) || 1)}
-                  className="w-20 px-2 py-1.5 bg-white border border-slate-300 rounded-xl font-bold text-center"
-                />
-              </div>
-            )}
-
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-600">Bố cục:</span>
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col gap-3 no-print shrink-0 text-xs">
+          
+          {/* Organization Mode Selector Tabs */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="inline-flex p-1 bg-slate-200/80 rounded-xl font-bold text-xs">
               <button
                 type="button"
-                onClick={() => setCardsPerPage(2)}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                  cardsPerPage === 2 ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-700'
+                onClick={() => setOrganizationMode('class')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  organizationMode === 'class' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                2 thẻ / trang A4 (Khuyên dùng)
+                <Users className="w-3.5 h-3.5" />
+                <span>Hình thức A: Thi theo lớp</span>
               </button>
               <button
                 type="button"
-                onClick={() => setCardsPerPage(4)}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                  cardsPerPage === 4 ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-700'
+                onClick={() => setOrganizationMode('free')}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  organizationMode === 'free' ? 'bg-white text-teal-800 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                4 thẻ / trang A4 (Tiết kiệm)
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Hình thức B: Thi tự do</span>
               </button>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
+            {/* Template Type */}
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-600">Mẫu in:</span>
+              <button
+                type="button"
+                onClick={() => setTemplateType('plickers')}
+                className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  templateType === 'plickers' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-300 text-slate-700'
+                }`}
+              >
+                Thẻ 4 chiều Plickers
+              </button>
+              <button
+                type="button"
+                onClick={() => setTemplateType('answer_sheet')}
+                className={`px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  templateType === 'answer_sheet' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-300 text-slate-700'
+                }`}
+              >
+                Phiếu làm bài thi A4
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95 ml-auto"
             >
               <Printer className="w-4 h-4" />
-              <span>In ngay ({cardItems.length} thẻ)</span>
+              <span>In ngay ({cardItems.length} phiếu)</span>
             </button>
           </div>
+
+          {/* Mode-specific settings */}
+          {organizationMode === 'class' ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              {classes.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-600">Chọn lớp:</span>
+                  <select
+                    value={selectedClassId}
+                    onChange={(e) => setSelectedClassId(e.target.value)}
+                    className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl font-medium"
+                  >
+                    <option value="all">Tất cả lớp</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {templateType === 'plickers' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-600">Bố cục:</span>
+                  <button
+                    type="button"
+                    onClick={() => setCardsPerPage(2)}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      cardsPerPage === 2 ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    2 thẻ / trang A4
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCardsPerPage(4)}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                      cardsPerPage === 4 ? 'bg-teal-600 text-white' : 'bg-white border border-slate-200 text-slate-700'
+                    }`}
+                  >
+                    4 thẻ / trang A4
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-200">
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="font-semibold">Nhập danh sách thí sinh tự do (Mỗi dòng một tên):</span>
+                <span className="text-[11px] text-teal-700 font-bold">{cardItems.length} thí sinh</span>
+              </div>
+              <textarea
+                rows={3}
+                value={freeStudentText}
+                onChange={(e) => setFreeStudentText(e.target.value)}
+                placeholder="Nguyễn Văn A&#10;Trần Thị B&#10;Lê Hoàng C, TD03..."
+                className="w-full p-2 border border-slate-300 rounded-xl font-sans text-xs focus:ring-2 focus:ring-teal-500 bg-slate-50"
+              />
+            </div>
+          )}
         </div>
 
         {/* Instructions banner */}
@@ -177,25 +308,135 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
             <div className="flex items-start gap-2">
               <HelpCircle className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" />
               <div>
-                <p className="font-bold">Hướng dẫn học sinh sử dụng:</p>
+                <p className="font-bold">Hướng dẫn sử dụng phiếu & mã QR:</p>
                 <p className="text-[11px] text-teal-800 mt-0.5">
-                  Mỗi mép thẻ tương ứng 1 đáp án A, B, C, D. Học sinh muốn chọn đáp án nào thì <strong>xoay chữ cái đó lên phía trên cùng</strong> khi giơ thẻ về phía giáo viên.
+                  Mỗi học sinh được in 1 phiếu có mã định danh QR duy nhất. Giáo viên mở ứng dụng EduTest trên điện thoại, bật camera quét mã QR trên phiếu để xem và chấm bài tức thì.
                 </p>
               </div>
             </div>
             <button 
               type="button" 
               onClick={() => setShowInstructions(false)}
-              className="text-teal-600 hover:text-teal-900 p-1"
+              className="text-teal-600 hover:text-teal-900 p-1 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
 
-        {/* Printable Cards Content Area */}
-        <div id="plickers-print-container" className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 space-y-6">
+        {/* Printable Content Area */}
+        <div id="edutest-qr-print-container" className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100 space-y-6">
           {cardItems.map((card, idx) => {
+            const qrUrl = qrCodeDataUrls[card.cardId];
+
+            if (templateType === 'answer_sheet') {
+              // TEMPLATE 2: A4 OFFICIAL EXAM ANSWER SHEET WITH QR CODE
+              return (
+                <React.Fragment key={card.cardId}>
+                  <div className="bg-white rounded-2xl border-2 border-slate-400 p-6 sm:p-8 shadow-sm mx-auto max-w-2xl text-slate-900 font-sans space-y-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
+                      <div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                          TRƯỜNG THCS & THPT EDUTEST
+                        </span>
+                        <h2 className="text-lg font-black uppercase text-slate-950">
+                          PHIẾU TRẢ LỜI BÀI THI KHẢO THÍ
+                        </h2>
+                        <p className="text-xs text-slate-700 mt-0.5 font-medium">
+                          Môn: {exam?.subjectName || 'Toán học'} • Đề thi: {exam?.title || 'Bài kiểm tra định kỳ'}
+                        </p>
+                      </div>
+
+                      {/* Header QR Code Box */}
+                      <div className="text-center shrink-0 border-2 border-slate-900 p-1.5 rounded-xl bg-white shadow-xs">
+                        {qrUrl ? (
+                          <img src={qrUrl} alt="Mã QR" className="w-20 h-20 object-contain mx-auto" />
+                        ) : (
+                          <div className="w-20 h-20 bg-slate-100 flex items-center justify-center font-mono text-[9px]">QR Code</div>
+                        )}
+                        <span className="text-[9px] font-mono font-bold block text-slate-600 mt-0.5">
+                          {card.studentCode}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Student Metadata Box */}
+                    <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs">
+                      <div>
+                        <span className="text-slate-500 font-medium block">Họ và tên thí sinh:</span>
+                        <strong className="text-slate-950 text-sm">{card.studentName}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-medium block">Số báo danh / Mã:</span>
+                        <strong className="font-mono text-slate-950 text-sm">{card.studentCode}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-medium block">Lớp / Phòng thi:</span>
+                        <strong className="text-slate-950 text-sm">{card.className}</strong>
+                      </div>
+                    </div>
+
+                    {/* Multiple Choice Bubbles Section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800 border-b border-slate-200 pb-1">
+                        <span>PHẦN I: TRẮC NGHIỆM KHÁCH QUAN (Tô kín một ô tròn lựa chọn)</span>
+                        <span className="text-[11px] text-slate-500 font-normal">Mỗi câu 1 đáp án đúng</span>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 pt-1 text-xs">
+                        {Array.from({ length: 20 }, (_, qI) => (
+                          <div key={qI} className="flex items-center justify-between p-1.5 border border-slate-200 rounded-lg bg-slate-50/50">
+                            <span className="font-bold text-[11px] w-6">{qI + 1}.</span>
+                            <div className="flex items-center gap-1.5 font-bold text-[10px]">
+                              {(['A', 'B', 'C', 'D'] as const).map(opt => (
+                                <span key={opt} className="w-5 h-5 rounded-full border border-slate-400 flex items-center justify-center bg-white">
+                                  {opt}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Essay Writing Space */}
+                    <div className="space-y-1.5 pt-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-800 border-b border-slate-200 pb-1">
+                        <span>PHẦN II: TỰ LUẬN & TRẢ LỜI NGẮN</span>
+                        <span className="text-[11px] text-slate-500 font-normal">Trình bày lời giải chi tiết bên dưới</span>
+                      </div>
+
+                      <div className="h-44 border-2 border-dashed border-slate-300 rounded-xl p-3 bg-slate-50/30">
+                        <span className="text-[10px] text-slate-400 block italic">
+                          (Thí sinh trình bày bài làm tự luận vào khoảng trống này...)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Footer Score & Sign Box */}
+                    <div className="grid grid-cols-2 gap-4 pt-3 border-t-2 border-slate-900 text-xs text-center">
+                      <div className="p-2 border border-slate-300 rounded-xl">
+                        <span className="font-bold block text-slate-700">Điểm số (Giáo viên chấm qua QR / Barem):</span>
+                        <div className="h-10 mt-1 flex items-center justify-center text-lg font-black text-teal-800">
+                          ....... / {exam?.maxScore || 10} điểm
+                        </div>
+                      </div>
+                      <div className="p-2 border border-slate-300 rounded-xl">
+                        <span className="font-bold block text-slate-700">Chữ ký cán bộ chấm thi:</span>
+                        <div className="h-10 mt-1 flex items-center justify-center text-xs text-slate-400 italic">
+                          (Ký và ghi rõ họ tên)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="page-break" />
+                </React.Fragment>
+              );
+            }
+
+            // TEMPLATE 1: 4-WAY PLICKERS INTERACTIVE GEOMETRIC CARDS
             const isPageBreak = cardsPerPage === 2 ? idx % 2 === 1 : idx % 4 === 3;
 
             return (
@@ -216,7 +457,7 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
                         {card.studentName}
                       </span>
                       <span className="text-[10px] font-mono text-slate-400">
-                        {card.studentCode}
+                        {card.studentCode} • {card.className}
                       </span>
                     </div>
                   </div>
@@ -246,27 +487,20 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
                       <span className="text-2xl font-black text-slate-900 tracking-wider -rotate-90">D</span>
                     </div>
 
-                    {/* Center Geometric High-Contrast Marker */}
-                    <div className="w-36 h-36 sm:w-44 sm:h-44 bg-slate-950 p-3 rounded-xl flex flex-col items-center justify-center text-white relative">
-                      {/* ArUco / Geometric Corner Markers */}
-                      <div className="absolute top-2 left-2 w-4 h-4 bg-white rounded-xs" />
-                      <div className="absolute top-2 right-2 w-3 h-3 bg-white/40" />
-                      <div className="absolute bottom-2 left-2 w-3 h-3 bg-white/40" />
-                      <div className="absolute bottom-2 right-2 w-4 h-4 bg-white rounded-xs" />
-
-                      {/* Center ID Display */}
-                      <div className="w-16 h-16 rounded-full bg-white text-slate-950 flex flex-col items-center justify-center shadow-md">
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">ID</span>
-                        <span className="text-2xl font-black leading-none">{card.cardId}</span>
-                      </div>
-
-                      <span className="text-[9px] font-mono text-slate-300 mt-2 tracking-widest">
-                        EDUTEST-{String(card.cardId).padStart(3, '0')}
+                    {/* Center QR Code Container */}
+                    <div className="w-40 h-40 bg-white p-2 border-2 border-slate-900 rounded-2xl flex flex-col items-center justify-center shadow-md">
+                      {qrUrl ? (
+                        <img src={qrUrl} alt={`QR Card ${card.cardId}`} className="w-32 h-32 object-contain" />
+                      ) : (
+                        <div className="w-32 h-32 bg-slate-900 rounded-xl" />
+                      )}
+                      <span className="text-[9px] font-mono font-bold text-slate-800 mt-1">
+                        #{card.cardId} • {card.studentCode}
                       </span>
                     </div>
                   </div>
 
-                  {/* Bottom instruction footnote */}
+                  {/* Bottom footnote */}
                   <div className="mt-3 pt-2 text-center text-[10px] text-slate-400 border-t border-slate-100 flex items-center justify-between">
                     <span>* Cắt theo viền đứt nét để sử dụng</span>
                     <span>Xoay chữ cái lựa chọn lên đỉnh trên</span>

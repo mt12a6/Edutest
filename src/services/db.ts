@@ -1580,12 +1580,14 @@ export async function saveAttemptProgress(
   answers: Record<string, any>,
   flaggedQuestions: Record<string, boolean>,
   tabViolations?: number,
-  tabViolationLogs?: string[]
+  tabViolationLogs?: string[],
+  currentQuestionIndex?: number,
+  sectionBreakdown?: ExamAttempt['sectionBreakdown']
 ): Promise<void> {
   const answeredCount = Object.keys(answers).filter(k => {
     const val = answers[k];
     if (val === undefined || val === null || val === '') return false;
-    if (typeof val === 'object') return Object.values(val).some(v => v !== undefined);
+    if (typeof val === 'object') return Object.values(val).some(v => v !== undefined && v !== '');
     return true;
   }).length;
 
@@ -1598,6 +1600,8 @@ export async function saveAttemptProgress(
 
   if (tabViolations !== undefined) updateData.tabViolations = tabViolations;
   if (tabViolationLogs !== undefined) updateData.tabViolationLogs = tabViolationLogs;
+  if (currentQuestionIndex !== undefined) updateData.currentQuestionIndex = currentQuestionIndex;
+  if (sectionBreakdown !== undefined) updateData.sectionBreakdown = sectionBreakdown;
 
   try {
     const localSaved = localStorage.getItem('edutest_custom_attempts');
@@ -1617,6 +1621,12 @@ export async function saveAttemptProgress(
     await setDoc(doc(db, 'attempts', attemptId), sanitizeForFirestore(updateData), { merge: true });
   } catch (err) {
     console.warn('Lưu tiến độ làm bài note:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:attempt_progress_updated', {
+      detail: { attemptId, updateData }
+    }));
   }
 }
 
@@ -1801,12 +1811,20 @@ export async function gradeEssaySubmission(
   const exam = await getExamById(targetResult.examId);
   const maxScale = targetResult.maxScore || 10;
 
-  // Base objective score preservation
-  const baseObjectiveScore = targetResult.objectiveScore !== undefined 
-    ? targetResult.objectiveScore 
-    : (targetResult.hasEssayGraded 
-        ? Math.max(0, Number(((targetResult.score || 0) - (targetResult.essayScore || 0)).toFixed(2)))
-        : (targetResult.score || 0));
+  // Base objective score preservation (Part 1 + Part 2 + Part 3)
+  let baseObjectiveScore = 0;
+  if (targetResult.partScores) {
+    const p1 = targetResult.partScores.part1?.earned || 0;
+    const p2 = targetResult.partScores.part2?.earned || 0;
+    const p3 = targetResult.partScores.part3?.earned || 0;
+    baseObjectiveScore = Number((p1 + p2 + p3).toFixed(2));
+  } else if (targetResult.objectiveScore !== undefined) {
+    baseObjectiveScore = targetResult.objectiveScore;
+  } else if (targetResult.hasEssayGraded) {
+    baseObjectiveScore = Math.max(0, Number(((targetResult.score || 0) - (targetResult.essayScore || 0)).toFixed(2)));
+  } else {
+    baseObjectiveScore = targetResult.score || 0;
+  }
 
   // Cumulative score: objective score + teacher's essay points
   const updatedScore = Math.min(maxScale, Number((baseObjectiveScore + essayScore).toFixed(2)));
@@ -1842,6 +1860,15 @@ export async function gradeEssaySubmission(
     lastUpdatedAt: now,
     graderHistory: updatedHistory,
     essayGrades: essayGrades || targetResult.essayGrades,
+    partScores: targetResult.partScores ? {
+      ...targetResult.partScores,
+      part4: {
+        earned: essayScore,
+        max: targetResult.partScores.part4?.max || essayScore,
+        count: targetResult.partScores.part4?.count || 1,
+        correctCount: essayScore > 0 ? 1 : 0
+      }
+    } : targetResult.partScores,
     feedback: updatedScore >= (exam?.passScore || 5) ? 'Đạt yêu cầu' : 'Chưa đạt yêu cầu'
   };
 

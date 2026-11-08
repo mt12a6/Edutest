@@ -544,6 +544,18 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                 <span>Quản lý Đề thi</span>
               </button>
               <button
+                onClick={() => { onTabChange('teacher-live'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'teacher-live' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
+                  <span>Giám sát Trực tiếp</span>
+                </div>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-700">LIVE</span>
+              </button>
+              <button
                 onClick={() => { onTabChange('teacher-submissions'); setMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
                   currentTab === 'teacher-submissions' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'

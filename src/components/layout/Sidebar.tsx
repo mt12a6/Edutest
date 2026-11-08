@@ -78,6 +78,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             </button>
 
             <button 
+              onClick={() => onTabChange('teacher-live')}
+              className={navItemClass('teacher-live')}
+            >
+              <div className="relative">
+                <Radio className="w-4 h-4 text-indigo-500" />
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+              </div>
+              <span className="flex-1 flex items-center justify-between">
+                <span>Giám sát Trực tiếp</span>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-100 text-rose-700">LIVE</span>
+              </span>
+            </button>
+
+            <button 
               onClick={() => {
                 if (onOpenWordUpload) {
                   onOpenWordUpload();

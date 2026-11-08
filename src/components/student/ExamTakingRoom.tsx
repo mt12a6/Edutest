@@ -155,11 +155,50 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
   }, [initialAttempt.deadline, exam.closeTime]);
 
 
+  // Compute real-time section progress breakdown
+  const computeSectionBreakdown = (currAnswers: Record<string, any>, currIdx: number) => {
+    let mcTotal = 0;
+    let mcAnswered = 0;
+    let fbTotal = 0;
+    let fbAnswered = 0;
+    let essayTotal = 0;
+    let essayAnswered = 0;
+    let essayWordCount = 0;
+
+    questions.forEach((q) => {
+      const ans = currAnswers[q.id];
+      const isAns = ans !== undefined && ans !== null && String(ans).trim() !== '';
+
+      if (q.type === 'essay' || q.section === 4) {
+        essayTotal++;
+        if (isAns) {
+          essayAnswered++;
+          const words = String(ans).trim().split(/\s+/).filter(Boolean).length;
+          essayWordCount += words;
+        }
+      } else if (q.type === 'fill_blank' || q.section === 3) {
+        fbTotal++;
+        if (isAns) fbAnswered++;
+      } else {
+        mcTotal++;
+        if (isAns) mcAnswered++;
+      }
+    });
+
+    return {
+      mc: { answered: mcAnswered, total: mcTotal, current: currIdx + 1 },
+      fillBlank: { answered: fbAnswered, total: fbTotal },
+      essay: { answered: essayAnswered, total: essayTotal, wordCount: essayWordCount }
+    };
+  };
+
   // Auto-save debounced sync
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const triggerAutoSave = (newAnswers: Record<string, any>, newFlagged: Record<string, boolean>) => {
+  const triggerAutoSave = (newAnswers: Record<string, any>, newFlagged: Record<string, boolean>, nextIdx?: number) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setIsSaving(true);
+    const effectiveIdx = nextIdx !== undefined ? nextIdx : currentIndex;
+    const breakdown = computeSectionBreakdown(newAnswers, effectiveIdx);
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
@@ -168,7 +207,9 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
           newAnswers, 
           newFlagged, 
           tabViolations, 
-          tabViolationLogs
+          tabViolationLogs,
+          effectiveIdx,
+          breakdown
         );
         setLastSavedTime(new Date().toLocaleTimeString('vi-VN'));
       } catch (err) {
@@ -176,7 +217,12 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
       } finally {
         setIsSaving(false);
       }
-    }, 800);
+    }, 600);
+  };
+
+  const handleNavigateQuestion = (newIdx: number) => {
+    setCurrentIndex(newIdx);
+    triggerAutoSave(answers, flagged, newIdx);
   };
 
   // Multiple Choice selection
@@ -823,7 +869,7 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
           {/* Navigation Buttons: Previous / Next */}
           <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
             <button
-              onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
+              onClick={() => handleNavigateQuestion(Math.max(0, currentIndex - 1))}
               disabled={currentIndex === 0}
               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
             >
@@ -837,7 +883,7 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
 
             {currentIndex < totalQuestions - 1 ? (
               <button
-                onClick={() => setCurrentIndex(currentIndex + 1)}
+                onClick={() => handleNavigateQuestion(currentIndex + 1)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
               >
                 <span>Câu tiếp theo</span>
@@ -912,7 +958,7 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
                       return (
                         <button
                           key={q.id}
-                          onClick={() => setCurrentIndex(idx)}
+                          onClick={() => handleNavigateQuestion(idx)}
                           className={`h-8 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
                         >
                           {idx + 1}
@@ -946,7 +992,7 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
                       return (
                         <button
                           key={q.id}
-                          onClick={() => setCurrentIndex(idx)}
+                          onClick={() => handleNavigateQuestion(idx)}
                           className={`h-8 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
                         >
                           {idx + 1}
@@ -980,7 +1026,7 @@ export const ExamTakingRoom: React.FC<ExamTakingRoomProps> = ({
                       return (
                         <button
                           key={q.id}
-                          onClick={() => setCurrentIndex(idx)}
+                          onClick={() => handleNavigateQuestion(idx)}
                           className={`h-8 rounded-xl border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer relative ${btnClass}`}
                         >
                           {idx + 1}

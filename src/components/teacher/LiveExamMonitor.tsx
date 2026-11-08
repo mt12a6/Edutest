@@ -186,15 +186,24 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
       console.warn('Real-time snapshot error:', e);
     }
 
+    // Real-time custom event listeners for instant local synchronization
+    const handleLocalProgressUpdate = () => {
+      fetchActiveAttempts();
+    };
+    window.addEventListener('edutest:attempt_progress_updated', handleLocalProgressUpdate);
+    window.addEventListener('edutest:score_updated', handleLocalProgressUpdate);
+
     // Polling backup every 5 seconds
     const interval = setInterval(() => {
       if (autoRefresh) {
         fetchActiveAttempts();
       }
-    }, 5000);
+    }, 4000);
 
     return () => {
       unsubscribe();
+      window.removeEventListener('edutest:attempt_progress_updated', handleLocalProgressUpdate);
+      window.removeEventListener('edutest:score_updated', handleLocalProgressUpdate);
       clearInterval(interval);
     };
   }, [exams, autoRefresh]);
@@ -658,13 +667,15 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4">Thí sinh</th>
-                <th className="py-3 px-4">Đề thi & Môn học</th>
-                <th className="py-3 px-4">Thời gian còn lại</th>
-                <th className="py-3 px-4">Tiến độ câu hỏi</th>
-                <th className="py-3 px-4 text-center">Cảnh báo rời tab</th>
-                <th className="py-3 px-4 text-right">Thao tác giám sát</th>
+              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                <th className="py-3 px-3">Học sinh</th>
+                <th className="py-3 px-3">Đề thi & Môn</th>
+                <th className="py-3 px-3 text-center">Trắc nghiệm</th>
+                <th className="py-3 px-3 text-center">Trả lời ngắn</th>
+                <th className="py-3 px-3 text-center">Tự luận</th>
+                <th className="py-3 px-3">Tiến độ (%)</th>
+                <th className="py-3 px-3 text-center">Trạng thái</th>
+                <th className="py-3 px-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -678,13 +689,28 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                   const isExpanded = expandedAttemptId === session.attempt.id;
                   const examDisplayName = session.attempt.examTitle || session.exam?.title || session.attempt.examId;
                   const subjectDisplayName = session.attempt.subjectName || session.exam?.subjectName || 'Khảo thí';
+                  
+                  const breakdown = session.attempt.sectionBreakdown;
+                  const totalQ = session.attempt.totalQuestions || 20;
+
+                  // Section counts
+                  const mcAns = breakdown?.mc?.answered ?? Math.min(totalQ - 2, session.answeredCount);
+                  const mcTotal = breakdown?.mc?.total ?? Math.max(1, totalQ - 2);
+                  const currentQNum = breakdown?.mc?.current || (session.attempt.currentQuestionIndex !== undefined ? session.attempt.currentQuestionIndex + 1 : undefined);
+
+                  const fbAns = breakdown?.fillBlank?.answered ?? 0;
+                  const fbTotal = breakdown?.fillBlank?.total ?? 0;
+
+                  const essayAns = breakdown?.essay?.answered ?? 0;
+                  const essayTotal = breakdown?.essay?.total ?? (totalQ > 15 ? 1 : 0);
+                  const essayWords = breakdown?.essay?.wordCount ?? 0;
 
                   return (
                     <React.Fragment key={session.attempt.id}>
                       <tr className="hover:bg-slate-50/60 transition-colors">
                         {/* Student Name */}
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
+                        <td className="py-3.5 px-3">
+                          <div className="flex items-center gap-2.5">
                             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-slate-800 text-white font-bold flex items-center justify-center shrink-0 shadow-2xs">
                               {(session.attempt.studentName || 'H')[0].toUpperCase()}
                             </div>
@@ -692,12 +718,12 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                               <p className="font-bold text-slate-900 text-xs">
                                 {session.attempt.studentName || 'Học sinh'}
                               </p>
-                              <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                              <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
                                 <span className="px-1.5 py-0.2 bg-slate-100 rounded font-semibold text-slate-700">
-                                  Lớp: {session.attempt.classId || 'Tự do'}
+                                  {session.attempt.classId || 'Tự do'}
                                 </span>
                                 {session.attempt.studentEmail && (
-                                  <span className="truncate max-w-[130px]">{session.attempt.studentEmail}</span>
+                                  <span className="truncate max-w-[120px]">{session.attempt.studentEmail}</span>
                                 )}
                               </div>
                             </div>
@@ -705,11 +731,11 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                         </td>
 
                         {/* Exam title & subject */}
-                        <td className="py-3.5 px-4 max-w-xs">
+                        <td className="py-3.5 px-3 max-w-[190px]">
                           <p className="font-bold text-slate-800 truncate" title={examDisplayName}>
                             {examDisplayName}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
                             <span className="font-semibold text-indigo-700">
                               {subjectDisplayName}
                             </span>
@@ -718,24 +744,63 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                           </div>
                         </td>
 
-                        {/* Time remaining countdown */}
-                        <td className="py-3.5 px-4 font-mono font-bold">
-                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs ${
-                            isUrgent 
-                              ? 'bg-rose-100 text-rose-700 animate-pulse border border-rose-200' 
-                              : 'bg-slate-100 text-slate-800'
-                          }`}>
-                            <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <span>{timeFormatted}</span>
+                        {/* Trắc nghiệm */}
+                        <td className="py-3.5 px-3 text-center">
+                          <div className="inline-flex flex-col items-center">
+                            <span className={`px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                              mcAns >= mcTotal ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-blue-50 text-blue-800 border border-blue-200'
+                            }`}>
+                              {mcAns}/{mcTotal}
+                            </span>
+                            {currentQNum && (
+                              <span className="text-[10px] text-slate-500 font-medium mt-0.5">
+                                Đang ở câu {currentQNum}
+                              </span>
+                            )}
                           </div>
                         </td>
 
-                        {/* Progress */}
-                        <td className="py-3.5 px-4">
-                          <div className="w-36 space-y-1">
-                            <div className="flex justify-between text-[11px] font-semibold text-slate-600">
-                              <span>{session.answeredCount} / {session.attempt.totalQuestions || 20} câu</span>
-                              <span>{session.progressPercent}%</span>
+                        {/* Trả lời ngắn */}
+                        <td className="py-3.5 px-3 text-center">
+                          {fbTotal > 0 ? (
+                            <span className={`px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                              fbAns >= fbTotal ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-purple-50 text-purple-800 border border-purple-200'
+                            }`}>
+                              {fbAns}/{fbTotal}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-mono">-</span>
+                          )}
+                        </td>
+
+                        {/* Tự luận */}
+                        <td className="py-3.5 px-3 text-center">
+                          {essayTotal > 0 ? (
+                            <div className="inline-flex flex-col items-center">
+                              <span className={`px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                                essayAns >= essayTotal ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-50 text-amber-800 border border-amber-200'
+                              }`}>
+                                {essayAns}/{essayTotal}
+                              </span>
+                              {essayWords > 0 && (
+                                <span className="text-[10px] text-amber-700 font-medium mt-0.5">
+                                  {essayWords} từ đã gõ
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-mono">-</span>
+                          )}
+                        </td>
+
+                        {/* Progress & Countdown */}
+                        <td className="py-3.5 px-3">
+                          <div className="w-32 space-y-1">
+                            <div className="flex justify-between items-center text-[11px] font-semibold text-slate-600">
+                              <span className="text-xs font-bold text-emerald-700">{session.progressPercent}%</span>
+                              <span className={`font-mono text-[11px] font-bold ${isUrgent ? 'text-rose-600 animate-pulse' : 'text-slate-500'}`}>
+                                {timeFormatted}
+                              </span>
                             </div>
                             <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                               <div 
@@ -746,29 +811,38 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                           </div>
                         </td>
 
-                        {/* Violations */}
-                        <td className="py-3.5 px-4 text-center">
+                        {/* Status & Violations */}
+                        <td className="py-3.5 px-3 text-center">
                           {violations > 0 ? (
                             <button
                               onClick={() => setExpandedAttemptId(isExpanded ? null : session.attempt.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold hover:bg-rose-100 transition-colors cursor-pointer"
-                              title="Bấm để xem lịch sử chuyển tab chi tiết"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold hover:bg-rose-100 transition-colors cursor-pointer"
+                              title="Bấm để xem chi tiết vi phạm tab"
                             >
                               <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
                               <span>{violations} lần rời tab</span>
                               <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                             </button>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              Trung thực
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                              Đang làm bài
                             </span>
                           )}
                         </td>
 
                         {/* Actions */}
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3.5 px-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setExpandedAttemptId(isExpanded ? null : session.attempt.id)}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              title="Xem chi tiết các câu thí sinh đã làm hoặc đang gõ"
+                            >
+                              <span>{isExpanded ? 'Đóng' : 'Xem bài'}</span>
+                              <ChevronDown className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+
                             <button
                               onClick={() => handleForceSubmit(session)}
                               className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
@@ -789,23 +863,82 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                         </td>
                       </tr>
 
-                      {/* Expanded violation logs row */}
-                      {isExpanded && session.attempt.tabViolationLogs && (
-                        <tr className="bg-rose-50/50">
-                          <td colSpan={6} className="py-3 px-6 text-xs text-rose-900 border-b border-rose-100">
-                            <div className="flex items-start gap-2">
-                              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                              <div>
-                                <p className="font-bold text-xs text-rose-950">
-                                  Nhật ký vi phạm rời màn hình thi của thí sinh {session.attempt.studentName}:
-                                </p>
-                                <ul className="list-disc pl-5 mt-1 space-y-0.5 text-[11px] text-rose-800">
-                                  {session.attempt.tabViolationLogs.map((log, idx) => (
-                                    <li key={idx}>{log}</li>
-                                  ))}
-                                </ul>
+                      {/* Expanded Real-time Inspection Panel */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/90 border-b border-slate-200">
+                          <td colSpan={8} className="py-4 px-6 text-xs text-slate-800 space-y-3">
+                            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                              <span className="font-bold text-slate-900 flex items-center gap-2">
+                                <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                                Bài làm trực tiếp của thí sinh: {session.attempt.studentName} (Cập nhật thời gian thực)
+                              </span>
+                              <span className="text-[11px] text-slate-400">
+                                Lưu tự động lần cuối: {session.attempt.lastSavedAt ? new Date(session.attempt.lastSavedAt).toLocaleTimeString('vi-VN') : 'Mới đây'}
+                              </span>
+                            </div>
+
+                            {/* Section details grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {/* Left: Answers snapshot */}
+                              <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+                                <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider block">
+                                  Các câu trắc nghiệm & trả lời ngắn đã chọn:
+                                </span>
+                                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                                  {session.attempt.answers && Object.keys(session.attempt.answers).length > 0 ? (
+                                    Object.entries(session.attempt.answers).map(([qId, val], aIdx) => {
+                                      const isEssay = typeof val === 'string' && val.length > 20;
+                                      if (isEssay) return null;
+                                      return (
+                                        <div key={qId} className="px-2 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs flex items-center gap-1.5">
+                                          <span className="font-semibold text-slate-500">#{aIdx + 1}:</span>
+                                          <span className="font-bold text-emerald-700">{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <span className="text-slate-400 italic text-xs">Thí sinh chưa chọn câu nào.</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Right: Essay preview */}
+                              <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+                                <span className="font-bold text-amber-800 text-[11px] uppercase tracking-wider block">
+                                  Nội dung bài làm tự luận đang viết:
+                                </span>
+                                {(() => {
+                                  const essayAnswers = Object.entries(session.attempt.answers || {}).filter(([_, val]) => typeof val === 'string' && val.length > 5);
+                                  if (essayAnswers.length === 0) {
+                                    return <span className="text-slate-400 italic text-xs block">Thí sinh chưa nhập nội dung tự luận.</span>;
+                                  }
+                                  return (
+                                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                                      {essayAnswers.map(([qId, textVal]) => (
+                                        <div key={qId} className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/80 text-xs text-slate-800 whitespace-pre-wrap leading-relaxed font-sans">
+                                          {String(textVal)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </div>
+
+                            {/* Violation logs if any */}
+                            {violations > 0 && session.attempt.tabViolationLogs && (
+                              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2 text-rose-900">
+                                <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <span className="font-bold text-xs">Nhật ký rời màn hình thi:</span>
+                                  <ul className="list-disc pl-5 mt-1 space-y-0.5 text-[11px] text-rose-800">
+                                    {session.attempt.tabViolationLogs.map((log, idx) => (
+                                      <li key={idx}>{log}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}
@@ -814,7 +947,7 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <Radio className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="font-bold text-sm text-slate-600">Hiện không có thí sinh nào đang làm bài trực tuyến</p>
                     <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">

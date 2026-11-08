@@ -162,6 +162,13 @@ export interface ExamAttempt {
   lastSavedAt: string;
   tabViolations?: number; // count of tab switch violations detected
   tabViolationLogs?: string[]; // timestamps of tab switches
+  currentQuestionIndex?: number;
+  sectionBreakdown?: {
+    mc: { answered: number; total: number; current?: number };
+    trueFalse?: { answered: number; total: number };
+    fillBlank: { answered: number; total: number; current?: number };
+    essay: { answered: number; total: number; current?: number; wordCount?: number };
+  };
 }
 
 export interface ExamResult {

@@ -388,17 +388,25 @@ export async function exportExamToPptx(
 ): Promise<void> {
   const pptx = new PptxGenJS();
 
-  // Widescreen 16:9 standard (13.33 x 7.5 inches)
-  pptx.layout = options.aspectRatio === '4:3' ? 'LAYOUT_4x3' : 'LAYOUT_16x9';
+  // Widescreen 16:9 standard (13.333333 x 7.5 inches)
+  if (options.aspectRatio === '4:3') {
+    pptx.defineLayout({ name: 'CUSTOM_4_3', width: 10.0, height: 7.5 });
+    pptx.layout = 'CUSTOM_4_3';
+  } else {
+    // Official Widescreen 16:9: width = 13.333333 inches, height = 7.5 inches
+    pptx.defineLayout({ name: 'CUSTOM_WIDESCREEN_16_9', width: 13.333333, height: 7.5 });
+    pptx.layout = 'CUSTOM_WIDESCREEN_16_9';
+  }
 
   const themeKey = options.theme || 'light-clean';
   const theme = THEMES[themeKey] || THEMES['light-clean'];
-  const fontFace = options.fontFamily || 'Arial';
+  // Enforce Segoe UI font across all slides and text runs
+  const fontFace = options.fontFamily || 'Segoe UI';
   const mode = options.presentationMode || 'click_reveal';
 
-  const slideW = options.aspectRatio === '4:3' ? 10.0 : 13.33;
-  const slideH = options.aspectRatio === '4:3' ? 7.5 : 7.5;
-  const contentW = slideW - 1.6; // Left 0.8, Right 0.8
+  const slideW = options.aspectRatio === '4:3' ? 10.0 : 13.333333;
+  const slideH = 7.5;
+  const contentW = options.aspectRatio === '4:3' ? 8.40 : 11.733333; // Left 0.8, Right 0.8
   const maxBottomLimit = 6.80; // Absolute bottom boundary (footer is at 7.05)
 
   const schoolName = options.schoolName || 'TRƯỜNG THCS & THPT EDUTEST';
@@ -641,7 +649,7 @@ export async function exportExamToPptx(
           optTexts[k] = latexToUnicodeMath(q.options?.[k] || '');
         });
         const maxOptLen = Math.max(...keys.map(k => optTexts[k].length));
-        isOneColMc = hasImage || maxOptLen > 40 || keys.some(k => optTexts[k].includes('\n'));
+        isOneColMc = hasImage || maxOptLen > 95;
       }
 
       // Check if multi-slide is needed (only when no image and prompt is very long)
@@ -1008,17 +1016,23 @@ export async function exportExamToPptx(
             });
 
           } else {
-            // 2-column x 2-row layout: Balanced Grid with generous 16pt font
-            const colW = (areaWidth - 0.32) / 2;
-            const gap = 0.15;
-            const cardH = Math.min(1.15, Math.max(0.85, (availableH - gap) / 2));
-            const optFontSize = cardH < 0.90 ? 15 : 17;
+            // 2-column x 2-row layout: Balanced Symmetric Grid as strictly specified:
+            // Column left (A, C): left = 0.85" (or startX)
+            // Column right (B, D): left = 6.85"
+            // Width of each option box: 5.65" (ensures clean separation and zero text overlap)
+            const isFullWidth = areaWidth > 10;
+            const leftColX = isFullWidth ? 0.85 : startX;
+            const rightColX = isFullWidth ? 6.85 : (startX + (areaWidth - 0.32) / 2 + 0.32);
+            const colW = isFullWidth ? 5.65 : (areaWidth - 0.32) / 2;
+            const gapY = 0.16;
+            const cardH = Math.min(1.20, Math.max(0.85, (availableH - gapY) / 2));
+            const optFontSize = cardH < 0.95 ? 15 : 16;
 
             const positions = [
-              { key: 'A' as const, x: startX, y: startY },
-              { key: 'B' as const, x: startX + colW + 0.32, y: startY },
-              { key: 'C' as const, x: startX, y: startY + cardH + gap },
-              { key: 'D' as const, x: startX + colW + 0.32, y: startY + cardH + gap }
+              { key: 'A' as const, x: leftColX, y: startY },
+              { key: 'B' as const, x: rightColX, y: startY },
+              { key: 'C' as const, x: leftColX, y: startY + cardH + gapY },
+              { key: 'D' as const, x: rightColX, y: startY + cardH + gapY }
             ];
 
             positions.forEach(pos => {
