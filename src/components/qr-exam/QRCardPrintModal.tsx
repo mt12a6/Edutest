@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles, QrCode, FileText, UserPlus, AlertTriangle } from 'lucide-react';
-import QRCode from 'qrcode';
+import { generateQRCodeDataUrl } from '../../utils/qrEncoder';
 import { SchoolClass, UserProfile, Exam, PlickersStudent } from '../../types';
 import { getPlickersStudents } from '../../services/db';
 
@@ -103,7 +103,7 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
         // Safe identifier payload: Exam ID + Student Code + Card ID
         const payload = `EDUTEST-QR:EXAM=${exam?.id || 'exam'}:STUDENT=${item.studentCode}:CARD=${item.cardId}`;
         try {
-          const url = await QRCode.toDataURL(payload, {
+          const url = await generateQRCodeDataUrl(payload, {
             margin: 1,
             width: 256,
             color: { dark: '#090D16', light: '#FFFFFF' }
