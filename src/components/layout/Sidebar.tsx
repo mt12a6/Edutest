@@ -14,7 +14,10 @@ import {
   Award,
   Sparkles,
   BookOpen,
-  Radio
+  Radio,
+  Camera,
+  Presentation,
+  QrCode
 } from 'lucide-react';
 
 
@@ -116,6 +119,48 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             >
               <BarChart3 className="w-4 h-4 text-indigo-500" />
               <span>Thống kê (Khối, Lớp, Môn)</span>
+            </button>
+          </div>
+        )}
+
+        {/* Plickers Assessment Navigation (Teachers & Admins) */}
+        {isTeacher && (
+          <div className="space-y-1 pt-2 border-t border-slate-200">
+            <div className="px-3.5 mb-2 text-[11px] font-bold text-amber-600 uppercase tracking-wider flex items-center justify-between">
+              <span>Khảo thí Thẻ Plickers</span>
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">QR 4D</span>
+            </div>
+
+            <button 
+              onClick={() => onTabChange('plickers-live')}
+              className={navItemClass('plickers-live')}
+            >
+              <Camera className="w-4 h-4 text-amber-500" />
+              <span>Quét Thẻ Camera</span>
+            </button>
+
+            <button 
+              onClick={() => onTabChange('plickers-present')}
+              className={navItemClass('plickers-present')}
+            >
+              <Presentation className="w-4 h-4 text-amber-500" />
+              <span>Trình Chiếu Máy Chiếu</span>
+            </button>
+
+            <button 
+              onClick={() => onTabChange('admin-students')}
+              className={navItemClass('admin-students')}
+            >
+              <Users className="w-4 h-4 text-amber-500" />
+              <span>Học sinh & Gán Thẻ ID</span>
+            </button>
+
+            <button 
+              onClick={() => onTabChange('plickers-cards')}
+              className={navItemClass('plickers-cards')}
+            >
+              <QrCode className="w-4 h-4 text-amber-500" />
+              <span>In Thẻ QR 4 Chiều (1-100)</span>
             </button>
           </div>
         )}

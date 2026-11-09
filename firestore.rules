@@ -98,5 +98,20 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // Plickers sessions
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Plickers responses
+    match /responses/{responseId} {
+      allow read, write: if true;
+    }
+
+    // Class Students
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
   }
 }

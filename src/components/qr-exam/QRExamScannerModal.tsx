@@ -21,10 +21,19 @@ import {
   AlertCircle
 } from 'lucide-react';
 import jsQR from 'jsqr';
-import { Exam, Question, SchoolClass, UserProfile, ExamResult } from '../../types';
+import { Exam, Question, SchoolClass, UserProfile, ExamResult, PlickersResponse } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
 import { calculateExamSubmissionBreakdown, isMultipleChoiceCorrect } from '../../utils/grading';
-import { submitExamAttempt, saveLocalResult, invalidateResultsCache, sanitizeForFirestore, getExamQuestions } from '../../services/db';
+import { 
+  submitExamAttempt, 
+  saveLocalResult, 
+  invalidateResultsCache, 
+  sanitizeForFirestore, 
+  getExamQuestions,
+  savePlickersResponse,
+  createOrGetPlickersSession
+} from '../../services/db';
+import { determineCardOrientation, detectMultipleCardsFromCanvas, parseCardPayload } from '../../utils/plickersVision';
 
 interface QRExamScannerModalProps {
   isOpen: boolean;
@@ -129,49 +138,52 @@ export const QRExamScannerModal: React.FC<QRExamScannerModalProps> = ({
       const canvas = document.createElement('canvas');
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert'
-        });
 
-        if (code && code.data) {
-          handleDetectedQR(code.data);
+        if (scanMode === 'classroom_response') {
+          // Real-time Multi-card scanning with orientation angle detection
+          const detectedCards = detectMultipleCardsFromCanvas(ctx, canvas.width, canvas.height, 6);
+          const now = Date.now();
+          detectedCards.forEach(card => {
+            const lastTime = lastScanStamp.current;
+            handleRecordClassroomAnswer(card.cardId, card.answer);
+            setJustScannedSuccess(true);
+            setTimeout(() => setJustScannedSuccess(false), 1500);
+          });
+        } else {
+          // Individual paper scanning
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'dontInvert'
+          });
+
+          if (code && code.data) {
+            handleDetectedQR(code.data);
+          }
         }
       }
     }
     animationFrameRef.current = requestAnimationFrame(scanVideoFrame);
   };
 
-  // Process detected QR code payload
+  // Process detected QR code payload for individual paper
   const lastScanStamp = useRef<number>(0);
   const handleDetectedQR = (data: string) => {
     const now = Date.now();
-    if (now - lastScanStamp.current < 2000) return; // debounce 2s
+    if (now - lastScanStamp.current < 1800) return; // debounce
     lastScanStamp.current = now;
 
-    // Pattern: EDUTEST-QR:EXAM=...:STUDENT=...:CARD=...
-    if (data.includes('EDUTEST-QR:') || data.includes('STUDENT=')) {
-      const studentMatch = data.match(/STUDENT=([^:]+)/);
-      const cardMatch = data.match(/CARD=([^:]+)/);
-      const studentCode = studentMatch ? studentMatch[1] : (cardMatch ? `HS${cardMatch[1]}` : 'HS01');
-      const cardId = cardMatch ? parseInt(cardMatch[1], 10) : 1;
-
+    const payload = parseCardPayload(data);
+    if (payload) {
+      const studentCode = payload.studentCode || `HS${String(payload.cardId).padStart(2, '0')}`;
       setJustScannedSuccess(true);
       setTimeout(() => setJustScannedSuccess(false), 2000);
 
-      if (scanMode === 'individual_paper') {
-        setActiveStudentId(`std_${studentCode}`);
-        setActiveStudentCode(studentCode);
-        setActiveStudentName(`Học sinh mã ${studentCode}`);
-      } else {
-        // In classroom response mode, record answer based on QR orientation
-        const randomOpts: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
-        const chosen = currentQ.correctOption || randomOpts[Math.floor(Math.random() * randomOpts.length)];
-        handleRecordClassroomAnswer(cardId, chosen);
-      }
+      setActiveStudentId(`std_${studentCode}`);
+      setActiveStudentCode(studentCode);
+      setActiveStudentName(`Học sinh mã ${studentCode}`);
     }
   };
 
@@ -262,36 +274,13 @@ export const QRExamScannerModal: React.FC<QRExamScannerModalProps> = ({
       ...prev,
       [cardId]: {
         studentId: `hs-${cardId}`,
-        studentName: `Học sinh ${cardId}`,
+        studentName: `Học sinh #${cardId}`,
         cardId,
         answer,
         isCorrect,
         timestamp: new Date().toLocaleTimeString('vi-VN')
       }
     }));
-  };
-
-  // Quick Demo Auto-Scan for classroom
-  const handleQuickDemoScan = () => {
-    const mockResponses: Record<number, StudentResponseRecord> = {};
-    const options: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
-    const correct = currentQ.correctOption || 'A';
-
-    for (let i = 1; i <= 32; i++) {
-      const chosen = Math.random() < 0.75 
-        ? correct 
-        : options[Math.floor(Math.random() * options.length)];
-
-      mockResponses[i] = {
-        studentId: `hs-${i}`,
-        studentName: `Học sinh ${String(i).padStart(2, '0')}`,
-        cardId: i,
-        answer: chosen,
-        isCorrect: chosen === correct,
-        timestamp: new Date().toLocaleTimeString('vi-VN')
-      };
-    }
-    setClassroomResponses(mockResponses);
   };
 
   // Classroom stats
@@ -672,14 +661,10 @@ export const QRExamScannerModal: React.FC<QRExamScannerModalProps> = ({
                     Đáp án đúng: {currentQ.correctOption || 'A'}
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={handleQuickDemoScan}
-                    className="px-2.5 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Mô phỏng 32 học sinh</span>
-                  </button>
+                  <span className="px-2.5 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Quét thực tế từ camera</span>
+                  </span>
                 </div>
 
                 {/* Question Prompt */}

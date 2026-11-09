@@ -312,3 +312,62 @@ export const DEFAULT_HOMEPAGE_SETTINGS: HomepageSettings = {
   updatedAt: new Date().toISOString()
 };
 
+// ==================== PLICKERS CLASSROOM RESPONSE ENTITIES ====================
+
+export interface PlickersCard {
+  cardId: number; // 1 to 100
+  classId?: string;
+  studentId?: string;
+  studentName?: string;
+  studentCode?: string;
+  assignedAt?: string;
+}
+
+export interface PlickersStudent {
+  id: string;
+  studentCode: string; // e.g. HS01, SBD123
+  displayName: string;
+  classId: string;
+  className?: string;
+  cardId: number; // Linked QR card ID (1..100)
+  status: 'active' | 'disabled';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PlickersSession {
+  id: string;
+  examId: string;
+  examTitle: string;
+  classId: string;
+  className: string;
+  teacherId: string;
+  teacherName?: string;
+  currentQuestionIndex: number;
+  revealAnswer: boolean;
+  status: 'active' | 'completed';
+  startedAt: string;
+  endedAt?: string;
+  totalQuestions: number;
+  totalStudents: number;
+}
+
+export interface PlickersResponse {
+  id: string; // composite key: `${sessionId}_${questionId}_${cardId}`
+  sessionId: string;
+  examId: string;
+  questionId: string;
+  questionNumber: number;
+  cardId: number;
+  studentId: string;
+  studentName: string;
+  studentCode: string;
+  answer: 'A' | 'B' | 'C' | 'D';
+  correctAnswer?: 'A' | 'B' | 'C' | 'D';
+  isCorrect: boolean;
+  confidence?: number;
+  rotationDeg?: number;
+  timestamp: string;
+}
+
+

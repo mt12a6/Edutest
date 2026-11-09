@@ -25,7 +25,11 @@ import {
   SystemLog,
   UserRole,
   HomepageSettings,
-  DEFAULT_HOMEPAGE_SETTINGS
+  DEFAULT_HOMEPAGE_SETTINGS,
+  PlickersCard,
+  PlickersStudent,
+  PlickersSession,
+  PlickersResponse
 } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 import { 
@@ -4213,4 +4217,406 @@ export async function saveClassAttendanceRecord(
 
   return record;
 }
+
+// ==================== PLICKERS SESSION & RESPONSE SERVICES ====================
+
+const STORAGE_PLICKERS_SESSIONS_KEY = 'edutest_plickers_sessions';
+const STORAGE_PLICKERS_RESPONSES_KEY = 'edutest_plickers_responses';
+const STORAGE_PLICKERS_STUDENTS_KEY = 'edutest_plickers_students';
+
+export function getLocalPlickersSessions(): PlickersSession[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_PLICKERS_SESSIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalPlickersSessions(sessions: PlickersSession[]): void {
+  try {
+    localStorage.setItem(STORAGE_PLICKERS_SESSIONS_KEY, JSON.stringify(sessions));
+  } catch (e) {
+    console.warn('saveLocalPlickersSessions note:', e);
+  }
+}
+
+export function getLocalPlickersResponses(sessionId?: string): PlickersResponse[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_PLICKERS_RESPONSES_KEY);
+    const list: PlickersResponse[] = raw ? JSON.parse(raw) : [];
+    return sessionId ? list.filter(r => r.sessionId === sessionId) : list;
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalPlickersResponses(responses: PlickersResponse[]): void {
+  try {
+    localStorage.setItem(STORAGE_PLICKERS_RESPONSES_KEY, JSON.stringify(responses));
+  } catch (e) {
+    console.warn('saveLocalPlickersResponses note:', e);
+  }
+}
+
+export async function createOrGetPlickersSession(
+  exam: Exam,
+  schoolClass: SchoolClass,
+  teacherId: string,
+  teacherName: string
+): Promise<PlickersSession> {
+  const sessionId = `ses_${exam.id}_${schoolClass.id}`;
+  const now = new Date().toISOString();
+
+  // Try fetching existing active session
+  try {
+    const docRef = doc(db, 'sessions', sessionId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data() as PlickersSession;
+      if (data.status === 'active') {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('getPlickersSession firestore error, falling back:', err);
+  }
+
+  const localSessions = getLocalPlickersSessions();
+  const existingLocal = localSessions.find(s => s.id === sessionId && s.status === 'active');
+  if (existingLocal) {
+    return existingLocal;
+  }
+
+  // Create new active session
+  const newSession: PlickersSession = {
+    id: sessionId,
+    examId: exam.id,
+    examTitle: exam.title,
+    classId: schoolClass.id,
+    className: schoolClass.name,
+    teacherId,
+    teacherName,
+    currentQuestionIndex: 0,
+    revealAnswer: false,
+    status: 'active',
+    startedAt: now,
+    totalQuestions: exam.questionCount || 20,
+    totalStudents: schoolClass.studentCount || 35
+  };
+
+  saveLocalPlickersSessions([newSession, ...localSessions.filter(s => s.id !== sessionId)]);
+
+  try {
+    await setDoc(doc(db, 'sessions', sessionId), sanitizeForFirestore(newSession), { merge: true });
+  } catch (e) {
+    console.warn('createOrGetPlickersSession firestore note:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:plickers_session_updated', { detail: newSession }));
+  }
+
+  return newSession;
+}
+
+export async function updatePlickersSessionState(
+  sessionId: string,
+  updates: Partial<PlickersSession>
+): Promise<void> {
+  const localSessions = getLocalPlickersSessions();
+  const idx = localSessions.findIndex(s => s.id === sessionId);
+  if (idx >= 0) {
+    localSessions[idx] = { ...localSessions[idx], ...updates };
+    saveLocalPlickersSessions(localSessions);
+  }
+
+  try {
+    await updateDoc(doc(db, 'sessions', sessionId), sanitizeForFirestore(updates));
+  } catch (e) {
+    console.warn('updatePlickersSessionState firestore note:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:plickers_session_updated', { detail: { id: sessionId, ...updates } }));
+  }
+}
+
+/**
+ * Upsert student response with composite unique key: `${sessionId}_${questionId}_${cardId}`
+ * Guarantees zero duplicate rows for same student & question in the session.
+ * Updates answer if student changes rotation.
+ */
+export async function savePlickersResponse(response: PlickersResponse): Promise<void> {
+  const responseId = `${response.sessionId}_${response.questionId}_${response.cardId}`;
+  const record: PlickersResponse = {
+    ...response,
+    id: responseId,
+    timestamp: response.timestamp || new Date().toISOString()
+  };
+
+  // 1. Update localStorage
+  const allResponses = getLocalPlickersResponses();
+  const filtered = allResponses.filter(r => r.id !== responseId);
+  filtered.push(record);
+  saveLocalPlickersResponses(filtered);
+
+  // 2. Persist to Firestore
+  try {
+    await setDoc(doc(db, 'responses', responseId), sanitizeForFirestore(record), { merge: true });
+  } catch (err) {
+    console.warn('savePlickersResponse firestore note:', err);
+  }
+
+  // 3. Dispatch realtime event for instant zero-latency UI update on presentation screen
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:plickers_response_recorded', { detail: record }));
+  }
+}
+
+export async function getPlickersResponsesForSession(sessionId: string): Promise<PlickersResponse[]> {
+  const local = getLocalPlickersResponses(sessionId);
+  try {
+    const q = query(collection(db, 'responses'), where('sessionId', '==', sessionId));
+    const snap = await getDocs(q);
+    const firestoreList: PlickersResponse[] = [];
+    snap.forEach(d => firestoreList.push({ ...d.data(), id: d.id } as PlickersResponse));
+
+    if (firestoreList.length > 0) {
+      // Merge unique by ID
+      const map = new Map<string, PlickersResponse>();
+      local.forEach(r => map.set(r.id, r));
+      firestoreList.forEach(r => map.set(r.id, r));
+      return Array.from(map.values());
+    }
+  } catch (e) {
+    console.warn('getPlickersResponsesForSession firestore note:', e);
+  }
+  return local;
+}
+
+/**
+ * Complete session, compute scores for each student, and persist to ExamResult collection.
+ */
+export async function completePlickersSessionAndCalculateResults(
+  session: PlickersSession,
+  exam: Exam,
+  questions: Question[]
+): Promise<ExamResult[]> {
+  const responses = await getPlickersResponsesForSession(session.id);
+  const studentMap = new Map<string, {
+    cardId: number;
+    studentId: string;
+    studentName: string;
+    studentCode: string;
+    answers: Record<string, 'A' | 'B' | 'C' | 'D'>;
+  }>();
+
+  // Group responses by card/student
+  for (const resp of responses) {
+    const key = String(resp.cardId);
+    if (!studentMap.has(key)) {
+      studentMap.set(key, {
+        cardId: resp.cardId,
+        studentId: resp.studentId || `std_card_${resp.cardId}`,
+        studentName: resp.studentName || `Học sinh thẻ #${resp.cardId}`,
+        studentCode: resp.studentCode || `HS${String(resp.cardId).padStart(2, '0')}`,
+        answers: {}
+      });
+    }
+    studentMap.get(key)!.answers[resp.questionId] = resp.answer;
+  }
+
+  const generatedResults: ExamResult[] = [];
+  const totalQ = questions.length || 1;
+  const maxScore = exam.maxScore || 10;
+  const pointsPerQ = maxScore / totalQ;
+
+  for (const [_, stdData] of studentMap.entries()) {
+    let correctCount = 0;
+    let wrongCount = 0;
+    const answeredCount = Object.keys(stdData.answers).length;
+
+    questions.forEach(q => {
+      const chosen = stdData.answers[q.id];
+      if (chosen) {
+        if (chosen === q.correctOption) {
+          correctCount++;
+        } else {
+          wrongCount++;
+        }
+      }
+    });
+
+    const unattemptedCount = Math.max(0, totalQ - answeredCount);
+    const score = Math.round(correctCount * pointsPerQ * 100) / 100;
+    const percentage = Math.round((correctCount / totalQ) * 100);
+
+    const resultId = `res_plickers_${session.id}_${stdData.cardId}`;
+    const result: ExamResult = {
+      id: resultId,
+      attemptId: `att_plickers_${session.id}_${stdData.cardId}`,
+      examId: exam.id,
+      studentId: stdData.studentId,
+      studentName: stdData.studentName,
+      studentEmail: `${stdData.studentCode.toLowerCase()}@edutest.local`,
+      classId: session.classId,
+      score,
+      maxScore,
+      correctCount,
+      wrongCount,
+      unattemptedCount,
+      percentage,
+      submittedAt: new Date().toISOString(),
+      source: 'system',
+      answers: stdData.answers,
+      status: 'completed',
+      partScores: {
+        part1: {
+          earned: score,
+          max: maxScore,
+          count: totalQ,
+          correctCount
+        }
+      }
+    };
+
+    // Save locally
+    saveLocalResult(result);
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'results', resultId), sanitizeForFirestore(result), { merge: true });
+    } catch (e) {
+      console.warn('completePlickersSession result note:', e);
+    }
+
+    generatedResults.push(result);
+  }
+
+  // Mark session completed
+  await updatePlickersSessionState(session.id, {
+    status: 'completed',
+    endedAt: new Date().toISOString()
+  });
+
+  invalidateResultsCache();
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:score_updated'));
+  }
+
+  return generatedResults;
+}
+
+// ==================== PLICKERS CLASSROOM STUDENT & CARD ASSIGNMENT SERVICES ====================
+
+export function getLocalPlickersStudents(classId: string): PlickersStudent[] {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_PLICKERS_STUDENTS_KEY}_${classId}`);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+
+  // Auto-generate roster for class if none stored yet
+  const defaultRoster: PlickersStudent[] = [];
+  const lastNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Vũ', 'Phan', 'Đỗ', 'Bùi', 'Đặng'];
+  const middleNames = ['Văn', 'Thị', 'Đình', 'Thanh', 'Hữu', 'Ngọc', 'Quang', 'Minh', 'Đức', 'Phương'];
+  const firstNames = ['An', 'Bình', 'Cường', 'Dũng', 'Đạt', 'Giang', 'Hà', 'Hải', 'Huy', 'Khoa', 'Linh', 'Long', 'Mai', 'Nam', 'Nhi', 'Phong', 'Quân', 'Sơn', 'Tâm', 'Thảo', 'Trang', 'Tuấn', 'Tùng', 'Vy', 'Yến'];
+
+  for (let i = 1; i <= 35; i++) {
+    const ln = lastNames[(i * 3) % lastNames.length];
+    const mn = middleNames[(i * 7) % middleNames.length];
+    const fn = firstNames[(i * 11) % firstNames.length];
+    defaultRoster.push({
+      id: `std_${classId}_${i}`,
+      studentCode: `HS${String(i).padStart(2, '0')}`,
+      displayName: `${ln} ${mn} ${fn}`,
+      classId,
+      cardId: i, // card # equals roll number by default
+      status: 'active',
+      createdAt: new Date().toISOString()
+    });
+  }
+  saveLocalPlickersStudents(classId, defaultRoster);
+  return defaultRoster;
+}
+
+export function saveLocalPlickersStudents(classId: string, students: PlickersStudent[]): void {
+  try {
+    localStorage.setItem(`${STORAGE_PLICKERS_STUDENTS_KEY}_${classId}`, JSON.stringify(students));
+  } catch (e) {
+    console.warn('saveLocalPlickersStudents note:', e);
+  }
+}
+
+export async function getPlickersStudents(classId: string): Promise<PlickersStudent[]> {
+  const local = getLocalPlickersStudents(classId);
+  try {
+    const q = query(collection(db, 'students'), where('classId', '==', classId));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const remote: PlickersStudent[] = [];
+      snap.forEach(d => remote.push({ ...d.data(), id: d.id } as PlickersStudent));
+      saveLocalPlickersStudents(classId, remote);
+      return remote;
+    }
+  } catch (e) {
+    console.warn('getPlickersStudents firestore note:', e);
+  }
+  return local;
+}
+
+export async function savePlickersStudent(student: PlickersStudent): Promise<PlickersStudent> {
+  const localList = getLocalPlickersStudents(student.classId);
+  const nextList = [student, ...localList.filter(s => s.id !== student.id)];
+  saveLocalPlickersStudents(student.classId, nextList);
+
+  try {
+    await setDoc(doc(db, 'students', student.id), sanitizeForFirestore(student), { merge: true });
+  } catch (e) {
+    console.warn('savePlickersStudent firestore note:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:students_updated', { detail: { classId: student.classId } }));
+  }
+
+  return student;
+}
+
+export async function bulkSavePlickersStudents(classId: string, students: PlickersStudent[]): Promise<void> {
+  saveLocalPlickersStudents(classId, students);
+
+  try {
+    const batch = writeBatch(db);
+    students.forEach(s => {
+      const ref = doc(db, 'students', s.id);
+      batch.set(ref, sanitizeForFirestore(s), { merge: true });
+    });
+    await batch.commit();
+  } catch (e) {
+    console.warn('bulkSavePlickersStudents firestore note:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:students_updated', { detail: { classId } }));
+  }
+}
+
+export async function deletePlickersStudent(classId: string, studentId: string): Promise<void> {
+  const localList = getLocalPlickersStudents(classId);
+  const nextList = localList.filter(s => s.id !== studentId);
+  saveLocalPlickersStudents(classId, nextList);
+
+  try {
+    await deleteDoc(doc(db, 'students', studentId));
+  } catch (e) {
+    console.warn('deletePlickersStudent firestore note:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:students_updated', { detail: { classId } }));
+  }
+}
+
 

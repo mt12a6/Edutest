@@ -85,6 +85,8 @@ import { GoogleFormModal } from './GoogleFormModal';
 import { PinnedExamsConfigModal } from '../home/PinnedExamsConfigModal';
 import { QRCardPrintModal } from '../qr-exam/QRCardPrintModal';
 import { QRExamScannerModal } from '../qr-exam/QRExamScannerModal';
+import { PlickersScannerView } from '../qr-exam/PlickersScannerView';
+import { PlickersPresentationView } from '../qr-exam/PlickersPresentationView';
 import { TexExamUploadModal } from './TexExamUploadModal';
 import { WordExportModal } from './WordExportModal';
 import { PowerPointExportModal } from './PowerPointExportModal';
@@ -232,6 +234,8 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   // QR Plickers Print & Live Scanner Modals
   const [qrPrintModalExam, setQrPrintModalExam] = useState<Exam | null>(null);
   const [qrScannerModalSession, setQrScannerModalSession] = useState<{ exam: Exam; questions: Question[] } | null>(null);
+  const [plickersScannerSession, setPlickersScannerSession] = useState<{ exam: Exam; questions: Question[] } | null>(null);
+  const [plickersPresentationSession, setPlickersPresentationSession] = useState<{ exam: Exam; questions: Question[] } | null>(null);
   const [exportingPptxExamId, setExportingPptxExamId] = useState<string | null>(null);
 
   // Word & PowerPoint Custom Export Modals
@@ -561,7 +565,21 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         showError('Đề thi chưa có câu hỏi nào để quét phiếu.');
         return;
       }
-      setQrScannerModalSession({ exam, questions: qList });
+      setPlickersScannerSession({ exam, questions: qList });
+    } catch (err: any) {
+      showError('Không thể tải câu hỏi: ' + (err.message || ''));
+    }
+  };
+
+  const handleOpenPlickersPresentation = async (exam: Exam) => {
+    try {
+      setActiveMenuExamId(null);
+      const qList = await getExamQuestions(exam.id);
+      if (!qList || qList.length === 0) {
+        showError('Đề thi chưa có câu hỏi nào để trình chiếu.');
+        return;
+      }
+      setPlickersPresentationSession({ exam, questions: qList });
     } catch (err: any) {
       showError('Không thể tải câu hỏi: ' + (err.message || ''));
     }
@@ -697,7 +715,16 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                 className="w-full px-3.5 py-1.5 text-left font-medium text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
               >
                 <Camera className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Quét phiếu trực tiếp (Camera Plickers)</span>
+                <span>Quét thẻ trực tiếp (Camera Plickers)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenPlickersPresentation(exam)}
+                className="w-full px-3.5 py-1.5 text-left font-medium text-indigo-700 hover:bg-indigo-50 flex items-center gap-2 cursor-pointer"
+              >
+                <Presentation className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Trình chiếu câu hỏi Plickers (Màn hình lớn)</span>
               </button>
             </div>
 
@@ -1859,6 +1886,36 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
           onSaveResults={() => {
             showSuccess('Đã lưu kết quả quét phiếu trực tiếp thành công!');
             onRefreshExams();
+          }}
+        />
+      )}
+
+      {/* Plickers Live Camera Scanner View */}
+      {plickersScannerSession && (
+        <PlickersScannerView
+          exam={plickersScannerSession.exam}
+          questions={plickersScannerSession.questions}
+          classes={classes}
+          onClose={() => setPlickersScannerSession(null)}
+          onOpenPresentation={() => {
+            const target = plickersScannerSession;
+            setPlickersScannerSession(null);
+            setPlickersPresentationSession(target);
+          }}
+        />
+      )}
+
+      {/* Plickers Live Presentation View */}
+      {plickersPresentationSession && (
+        <PlickersPresentationView
+          exam={plickersPresentationSession.exam}
+          questions={plickersPresentationSession.questions}
+          classes={classes}
+          onClose={() => setPlickersPresentationSession(null)}
+          onOpenScanner={() => {
+            const target = plickersPresentationSession;
+            setPlickersPresentationSession(null);
+            setPlickersScannerSession(target);
           }}
         />
       )}

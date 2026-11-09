@@ -27,7 +27,10 @@ import {
   Sun,
   Moon,
   Database,
-  User
+  User,
+  Camera,
+  Presentation,
+  QrCode
 } from 'lucide-react';
 import { UserRole } from '../../types';
 import { LoginModal } from '../auth/LoginModal';
@@ -572,6 +575,47 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
               >
                 <BarChart3 className="w-4 h-4 text-indigo-500" />
                 <span>Thống kê (Khối, Lớp, Môn)</span>
+              </button>
+
+              <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider px-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span>Khảo thí Thẻ Plickers</span>
+                <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">QR 4D</span>
+              </div>
+              <button
+                onClick={() => { onTabChange('plickers-live'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'plickers-live' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Camera className="w-4 h-4 text-amber-500" />
+                <span>Quét Thẻ Camera (Plickers)</span>
+              </button>
+              <button
+                onClick={() => { onTabChange('plickers-present'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'plickers-present' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Presentation className="w-4 h-4 text-amber-500" />
+                <span>Trình Chiếu Máy Chiếu</span>
+              </button>
+              <button
+                onClick={() => { onTabChange('admin-students'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'admin-students' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Users className="w-4 h-4 text-amber-500" />
+                <span>Học sinh & Gán Thẻ ID</span>
+              </button>
+              <button
+                onClick={() => { onTabChange('plickers-cards'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'plickers-cards' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <QrCode className="w-4 h-4 text-amber-500" />
+                <span>In Thẻ QR 4 Chiều (1-100)</span>
               </button>
             </>
           )}

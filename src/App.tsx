@@ -18,6 +18,10 @@ import { ExamTakingRoom } from './components/student/ExamTakingRoom';
 import { ExamResultView } from './components/student/ExamResultView';
 import { UserManager } from './components/admin/UserManager';
 import { ClassSubjectManager } from './components/admin/ClassSubjectManager';
+import { ClassStudentManager } from './components/admin/ClassStudentManager';
+import { PlickersScannerView } from './components/qr-exam/PlickersScannerView';
+import { PlickersPresentationView } from './components/qr-exam/PlickersPresentationView';
+import { QRCardPrintModal } from './components/qr-exam/QRCardPrintModal';
 import { SystemAuditLogs } from './components/admin/SystemAuditLogs';
 import { BackupRestoreManager } from './components/admin/BackupRestoreManager';
 import { 
@@ -96,6 +100,13 @@ function MainApp() {
   const [activeFolderSubject, setActiveFolderSubject] = useState<Subject | null>(null);
   const [notFoundRoute, setNotFoundRoute] = useState<{ path: string; type: 'bai-thi' | 'thu-muc' | 'page' } | null>(null);
 
+  // Plickers testing states
+  const [activePlickersExam, setActivePlickersExam] = useState<Exam | null>(null);
+  const [activePlickersQuestions, setActivePlickersQuestions] = useState<Question[]>([]);
+  const [activePlickersClassId, setActivePlickersClassId] = useState<string>('');
+  const [showPrintCardsModal, setShowPrintCardsModal] = useState<boolean>(false);
+  const [selectedPrintClassId, setSelectedPrintClassId] = useState<string>('');
+
   // Dynamic Route Resolver for /bai-thi/:slug and /thu-muc/:slug and aliases
   const resolveCurrentRoute = async (examList: Exam[], subjectList: Subject[]) => {
     if (typeof window === 'undefined') return;
@@ -157,8 +168,9 @@ function MainApp() {
     const cleanTab = pathname.replace(/^\//, '').replace(/\/+$/, '');
     const validTabs = [
       'home', 'teacher-exams', 'teacher-submissions', 'teacher-results', 'teacher-live', 
+      'plickers-live', 'plickers-present', 'plickers-cards',
       'student-exams', 'student-history', 
-      'admin-users', 'admin-classes', 'admin-logs', 'admin-backup'
+      'admin-users', 'admin-classes', 'admin-students', 'admin-logs', 'admin-backup'
     ];
     if (validTabs.includes(cleanTab)) {
       setNotFoundRoute(null);
@@ -473,6 +485,61 @@ function MainApp() {
                 setViewingResultSession({ exam, result, questions });
               }}
             />
+          ) : currentTab === 'plickers-live' ? (
+            <PlickersScannerView
+              exam={activePlickersExam || exams[0] || { id: 'exam_plickers', title: 'Khảo thí lớp học Plickers', subjectName: 'Toán học', questionCount: 10, maxScore: 10, classIds: [classes[0]?.id || '10A1'] }}
+              questions={activePlickersQuestions.length > 0 ? activePlickersQuestions : []}
+              classes={classes}
+              initialClassId={activePlickersClassId || classes[0]?.id}
+              onClose={() => navigateTo('/teacher-exams', 'teacher-exams')}
+              onOpenPresentation={() => navigateTo('/plickers-present', 'plickers-present')}
+            />
+          ) : currentTab === 'plickers-present' ? (
+            <PlickersPresentationView
+              exam={activePlickersExam || exams[0] || { id: 'exam_plickers', title: 'Khảo thí lớp học Plickers', subjectName: 'Toán học', questionCount: 10, maxScore: 10, classIds: [classes[0]?.id || '10A1'] }}
+              questions={activePlickersQuestions.length > 0 ? activePlickersQuestions : []}
+              classes={classes}
+              initialClassId={activePlickersClassId || classes[0]?.id}
+              onClose={() => navigateTo('/teacher-exams', 'teacher-exams')}
+              onOpenScanner={() => navigateTo('/plickers-live', 'plickers-live')}
+            />
+          ) : currentTab === 'plickers-cards' ? (
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 text-center space-y-4 max-w-xl mx-auto my-8 shadow-xs">
+              <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 border border-teal-200 flex items-center justify-center mx-auto shadow-xs">
+                <span className="text-2xl font-black">QR</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900">In Bộ Thẻ QR 4 Chiều (Plickers)</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Mỗi học sinh trong lớp được cấp 1 thẻ định danh hình học 4 chiều (A, B, C, D). Giáo viên quét camera một lần để nhận diện cả lớp.
+                </p>
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintCardsModal(true)}
+                  className="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  Mở Trình In Thẻ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/admin-students', 'admin-students')}
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  Quản lý Danh Sách Học Sinh
+                </button>
+              </div>
+            </div>
+          ) : currentTab === 'admin-students' ? (
+            <ClassStudentManager
+              classes={classes}
+              onRefreshClasses={reloadData}
+              onOpenCardPrint={(classId) => {
+                setSelectedPrintClassId(classId);
+                setShowPrintCardsModal(true);
+              }}
+            />
           ) : currentTab === 'admin-users' ? (
             <UserManager />
           ) : currentTab === 'admin-classes' ? (
@@ -598,6 +665,15 @@ function MainApp() {
               console.error('Lỗi khi vào phòng thi bí mật:', err);
             }
           }}
+        />
+      )}
+
+      {/* Global QR Card Print Modal */}
+      {showPrintCardsModal && (
+        <QRCardPrintModal
+          isOpen={showPrintCardsModal}
+          classes={classes}
+          onClose={() => setShowPrintCardsModal(false)}
         />
       )}
     </div>

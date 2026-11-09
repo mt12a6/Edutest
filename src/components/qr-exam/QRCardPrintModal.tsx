@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles, QrCode, FileText, UserPlus } from 'lucide-react';
+import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles, QrCode, FileText, UserPlus, AlertTriangle } from 'lucide-react';
 import QRCode from 'qrcode';
-import { SchoolClass, UserProfile, Exam } from '../../types';
+import { SchoolClass, UserProfile, Exam, PlickersStudent } from '../../types';
+import { getPlickersStudents } from '../../services/db';
 
 interface QRCardPrintModalProps {
   isOpen: boolean;
@@ -20,15 +21,24 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
 }) => {
   // Mode: 'class' (Thi theo lớp) | 'free' (Thi tự do)
   const [organizationMode, setOrganizationMode] = useState<'class' | 'free'>('class');
-  const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || 'all');
+  const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '10A1');
+  const [classStudents, setClassStudents] = useState<PlickersStudent[]>([]);
   const [freeStudentText, setFreeStudentText] = useState<string>(
     'Nguyễn Văn An\nTrần Thị Bình\nLê Hoàng Cường\nPhạm Thị Dung\nVũ Minh Đức\nĐặng Thúy Hằng\nBùi Quốc Huy\nHoàng Mai Linh'
   );
-  const [cardCount, setCardCount] = useState<number>(30);
+  const [cardCount, setCardCount] = useState<number>(35);
   const [cardsPerPage, setCardsPerPage] = useState<2 | 4>(2);
   const [templateType, setTemplateType] = useState<'plickers' | 'answer_sheet'>('plickers');
   const [showInstructions, setShowInstructions] = useState<boolean>(true);
   const [qrCodeDataUrls, setQrCodeDataUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (selectedClassId && selectedClassId !== 'all') {
+      getPlickersStudents(selectedClassId).then(list => {
+        setClassStudents(list);
+      }).catch(e => console.warn('Lỗi tải học sinh lớp:', e));
+    }
+  }, [selectedClassId]);
 
   if (!isOpen) return null;
 
@@ -36,20 +46,18 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   let cardItems: { cardId: number; studentName: string; studentCode: string; className: string }[] = [];
 
   if (organizationMode === 'class') {
-    const classStudents = selectedClassId === 'all'
-      ? students
-      : students.filter(s => s.classIds?.includes(selectedClassId));
+    const currentClass = classes.find(c => c.id === selectedClassId);
+    const className = currentClass?.name || selectedClassId;
 
     if (classStudents.length > 0) {
-      cardItems = classStudents.map((s, idx) => ({
-        cardId: idx + 1,
-        studentName: s.displayName || `Học sinh ${idx + 1}`,
-        studentCode: s.username || s.email?.split('@')[0] || `HS${String(idx + 1).padStart(2, '0')}`,
-        className: classes.find(c => c.id === selectedClassId)?.name || s.className || 'Lớp khảo thí'
+      cardItems = classStudents.map(s => ({
+        cardId: s.cardId,
+        studentName: s.displayName,
+        studentCode: s.studentCode,
+        className
       }));
     } else {
-      // Fallback if class has no student records yet
-      const className = classes.find(c => c.id === selectedClassId)?.name || 'Lớp 10A1';
+      // Fallback
       cardItems = Array.from({ length: cardCount }, (_, i) => ({
         cardId: i + 1,
         studentName: `Học sinh số ${i + 1}`,
