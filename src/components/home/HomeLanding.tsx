@@ -471,20 +471,20 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 sm:space-y-5 pb-12 animate-in fade-in duration-200">
 
       {/* ================================================================= */}
-      {/* 2. BANNER CHÍNH (Nền xanh than #14243B & Teal #0F766E, Tối giản, Chuyên nghiệp) */}
+      {/* 2. BANNER CHÍNH (Nền xanh than #14243B & Teal #009F91, Tối giản, Chuyên nghiệp) */}
       {/* ================================================================= */}
-      <div className="relative overflow-hidden rounded-2xl bg-[#14243B] text-white p-5 sm:p-7 shadow-md border border-slate-800">
+      <div className="relative overflow-hidden rounded-2xl bg-[#14243B] text-white p-4 sm:p-5 lg:p-5.5 shadow-md border border-slate-800">
         {/* Subtle geometric light accent */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-teal-600/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 w-80 h-80 bg-teal-600/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5">
           {/* Left: Branding & Core Message */}
-          <div className="space-y-2 max-w-xl">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+          <div className="space-y-1.5 max-w-xl min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-[#009F91]/20 text-teal-300 border border-[#009F91]/30">
                 <Sparkles className="w-3.5 h-3.5 text-teal-400" />
                 <span>EduTest PRO</span>
               </span>
@@ -493,19 +493,19 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
               </span>
             </div>
 
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white leading-tight">
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-black tracking-tight text-white leading-tight break-words [overflow-wrap:anywhere]">
               HỆ THỐNG THI TRỰC TUYẾN THÔNG MINH
             </h1>
 
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed break-words [overflow-wrap:anywhere]">
               Nền tảng kiểm tra, đánh giá và luyện tập dành cho giáo viên và học sinh.
             </p>
           </div>
 
           {/* Right: Quick Exam Code Entry & Action */}
-          <div className="flex flex-col items-stretch lg:items-end gap-2.5 shrink-0">
+          <div className="flex flex-col items-stretch lg:items-end gap-2 shrink-0">
             <form onSubmit={handleEnterExamCode} className="w-full sm:w-80">
-              <div className="flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-700 shadow-inner">
+              <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-700 shadow-inner">
                 <div className="relative flex-1 flex items-center min-w-0">
                   <KeyRound className="w-4 h-4 text-teal-400 absolute left-3 shrink-0" />
                   <input
@@ -516,22 +516,22 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                       if (codeError) setCodeError(null);
                     }}
                     placeholder="Nhập mã đề (ví dụ: TOAN6)..."
-                    className="w-full pl-9 pr-2 py-2 text-xs font-semibold text-white placeholder-slate-400 bg-transparent border-none focus:outline-none uppercase"
+                    className="w-full pl-9 pr-2 py-1.5 text-xs font-semibold text-white placeholder-slate-400 bg-transparent border-none focus:outline-none uppercase"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="px-4 py-2 min-h-[36px] bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                  className="px-3.5 py-1.5 min-h-[32px] bg-[#009F91] hover:bg-teal-600 text-white font-bold text-xs rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
                 >
-                  <Play className="w-3.5 h-3.5 fill-white shrink-0" />
+                  <Play className="w-3 h-3 fill-white shrink-0" />
                   <span>Vào thi</span>
                 </button>
               </div>
 
               {codeError && (
-                <div className="mt-2 p-2 bg-rose-500/20 border border-rose-400/40 rounded-lg text-xs text-rose-200 flex items-center gap-1.5">
+                <div className="mt-1.5 p-2 bg-rose-500/20 border border-rose-400/40 rounded-lg text-xs text-rose-200 flex items-center gap-1.5 animate-in fade-in">
                   <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                  <span className="truncate">{codeError}</span>
+                  <span className="break-words [overflow-wrap:anywhere] flex-1">{codeError}</span>
                 </div>
               )}
             </form>
@@ -548,7 +548,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowPinConfigModal(true)}
-                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-1.5 bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <Settings2 className="w-3.5 h-3.5 text-teal-300" />
                   <span>Cấu hình ghim</span>
@@ -558,45 +558,45 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
           </div>
         </div>
 
-        {/* 4 Stats Cards integrated directly inside Banner */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-slate-800/80">
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center justify-between">
+        {/* 4 Stats Cards integrated directly inside Banner with compact elegant layout */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 mt-3.5 border-t border-slate-800/80">
+          <div className="bg-white/5 rounded-xl p-2.5 sm:p-3 border border-white/5 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Đề thi</span>
-              <p className="text-lg font-black text-white">{totalExams}</p>
+              <p className="text-base sm:text-lg font-black text-white">{totalExams}</p>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-teal-400" />
+            <div className="w-7 h-7 rounded-lg bg-teal-500/10 flex items-center justify-center">
+              <BookOpen className="w-3.5 h-3.5 text-teal-400" />
             </div>
           </div>
 
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center justify-between">
+          <div className="bg-white/5 rounded-xl p-2.5 sm:p-3 border border-white/5 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Lớp học</span>
-              <p className="text-lg font-black text-emerald-400">{totalClasses}</p>
+              <p className="text-base sm:text-lg font-black text-emerald-400">{totalClasses}</p>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <GraduationCap className="w-4 h-4 text-emerald-400" />
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <GraduationCap className="w-3.5 h-3.5 text-emerald-400" />
             </div>
           </div>
 
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center justify-between">
+          <div className="bg-white/5 rounded-xl p-2.5 sm:p-3 border border-white/5 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Kỳ thi</span>
-              <p className="text-lg font-black text-amber-400">{activeExams}</p>
+              <p className="text-base sm:text-lg font-black text-amber-400">{activeExams}</p>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-              <Clock className="w-4 h-4 text-amber-400" />
+            <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
             </div>
           </div>
 
-          <div className="bg-white/5 rounded-xl p-3 border border-white/5 flex items-center justify-between">
+          <div className="bg-white/5 rounded-xl p-2.5 sm:p-3 border border-white/5 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Thí sinh</span>
-              <p className="text-lg font-black text-cyan-400">~{estimatedStudents}</p>
+              <p className="text-base sm:text-lg font-black text-cyan-400">~{estimatedStudents}</p>
             </div>
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-              <Users className="w-4 h-4 text-cyan-400" />
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+              <Users className="w-3.5 h-3.5 text-cyan-400" />
             </div>
           </div>
         </div>

@@ -200,10 +200,10 @@ export const ExamCard: React.FC<ExamCardProps> = ({
 
           {/* Exam Title & Quiet metadata */}
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-start sm:items-center gap-2 flex-wrap">
               <h3 
                 onClick={() => onTakeExam(exam)}
-                className="text-sm font-bold text-slate-900 truncate hover:text-teal-700 cursor-pointer transition-colors"
+                className="text-xs sm:text-sm font-bold text-slate-900 break-words [overflow-wrap:anywhere] leading-snug hover:text-teal-700 cursor-pointer transition-colors flex-1 min-w-[200px]"
                 title={exam.title}
               >
                 {exam.title}
@@ -303,7 +303,7 @@ export const ExamCard: React.FC<ExamCardProps> = ({
             <div className="min-w-0 max-w-sm sm:max-w-md">
               <span 
                 onClick={() => onTakeExam(exam)}
-                className="font-bold text-xs sm:text-sm text-slate-900 hover:text-teal-700 cursor-pointer line-clamp-1"
+                className="font-bold text-xs sm:text-sm text-slate-900 hover:text-teal-700 cursor-pointer break-words [overflow-wrap:anywhere] leading-snug block"
                 title={exam.title}
               >
                 {exam.title}
@@ -431,7 +431,7 @@ export const ExamCard: React.FC<ExamCardProps> = ({
       {/* Main Title */}
       <h3 
         onClick={() => onTakeExam(exam)}
-        className="font-bold text-sm text-slate-900 group-hover:text-teal-700 cursor-pointer line-clamp-2 leading-snug transition-colors"
+        className="font-bold text-sm text-slate-900 group-hover:text-teal-700 cursor-pointer break-words [overflow-wrap:anywhere] leading-snug transition-colors"
         title={exam.title}
       >
         {exam.title}

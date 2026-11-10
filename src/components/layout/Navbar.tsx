@@ -591,6 +591,15 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                 <span>Quét Thẻ Camera (Plickers)</span>
               </button>
               <button
+                onClick={() => { onTabChange('plickers-test'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'plickers-test' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>Kiểm Tra Camera &amp; Thẻ</span>
+              </button>
+              <button
                 onClick={() => { onTabChange('plickers-present'); setMobileMenuOpen(false); }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
                   currentTab === 'plickers-present' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'

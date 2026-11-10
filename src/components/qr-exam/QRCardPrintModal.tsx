@@ -131,9 +131,20 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
       
-      {/* Print Stylesheet */}
+      {/* Standard A4 Print Stylesheet with Page-Break Safety */}
       <style>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 15mm 15mm 15mm 15mm;
+          }
+          html, body {
+            width: 210mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -141,11 +152,11 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
             visibility: visible;
           }
           #edutest-qr-print-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: white !important;
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            background: #ffffff !important;
             padding: 0 !important;
             margin: 0 !important;
           }
@@ -153,8 +164,15 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
             display: none !important;
           }
           .page-break {
-            page-break-after: always;
-            break-after: page;
+            page-break-after: always !important;
+            break-after: page !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .break-inside-avoid {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
         }
       `}</style>
@@ -449,7 +467,7 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
 
             return (
               <React.Fragment key={card.cardId}>
-                <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-4 sm:p-6 shadow-sm mx-auto max-w-xl">
+                <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-4 sm:p-6 shadow-sm mx-auto max-w-xl break-inside-avoid">
                   {/* Card Header */}
                   <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
                     <div>

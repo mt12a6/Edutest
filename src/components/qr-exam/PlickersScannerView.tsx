@@ -39,6 +39,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { MathRenderer } from '../common/MathRenderer';
 import { PlickersSessionReportModal } from './PlickersSessionReportModal';
+import { CameraDiagnosticModal } from './CameraDiagnosticModal';
 
 interface PlickersScannerViewProps {
   exam: Exam;
@@ -80,6 +81,7 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
   // Stats & Feedback
   const [recentlyScannedCard, setRecentlyScannedCard] = useState<{ cardId: number; studentName: string; answer: string; isCorrect: boolean } | null>(null);
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState<boolean>(false);
   const [isCompleting, setIsCompleting] = useState<boolean>(false);
   const [completionSuccess, setCompletionSuccess] = useState<string | null>(null);
 
@@ -479,6 +481,16 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowDiagnosticModal(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-teal-50 border border-teal-300 text-teal-800 text-xs font-semibold flex items-center gap-1.5 hover:bg-teal-100 transition-colors cursor-pointer"
+              title="Mở chế độ kiểm tra chuyên sâu Camera & Thẻ 4 hướng"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+              <span>Kiểm Tra Camera</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setShowAnswerFeedback(prev => !prev)}
               className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
                 showAnswerFeedback ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-white text-slate-600 border-slate-300'
@@ -747,6 +759,16 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
           responses={responses}
           students={students}
           onClose={() => setShowReportModal(false)}
+        />
+      )}
+
+      {/* Camera Diagnostic & Real-Time Test Modal */}
+      {showDiagnosticModal && (
+        <CameraDiagnosticModal
+          isOpen={showDiagnosticModal}
+          onClose={() => setShowDiagnosticModal(false)}
+          classes={classes}
+          initialClassId={selectedClassId}
         />
       )}
     </div>

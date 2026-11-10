@@ -21,6 +21,7 @@ import { ClassSubjectManager } from './components/admin/ClassSubjectManager';
 import { ClassStudentManager } from './components/admin/ClassStudentManager';
 import { PlickersScannerView } from './components/qr-exam/PlickersScannerView';
 import { PlickersPresentationView } from './components/qr-exam/PlickersPresentationView';
+import { CameraDiagnosticModal } from './components/qr-exam/CameraDiagnosticModal';
 import { QRCardPrintModal } from './components/qr-exam/QRCardPrintModal';
 import { SystemAuditLogs } from './components/admin/SystemAuditLogs';
 import { BackupRestoreManager } from './components/admin/BackupRestoreManager';
@@ -493,6 +494,13 @@ function MainApp() {
               initialClassId={activePlickersClassId || classes[0]?.id}
               onClose={() => navigateTo('/teacher-exams', 'teacher-exams')}
               onOpenPresentation={() => navigateTo('/plickers-present', 'plickers-present')}
+            />
+          ) : currentTab === 'plickers-test' ? (
+            <CameraDiagnosticModal
+              isOpen={true}
+              classes={classes}
+              initialClassId={activePlickersClassId || classes[0]?.id}
+              onClose={() => navigateTo('/plickers-live', 'plickers-live')}
             />
           ) : currentTab === 'plickers-present' ? (
             <PlickersPresentationView

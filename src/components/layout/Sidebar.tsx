@@ -17,7 +17,8 @@ import {
   Radio,
   Camera,
   Presentation,
-  QrCode
+  QrCode,
+  CheckCircle2
 } from 'lucide-react';
 
 
@@ -137,6 +138,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             >
               <Camera className="w-4 h-4 text-amber-500" />
               <span>Quét Thẻ Camera</span>
+            </button>
+
+            <button 
+              onClick={() => onTabChange('plickers-test')}
+              className={navItemClass('plickers-test')}
+            >
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span>Kiểm Tra Camera &amp; Thẻ</span>
             </button>
 
             <button 

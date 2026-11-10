@@ -66,8 +66,53 @@ export const ExamPrintModal: React.FC<ExamPrintModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto animate-in fade-in print:p-0 print:bg-white print:static print:overflow-visible">
       
+      {/* Standard A4 Print Stylesheet (Conforming to Nghị định 30/2020/NĐ-CP) */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 20mm 15mm 20mm 25mm;
+          }
+          html, body {
+            width: 210mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-family: 'Times New Roman', Times, serif !important;
+          }
+          body * {
+            visibility: hidden;
+          }
+          #edutest-exam-print-paper, #edutest-exam-print-paper * {
+            visibility: visible;
+          }
+          #edutest-exam-print-paper {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .print\\:hidden, .no-print {
+            display: none !important;
+          }
+          .break-inside-avoid {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .page-break {
+            page-break-after: always !important;
+            break-after: page !important;
+          }
+        }
+      `}</style>
+
       {/* Outer Card */}
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 print:border-none print:shadow-none print:max-h-none print:rounded-none">
         
@@ -170,7 +215,7 @@ export const ExamPrintModal: React.FC<ExamPrintModalProps> = ({
 
         {/* Printable Paper Canvas (Styled for A4 paper standard) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/60 print:p-0 print:bg-white print:overflow-visible">
-          <div className="max-w-[210mm] mx-auto bg-white p-6 sm:p-10 shadow-lg print:shadow-none print:p-0 text-slate-950 font-serif leading-normal space-y-5 print:space-y-4">
+          <div id="edutest-exam-print-paper" className="max-w-[210mm] mx-auto bg-white p-6 sm:p-10 shadow-lg print:shadow-none print:p-0 text-slate-950 font-serif leading-normal space-y-5 print:space-y-4">
             
             {/* Header section (A4 standard) */}
             <div className="border-b-2 border-slate-900 pb-3">
