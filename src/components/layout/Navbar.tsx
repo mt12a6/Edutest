@@ -30,7 +30,8 @@ import {
   User,
   Camera,
   Presentation,
-  QrCode
+  QrCode,
+  Music
 } from 'lucide-react';
 import { UserRole } from '../../types';
 import { LoginModal } from '../auth/LoginModal';
@@ -625,6 +626,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
               >
                 <QrCode className="w-4 h-4 text-amber-500" />
                 <span>In Thẻ QR 4 Chiều (1-100)</span>
+              </button>
+
+              <button
+                onClick={() => { onTabChange('vannghe-scoring'); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                  currentTab === 'vannghe-scoring' ? 'bg-rose-600 text-white' : 'text-rose-700 hover:bg-rose-50'
+                }`}
+              >
+                <Music className="w-4 h-4 text-rose-500" />
+                <span>Chấm Thi Văn Nghệ 20/11</span>
               </button>
             </>
           )}

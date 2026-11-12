@@ -244,14 +244,15 @@ export const ExamCard: React.FC<ExamCardProps> = ({
                 </>
               )}
               <span aria-hidden="true" className="text-slate-300">·</span>
-              <span 
+              <button 
+                type="button"
                 onClick={handleCopyLink}
-                className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1.5 py-0.2 rounded cursor-pointer transition-colors"
-                title="Sao chép đường dẫn bài thi"
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1.5 py-0.5 rounded-md cursor-pointer transition-colors"
+                title={`Sao chép liên kết bài thi: ${getDynamicRouteUrl('bai-thi', exam.slug || exam.id)}`}
               >
-                <span>/bai-thi/{exam.slug || exam.id}</span>
                 {copiedLink ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5 text-teal-600" />}
-              </span>
+                <span>{copiedLink ? 'Đã chép link' : 'Sao chép link'}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -309,14 +310,15 @@ export const ExamCard: React.FC<ExamCardProps> = ({
                 {exam.title}
               </span>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span 
+                <button 
+                  type="button"
                   onClick={handleCopyLink}
-                  className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1 py-0.2 rounded cursor-pointer transition-colors"
-                  title="Sao chép đường dẫn bài thi"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/60 px-1.5 py-0.5 rounded-md cursor-pointer transition-colors"
+                  title={`Sao chép liên kết bài thi: ${getDynamicRouteUrl('bai-thi', exam.slug || exam.id)}`}
                 >
-                  <span>/bai-thi/{exam.slug || exam.id}</span>
                   {copiedLink ? <Check className="w-2.5 h-2.5 text-emerald-600" /> : <Copy className="w-2.5 h-2.5 text-teal-600" />}
-                </span>
+                  <span>{copiedLink ? 'Đã chép link' : 'Sao chép link'}</span>
+                </button>
                 {exam.classIds && exam.classIds.length > 0 && (
                   <span className="text-[11px] text-slate-400 truncate">
                     · Lớp: {exam.classIds.join(', ')}
@@ -437,17 +439,32 @@ export const ExamCard: React.FC<ExamCardProps> = ({
         {exam.title}
       </h3>
 
-      {/* Direct Route URL & Copy Button */}
-      <div className="flex items-center justify-between gap-1 bg-slate-50 border border-slate-200/80 rounded-lg px-2 py-1 text-[11px] font-mono text-teal-700">
-        <span className="truncate">/bai-thi/{exam.slug || exam.id}</span>
+      {/* Clean Link Action & QR Code Trigger */}
+      <div className="flex items-center justify-between gap-2 pt-0.5">
         <button
           type="button"
           onClick={handleCopyLink}
-          className="p-0.5 hover:text-teal-900 transition-colors cursor-pointer shrink-0"
-          title="Sao chép đường dẫn bài thi"
+          className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200/80 px-2 py-1 rounded-lg transition-all cursor-pointer shadow-2xs"
+          title={`Sao chép liên kết bài thi: ${getDynamicRouteUrl('bai-thi', exam.slug || exam.id)}`}
         >
           {copiedLink ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-teal-600" />}
+          <span>{copiedLink ? 'Đã sao chép' : 'Sao chép link'}</span>
         </button>
+
+        {onShareExam && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onShareExam(exam);
+            }}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 hover:text-teal-700 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 px-2 py-1 rounded-lg transition-all cursor-pointer"
+            title="Mở mã QR chia sẻ đề thi"
+          >
+            <Share2 className="w-3 h-3 text-slate-500" />
+            <span>Mã QR</span>
+          </button>
+        )}
       </div>
 
       {/* Metadata Row */}

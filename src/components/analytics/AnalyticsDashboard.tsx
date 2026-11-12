@@ -382,20 +382,97 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* ================= VIEW 1: THỐNG KÊ THEO KHỐI LỚP (1 -> 12) ================= */}
       {viewMode === 'by_grade' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden space-y-4 p-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
                 K12
               </div>
               <div>
-                <h3 className="font-bold text-sm text-slate-900">Bảng so sánh chất lượng toàn bộ các Khối lớp (Khối 1 đến 12)</h3>
-                <p className="text-xs text-slate-500">Thống kê điểm trung bình, tỷ lệ Đạt và tỷ lệ Giỏi trên toàn trường</p>
+                <h3 className="font-black text-base text-slate-900">Thống Kê Chất Lượng Theo Khối Lớp</h3>
+                <p className="text-xs text-slate-500">Chọn khối cụ thể để phân tích chuyên sâu hoặc xem tổng hợp toàn trường</p>
               </div>
+            </div>
+
+            {/* Quick Grade Tier Switcher */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedGrade('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  selectedGrade === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Tất cả khối
+              </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Interactive Grade Selection Buttons */}
+          <div className="space-y-2 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/80">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Chọn nhanh Khối lớp để lọc chi tiết:
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200/60">
+                Tiểu học:
+              </span>
+              {['1', '2', '3', '4', '5'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setSelectedGrade(selectedGrade === g ? 'all' : g)}
+                  className={`w-8 h-8 rounded-xl font-black text-xs transition-all ${
+                    selectedGrade === g
+                      ? 'bg-amber-600 text-white ring-2 ring-amber-300 shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-amber-50 hover:text-amber-800'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+
+              <span className="text-xs font-bold text-cyan-700 bg-cyan-50 px-2 py-1 rounded-lg border border-cyan-200/60 ml-2">
+                THCS:
+              </span>
+              {['6', '7', '8', '9'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setSelectedGrade(selectedGrade === g ? 'all' : g)}
+                  className={`w-8 h-8 rounded-xl font-black text-xs transition-all ${
+                    selectedGrade === g
+                      ? 'bg-cyan-600 text-white ring-2 ring-cyan-300 shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-cyan-50 hover:text-cyan-800'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+
+              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200/60 ml-2">
+                THPT:
+              </span>
+              {['10', '11', '12'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setSelectedGrade(selectedGrade === g ? 'all' : g)}
+                  className={`w-8 h-8 rounded-xl font-black text-xs transition-all ${
+                    selectedGrade === g
+                      ? 'bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-xs'
+                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-indigo-50 hover:text-indigo-800'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
                 <tr>
@@ -409,7 +486,15 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allGrades.map((g) => {
+                {(selectedGrade === 'all' 
+                  ? allGrades.filter(g => {
+                      // Show grades that have results or active classes, or at least show active ones
+                      const hasResults = enrichedResults.some(r => r.grade === g);
+                      const hasClasses = classes.some(c => c.grade === g);
+                      return hasResults || hasClasses || ['1', '2', '3', '4', '5'].includes(g);
+                    })
+                  : [selectedGrade]
+                ).map((g) => {
                   const gradeResults = enrichedResults.filter(r => r.grade === g);
                   const count = gradeResults.length;
                   const avg = count > 0 ? (gradeResults.reduce((a, b) => a + b.score, 0) / count).toFixed(2) : '--';

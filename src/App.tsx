@@ -33,6 +33,10 @@ import {
   ExamAttempt, 
   ExamResult 
 } from './types';
+import { SecureExamStudentSelectModal } from './components/common/SecureExamStudentSelectModal';
+import { FolderView } from './components/folder/FolderView';
+import { NotFoundView } from './components/common/NotFoundView';
+import { VanNgheScoringManager } from './components/vannghe/VanNgheScoringManager';
 import { 
   getExams, 
   getClasses, 
@@ -43,11 +47,9 @@ import {
   deleteExam,
   startOrCreateAttempt,
   findExamBySlug,
-  findSubjectBySlug
+  findSubjectBySlug,
+  getPlickersSessionById
 } from './services/db';
-import { SecureExamStudentSelectModal } from './components/common/SecureExamStudentSelectModal';
-import { FolderView } from './components/folder/FolderView';
-import { NotFoundView } from './components/common/NotFoundView';
 
 import { AlertTriangle, Lock, ShieldAlert } from 'lucide-react';
 
@@ -165,18 +167,43 @@ function MainApp() {
       return;
     }
 
-    // 3. Known static tabs (/home, /teacher-exams, etc.)
-    const cleanTab = pathname.replace(/^\//, '').replace(/\/+$/, '');
+    // 3. Known static tabs (/home, /teacher-exams, etc.) or URL Search Params (?tab=...&session=...)
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchTab = urlParams.get('tab');
+    const sessionParam = urlParams.get('session');
+    const classIdParam = urlParams.get('classId');
+
+    const cleanTab = searchTab || pathname.replace(/^\//, '').replace(/\/+$/, '');
     const validTabs = [
       'home', 'teacher-exams', 'teacher-submissions', 'teacher-results', 'teacher-live', 
-      'plickers-live', 'plickers-present', 'plickers-cards',
+      'plickers-live', 'plickers-present', 'plickers-cards', 'plickers-test',
       'student-exams', 'student-history', 
-      'admin-users', 'admin-classes', 'admin-students', 'admin-logs', 'admin-backup'
+      'admin-users', 'admin-classes', 'admin-students', 'admin-logs', 'admin-backup',
+      'vannghe-scoring'
     ];
+
     if (validTabs.includes(cleanTab)) {
       setNotFoundRoute(null);
       setActiveFolderSubject(null);
       setCurrentTab(cleanTab);
+
+      // Auto-bind session for mobile scanner connected via QR Code
+      if (sessionParam) {
+        try {
+          const sessionData = await getPlickersSessionById(sessionParam);
+          if (sessionData) {
+            const matchedExam = examList.find(e => e.id === sessionData.examId) || await getExamById(sessionData.examId);
+            if (matchedExam) {
+              setActivePlickersExam(matchedExam);
+              setActivePlickersClassId(sessionData.classId || classIdParam || '');
+              const qList = await getExamQuestions(matchedExam.id);
+              setActivePlickersQuestions(qList);
+            }
+          }
+        } catch (err) {
+          console.warn('Auto bind session note:', err);
+        }
+      }
       return;
     }
 
@@ -560,6 +587,8 @@ function MainApp() {
             <SystemAuditLogs />
           ) : currentTab === 'admin-backup' ? (
             <BackupRestoreManager />
+          ) : currentTab === 'vannghe-scoring' ? (
+            <VanNgheScoringManager />
           ) : (
             <HomeLanding
               exams={exams}

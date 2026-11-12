@@ -18,7 +18,8 @@ import {
   Camera,
   Presentation,
   QrCode,
-  CheckCircle2
+  CheckCircle2,
+  Music
 } from 'lucide-react';
 
 
@@ -173,6 +174,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
             </button>
           </div>
         )}
+
+        {/* Van Nghe 20/11 Scoring Module */}
+        <div className="space-y-1 pt-2 border-t border-slate-200">
+          <div className="px-3.5 mb-2 text-[11px] font-bold text-rose-600 uppercase tracking-wider flex items-center justify-between">
+            <span>Hội Thi Văn Nghệ</span>
+            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">20/11</span>
+          </div>
+
+          <button 
+            onClick={() => onTabChange('vannghe-scoring')}
+            className={navItemClass('vannghe-scoring')}
+          >
+            <Music className="w-4 h-4 text-rose-500" />
+            <span>Chấm Thi Văn Nghệ 20/11</span>
+          </button>
+        </div>
 
         {/* Student / Candidate Navigation */}
         <div className="space-y-1 pt-2 border-t border-slate-200">

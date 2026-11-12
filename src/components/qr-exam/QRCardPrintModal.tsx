@@ -26,7 +26,7 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   const [freeStudentText, setFreeStudentText] = useState<string>(
     'Nguyễn Văn An\nTrần Thị Bình\nLê Hoàng Cường\nPhạm Thị Dung\nVũ Minh Đức\nĐặng Thúy Hằng\nBùi Quốc Huy\nHoàng Mai Linh'
   );
-  const [cardCount, setCardCount] = useState<number>(35);
+  const [cardCount, setCardCount] = useState<number>(45);
   const [cardsPerPage, setCardsPerPage] = useState<2 | 4>(2);
   const [templateType, setTemplateType] = useState<'plickers' | 'answer_sheet'>('plickers');
   const [showInstructions, setShowInstructions] = useState<boolean>(true);
@@ -48,23 +48,22 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   if (organizationMode === 'class') {
     const currentClass = classes.find(c => c.id === selectedClassId);
     const className = currentClass?.name || selectedClassId;
+    const effectiveCount = Math.max(cardCount, classStudents.length, currentClass?.studentCount || 45);
 
-    if (classStudents.length > 0) {
-      cardItems = classStudents.map(s => ({
-        cardId: s.cardId,
-        studentName: s.displayName,
-        studentCode: s.studentCode,
+    // Map existing students by cardId to prevent duplicates or skips
+    const studentByCardId = new Map<number, PlickersStudent>();
+    classStudents.forEach(s => studentByCardId.set(s.cardId, s));
+
+    cardItems = Array.from({ length: effectiveCount }, (_, i) => {
+      const cardNum = i + 1;
+      const existing = studentByCardId.get(cardNum);
+      return {
+        cardId: cardNum,
+        studentName: existing?.displayName || `Học sinh số ${cardNum}`,
+        studentCode: existing?.studentCode || `HS${String(cardNum).padStart(2, '0')}`,
         className
-      }));
-    } else {
-      // Fallback
-      cardItems = Array.from({ length: cardCount }, (_, i) => ({
-        cardId: i + 1,
-        studentName: `Học sinh số ${i + 1}`,
-        studentCode: `HS${String(i + 1).padStart(2, '0')}`,
-        className
-      }));
-    }
+      };
+    });
   } else {
     // Free mode
     const lines = freeStudentText
@@ -131,19 +130,21 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
       
-      {/* Standard A4 Print Stylesheet with Page-Break Safety */}
+      {/* Standard A4 Print Stylesheet with Page-Break Safety and Zero Duplicate Loop Fix */}
       <style>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 15mm 15mm 15mm 15mm;
+            margin: 10mm 10mm 10mm 10mm;
           }
           html, body {
-            width: 210mm !important;
+            width: 100% !important;
+            height: auto !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
+            overflow: visible !important;
           }
           body * {
             visibility: hidden;
@@ -151,14 +152,34 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
           #edutest-qr-print-container, #edutest-qr-print-container * {
             visibility: visible;
           }
+          .fixed.inset-0 {
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            background: transparent !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+          }
+          .max-h-\\[92vh\\] {
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
           #edutest-qr-print-container {
             position: static !important;
             display: block !important;
             width: 100% !important;
             max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
             background: #ffffff !important;
             padding: 0 !important;
             margin: 0 !important;
+            overflow: visible !important;
           }
           .no-print {
             display: none !important;
@@ -169,6 +190,7 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
             height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
+            display: block !important;
           }
           .break-inside-avoid {
             break-inside: avoid !important;
@@ -287,6 +309,21 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
                 </div>
               )}
 
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-slate-600">Sĩ số in:</span>
+                <select
+                  value={cardCount}
+                  onChange={(e) => setCardCount(Number(e.target.value))}
+                  className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl font-bold text-teal-800"
+                >
+                  <option value={35}>35 học sinh</option>
+                  <option value={40}>40 học sinh</option>
+                  <option value={45}>45 học sinh (Chuẩn)</option>
+                  <option value={50}>50 học sinh</option>
+                  <option value={60}>60 học sinh</option>
+                </select>
+              </div>
+
               {templateType === 'plickers' && (
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-600">Bố cục:</span>
@@ -326,6 +363,25 @@ export const QRCardPrintModal: React.FC<QRCardPrintModalProps> = ({
               />
             </div>
           )}
+        </div>
+
+        {/* Pre-print Summary Banner (No print) */}
+        <div className="mx-4 mt-3 p-3 bg-gradient-to-r from-teal-50 via-emerald-50 to-indigo-50 border border-teal-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs text-slate-800 no-print shrink-0 shadow-2xs">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="font-bold text-teal-900 flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              Tổng cộng: <strong className="font-black text-teal-950">{cardItems.length} thẻ</strong> (Thẻ #{String(cardItems[0]?.cardId || 1).padStart(2, '0')} đến #{String(cardItems[cardItems.length - 1]?.cardId || cardItems.length).padStart(2, '0')})
+            </span>
+            <span className="text-slate-300">•</span>
+            <span>Ước tính: <strong className="font-bold text-indigo-900">{templateType === 'answer_sheet' ? cardItems.length : Math.ceil(cardItems.length / cardsPerPage)} trang A4</strong></span>
+            <span className="text-slate-300">•</span>
+            <span className="text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-md text-[11px]">
+              ✓ 100% Không trùng lặp
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-600 font-semibold">
+            Tương thích máy in Canon LBP 2900 / HP / Brother
+          </div>
         </div>
 
         {/* Instructions banner */}

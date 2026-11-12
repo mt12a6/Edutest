@@ -11,7 +11,8 @@ import {
   where,
   orderBy,
   limit,
-  writeBatch
+  writeBatch,
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
@@ -330,6 +331,33 @@ export function saveLocalResult(result: ExamResult) {
     localStorage.setItem(STORAGE_RESULTS_KEY, JSON.stringify(updated));
   } catch (e) {
     console.warn('Could not save result to localStorage', e);
+  }
+}
+
+export async function deleteExamResult(resultId: string): Promise<void> {
+  try {
+    const raw = localStorage.getItem(STORAGE_RESULTS_KEY);
+    if (raw) {
+      const list: ExamResult[] = JSON.parse(raw);
+      const filtered = list.filter(r => r.id !== resultId && r.attemptId !== resultId);
+      localStorage.setItem(STORAGE_RESULTS_KEY, JSON.stringify(filtered));
+    }
+  } catch (e) {}
+
+  inMemoryResultsCache = null;
+
+  try {
+    await deleteDoc(doc(db, 'results', resultId));
+  } catch (err) {
+    console.warn('deleteExamResult firestore note:', err);
+  }
+
+  try {
+    await deleteDoc(doc(db, 'attempts', resultId));
+  } catch (e) {}
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:score_updated', { detail: { deletedId: resultId } }));
   }
 }
 
@@ -4395,6 +4423,74 @@ export async function getPlickersResponsesForSession(sessionId: string): Promise
   return local;
 }
 
+export async function getPlickersSessionById(sessionId: string): Promise<PlickersSession | null> {
+  const local = getLocalPlickersSessions().find(s => s.id === sessionId);
+  try {
+    const snap = await getDoc(doc(db, 'sessions', sessionId));
+    if (snap.exists()) {
+      return { ...snap.data(), id: snap.id } as PlickersSession;
+    }
+  } catch (err) {
+    console.warn('getPlickersSessionById note:', err);
+  }
+  return local || null;
+}
+
+/**
+ * Real-time listener for Plickers Session state across devices (PC and mobile scanner)
+ */
+export function subscribeToPlickersSession(
+  sessionId: string,
+  callback: (session: PlickersSession | null) => void
+): () => void {
+  try {
+    const docRef = doc(db, 'sessions', sessionId);
+    const unsubscribe = onSnapshot(docRef, (snap) => {
+      if (snap.exists()) {
+        const session = { ...snap.data(), id: snap.id } as PlickersSession;
+        callback(session);
+      } else {
+        const local = getLocalPlickersSessions().find(s => s.id === sessionId);
+        callback(local || null);
+      }
+    }, (error) => {
+      console.warn('subscribeToPlickersSession error:', error);
+      const local = getLocalPlickersSessions().find(s => s.id === sessionId);
+      callback(local || null);
+    });
+    return unsubscribe;
+  } catch (err) {
+    console.warn('subscribeToPlickersSession setup error:', err);
+    return () => {};
+  }
+}
+
+/**
+ * Real-time listener for Plickers student responses across devices
+ */
+export function subscribeToPlickersResponses(
+  sessionId: string,
+  callback: (responses: PlickersResponse[]) => void
+): () => void {
+  try {
+    const q = query(collection(db, 'responses'), where('sessionId', '==', sessionId));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const responses: PlickersResponse[] = [];
+      snap.forEach(d => {
+        responses.push({ ...d.data(), id: d.id } as PlickersResponse);
+      });
+      callback(responses);
+    }, (error) => {
+      console.warn('subscribeToPlickersResponses error:', error);
+      callback(getLocalPlickersResponses(sessionId));
+    });
+    return unsubscribe;
+  } catch (err) {
+    console.warn('subscribeToPlickersResponses setup error:', err);
+    return () => {};
+  }
+}
+
 /**
  * Complete session, compute scores for each student, and persist to ExamResult collection.
  */
@@ -4511,10 +4607,37 @@ export async function completePlickersSessionAndCalculateResults(
 
 // ==================== PLICKERS CLASSROOM STUDENT & CARD ASSIGNMENT SERVICES ====================
 
-export function getLocalPlickersStudents(classId: string): PlickersStudent[] {
+export function getLocalPlickersStudents(classId: string, minCount: number = 45): PlickersStudent[] {
   try {
     const raw = localStorage.getItem(`${STORAGE_PLICKERS_STUDENTS_KEY}_${classId}`);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: PlickersStudent[] = JSON.parse(raw);
+      if (parsed.length >= minCount) return parsed;
+      // If cached roster has fewer than requested (e.g. 35 instead of 45), fill the remaining
+      const existingCodes = new Set(parsed.map(s => s.cardId));
+      const lastNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Vũ', 'Phan', 'Đỗ', 'Bùi', 'Đặng'];
+      const middleNames = ['Văn', 'Thị', 'Đình', 'Thanh', 'Hữu', 'Ngọc', 'Quang', 'Minh', 'Đức', 'Phương'];
+      const firstNames = ['An', 'Bình', 'Cường', 'Dũng', 'Đạt', 'Giang', 'Hà', 'Hải', 'Huy', 'Khoa', 'Linh', 'Long', 'Mai', 'Nam', 'Nhi', 'Phong', 'Quân', 'Sơn', 'Tâm', 'Thảo', 'Trang', 'Tuấn', 'Tùng', 'Vy', 'Yến'];
+      for (let i = 1; i <= minCount; i++) {
+        if (!existingCodes.has(i)) {
+          const ln = lastNames[(i * 3) % lastNames.length];
+          const mn = middleNames[(i * 7) % middleNames.length];
+          const fn = firstNames[(i * 11) % firstNames.length];
+          parsed.push({
+            id: `std_${classId}_${i}`,
+            studentCode: `HS${String(i).padStart(2, '0')}`,
+            displayName: `${ln} ${mn} ${fn}`,
+            classId,
+            cardId: i,
+            status: 'active',
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      parsed.sort((a, b) => a.cardId - b.cardId);
+      saveLocalPlickersStudents(classId, parsed);
+      return parsed;
+    }
   } catch {}
 
   // Auto-generate roster for class if none stored yet
@@ -4523,7 +4646,8 @@ export function getLocalPlickersStudents(classId: string): PlickersStudent[] {
   const middleNames = ['Văn', 'Thị', 'Đình', 'Thanh', 'Hữu', 'Ngọc', 'Quang', 'Minh', 'Đức', 'Phương'];
   const firstNames = ['An', 'Bình', 'Cường', 'Dũng', 'Đạt', 'Giang', 'Hà', 'Hải', 'Huy', 'Khoa', 'Linh', 'Long', 'Mai', 'Nam', 'Nhi', 'Phong', 'Quân', 'Sơn', 'Tâm', 'Thảo', 'Trang', 'Tuấn', 'Tùng', 'Vy', 'Yến'];
 
-  for (let i = 1; i <= 35; i++) {
+  const countToGenerate = Math.max(45, minCount);
+  for (let i = 1; i <= countToGenerate; i++) {
     const ln = lastNames[(i * 3) % lastNames.length];
     const mn = middleNames[(i * 7) % middleNames.length];
     const fn = firstNames[(i * 11) % firstNames.length];

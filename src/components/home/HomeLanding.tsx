@@ -247,6 +247,20 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
     return { pinnedExams: capped, pinnedExamIdSet: idSet };
   }, [exams, homepageSettings, canManageExam]);
 
+  // Group pinned exams by Subject to display parallel 2 columns when 2 subjects are pinned (e.g. Toán and Tin học)
+  const pinnedBySubject = useMemo(() => {
+    const map = new Map<string, Exam[]>();
+    pinnedExams.forEach(e => {
+      const subj = e.subjectName || 'Khác';
+      if (!map.has(subj)) map.set(subj, []);
+      map.get(subj)!.push(e);
+    });
+    return Array.from(map.entries()).map(([subjectName, examList]) => ({
+      subjectName,
+      exams: examList
+    }));
+  }, [pinnedExams]);
+
   // =========================================================================
   // UNPINNED CATALOG EXAMS (Excluded pinned exams to avoid duplication)
   // =========================================================================
@@ -647,24 +661,69 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
 
           {/* Pinned Exams List */}
           {pinnedExams.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {pinnedExams.map(exam => (
-                <ExamCard
-                  key={`pinned-${exam.id}`}
-                  exam={exam}
-                  displayMode="grid"
-                  isPinned={true}
-                  canManage={canManageExam(exam)}
-                  canPin={canPin(exam)}
-                  isLoadingThis={loadingExamId === exam.id}
-                  onTakeExam={handleTakeExam}
-                  onShareExam={setShareExamTarget}
-                  onTogglePin={handleTogglePin}
-                  onEditExam={onEditExam}
-                  onDeleteExam={setExamToDelete}
-                />
-              ))}
-            </div>
+            pinnedBySubject.length === 2 ? (
+              /* Two Distinct Parallel Columns on Desktop (1 Column on Mobile) */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pinnedBySubject.map((group) => (
+                  <div 
+                    key={group.subjectName} 
+                    className="bg-slate-50/80 p-4 rounded-3xl border border-slate-200/90 space-y-3 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between px-1 border-b border-slate-200/70 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-xl bg-teal-600 text-white font-black flex items-center justify-center text-xs shadow-xs">
+                          {group.subjectName[0]?.toUpperCase()}
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                          Môn {group.subjectName}
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-bold text-teal-800 bg-teal-100/80 px-2.5 py-0.5 rounded-full">
+                        {group.exams.length} đề thi nổi bật
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {group.exams.map(exam => (
+                        <ExamCard
+                          key={`pinned-${exam.id}`}
+                          exam={exam}
+                          displayMode="grid"
+                          isPinned={true}
+                          canManage={canManageExam(exam)}
+                          canPin={canPin(exam)}
+                          isLoadingThis={loadingExamId === exam.id}
+                          onTakeExam={handleTakeExam}
+                          onShareExam={setShareExamTarget}
+                          onTogglePin={handleTogglePin}
+                          onEditExam={onEditExam}
+                          onDeleteExam={setExamToDelete}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {pinnedExams.map(exam => (
+                  <ExamCard
+                    key={`pinned-${exam.id}`}
+                    exam={exam}
+                    displayMode="grid"
+                    isPinned={true}
+                    canManage={canManageExam(exam)}
+                    canPin={canPin(exam)}
+                    isLoadingThis={loadingExamId === exam.id}
+                    onTakeExam={handleTakeExam}
+                    onShareExam={setShareExamTarget}
+                    onTogglePin={handleTogglePin}
+                    onEditExam={onEditExam}
+                    onDeleteExam={setExamToDelete}
+                  />
+                ))}
+              </div>
+            )
           ) : (
             isPrivilegedStaff ? (
               <div className="p-6 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 space-y-2">

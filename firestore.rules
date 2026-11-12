@@ -113,5 +113,18 @@ service cloud.firestore {
     match /students/{studentId} {
       allow read, write: if true;
     }
+
+    // Van Nghe 20/11 Art Festival Scoring
+    match /vannghe_tietmuc/{id} {
+      allow read, write: if true;
+    }
+
+    match /vannghe_diem/{id} {
+      allow read, write: if true;
+    }
+
+    match /vannghe_cauhinh/{id} {
+      allow read, write: if true;
+    }
   }
 }

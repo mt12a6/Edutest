@@ -13,7 +13,12 @@ import {
   Award, 
   Sparkles,
   Camera,
-  Play
+  Play,
+  Smartphone,
+  QrCode,
+  Copy,
+  Check,
+  Radio
 } from 'lucide-react';
 import { Exam, Question, SchoolClass, PlickersSession, PlickersResponse, PlickersStudent } from '../../types';
 import { MathRenderer } from '../common/MathRenderer';
@@ -21,8 +26,11 @@ import {
   createOrGetPlickersSession, 
   updatePlickersSessionState, 
   getPlickersResponsesForSession,
-  getPlickersStudents 
+  getPlickersStudents,
+  subscribeToPlickersSession,
+  subscribeToPlickersResponses
 } from '../../services/db';
+import { generateQRCodeDataUrl } from '../../utils/qrEncoder';
 import { useAuth } from '../../context/AuthContext';
 
 interface PlickersPresentationViewProps {
@@ -54,6 +62,11 @@ export const PlickersPresentationView: React.FC<PlickersPresentationViewProps> =
   const [revealAnswer, setRevealAnswer] = useState<boolean>(false);
   const [showChart, setShowChart] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  // Phone Connect Remote QR
+  const [showPhoneConnectModal, setShowPhoneConnectModal] = useState<boolean>(false);
+  const [connectQrUrl, setConnectQrUrl] = useState<string>('');
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   const currentQ = questions[currentQuestionIndex] || questions[0];
 
@@ -89,8 +102,38 @@ export const PlickersPresentationView: React.FC<PlickersPresentationViewProps> =
     initSession();
   }, [selectedClassId, exam.id]);
 
-  // Real-time synchronization
+  // Generate remote phone connection QR Code
   useEffect(() => {
+    if (activeSession?.id && typeof window !== 'undefined') {
+      const mobileUrl = `${window.location.origin}/?tab=plickers-live&session=${activeSession.id}&classId=${selectedClassId}`;
+      generateQRCodeDataUrl(mobileUrl, { width: 320, margin: 2 })
+        .then(setConnectQrUrl)
+        .catch(err => console.warn('QR code generation error:', err));
+    }
+  }, [activeSession?.id, selectedClassId]);
+
+  // Real-time synchronization across devices (PC and Mobile Phone via Firestore)
+  useEffect(() => {
+    if (!activeSession?.id) return;
+
+    // 1. Listen to remote Firestore session updates (e.g. if phone advances question)
+    const unsubSession = subscribeToPlickersSession(activeSession.id, (updatedSession) => {
+      if (updatedSession) {
+        if (typeof updatedSession.currentQuestionIndex === 'number') {
+          setCurrentQuestionIndex(updatedSession.currentQuestionIndex);
+        }
+        if (typeof updatedSession.revealAnswer === 'boolean') {
+          setRevealAnswer(updatedSession.revealAnswer);
+        }
+      }
+    });
+
+    // 2. Listen to remote Firestore card responses from phone camera
+    const unsubResponses = subscribeToPlickersResponses(activeSession.id, (realtimeResponses) => {
+      setResponses(realtimeResponses);
+    });
+
+    // 3. Fallback local window event listeners for single-device testing
     const handleResponseRecorded = (e: any) => {
       if (e.detail) {
         setResponses(prev => {
@@ -115,10 +158,12 @@ export const PlickersPresentationView: React.FC<PlickersPresentationViewProps> =
     window.addEventListener('edutest:plickers_session_updated', handleSessionUpdated);
 
     return () => {
+      unsubSession();
+      unsubResponses();
       window.removeEventListener('edutest:plickers_response_recorded', handleResponseRecorded);
       window.removeEventListener('edutest:plickers_session_updated', handleSessionUpdated);
     };
-  }, []);
+  }, [activeSession?.id]);
 
   // Keyboard navigation shortcuts (Left/Right arrows, Space, R)
   useEffect(() => {
@@ -220,6 +265,17 @@ export const PlickersPresentationView: React.FC<PlickersPresentationViewProps> =
 
         {/* Top Control Actions */}
         <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setShowPhoneConnectModal(true)}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black flex items-center gap-2 transition-all cursor-pointer shadow-md"
+            title="Quét mã QR để mở camera quét thẻ trên điện thoại của giáo viên"
+          >
+            <Smartphone className="w-4 h-4" />
+            <span className="hidden md:inline">KẾT NỐI ĐIỆN THOẠI QUÉT THẺ</span>
+            <span className="md:hidden">QUÉT BẰNG ĐIỆN THOẠI</span>
+          </button>
+
           {onOpenScanner && (
             <button
               type="button"
@@ -421,6 +477,99 @@ export const PlickersPresentationView: React.FC<PlickersPresentationViewProps> =
         </div>
 
       </div>
+
+      {/* MODAL: KẾT NỐI ĐIỆN THOẠI QUÉT THẺ */}
+      {showPhoneConnectModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 text-white shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Kết Nối Điện Thoại Quét Thẻ</h3>
+                  <p className="text-[11px] text-slate-400">Đồng bộ hai chiều với máy chiếu qua Firestore</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPhoneConnectModal(false)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* QR Code Container */}
+            <div className="bg-white p-4 rounded-2xl flex flex-col items-center justify-center shadow-inner mx-auto max-w-[260px]">
+              {connectQrUrl ? (
+                <img
+                  src={connectQrUrl}
+                  alt="Mã QR kết nối điện thoại quét thẻ"
+                  className="w-56 h-56 object-contain"
+                />
+              ) : (
+                <div className="w-56 h-56 flex items-center justify-center text-slate-400 text-xs">
+                  Đang khởi tạo mã QR...
+                </div>
+              )}
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-2">
+                Quét bằng Camera điện thoại hoặc Zalo
+              </span>
+            </div>
+
+            {/* Step-by-step Instructions */}
+            <div className="space-y-2 bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/60 text-xs">
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                <span className="text-slate-300">Dùng điện thoại quét mã QR phía trên để mở trang quét thẻ.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                <span className="text-slate-300">Điện thoại sẽ tự động kết nối vào phiên thi <span className="text-amber-400 font-mono font-bold">Lớp {classes.find(c => c.id === selectedClassId)?.name || selectedClassId}</span>.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-black flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                <span className="text-slate-300">Khi bạn cầm điện thoại quét thẻ học sinh, kết quả sẽ nhảy trực tiếp lên màn hình máy chiếu này ngay lập tức!</span>
+              </div>
+            </div>
+
+            {/* Direct Link Copy */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={typeof window !== 'undefined' ? `${window.location.origin}/?tab=plickers-live&session=${activeSession?.id}&classId=${selectedClassId}` : ''}
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-300 select-all"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    const mobileUrl = `${window.location.origin}/?tab=plickers-live&session=${activeSession?.id}&classId=${selectedClassId}`;
+                    navigator.clipboard.writeText(mobileUrl);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2500);
+                  }
+                }}
+                className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shrink-0"
+              >
+                {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedLink ? 'Đã chép' : 'Sao chép'}</span>
+              </button>
+            </div>
+
+            {/* Status Live Pulse */}
+            <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800 text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span>Trạng thái máy chủ: Sẵn sàng</span>
+              </span>
+              <span className="font-mono text-[11px] text-slate-500">ID: {activeSession?.id}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

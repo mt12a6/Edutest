@@ -34,7 +34,10 @@ import {
   savePlickersResponse, 
   getPlickersResponsesForSession,
   getPlickersStudents,
-  completePlickersSessionAndCalculateResults
+  completePlickersSessionAndCalculateResults,
+  subscribeToPlickersSession,
+  subscribeToPlickersResponses,
+  getPlickersSessionById
 } from '../../services/db';
 import { useAuth } from '../../context/AuthContext';
 import { MathRenderer } from '../common/MathRenderer';
@@ -125,9 +128,25 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
   // Initialize Session & Students
   useEffect(() => {
     const initSession = async () => {
-      const cls = classes.find(c => c.id === selectedClassId) || {
-        id: selectedClassId,
-        name: selectedClassId,
+      let targetClassId = selectedClassId;
+      let targetSessionId = '';
+
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlClass = urlParams.get('classId');
+        const urlSession = urlParams.get('session');
+        if (urlClass) {
+          targetClassId = urlClass;
+          setSelectedClassId(urlClass);
+        }
+        if (urlSession) {
+          targetSessionId = urlSession;
+        }
+      }
+
+      const cls = classes.find(c => c.id === targetClassId) || {
+        id: targetClassId,
+        name: targetClassId,
         grade: exam.grade || '10',
         schoolYear: '2024 - 2025',
         studentCount: 35,
@@ -137,12 +156,19 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
       const stdList = await getPlickersStudents(cls.id);
       setStudents(stdList);
 
-      const session = await createOrGetPlickersSession(
-        exam,
-        cls,
-        user?.uid || 'teacher',
-        profile?.displayName || user?.displayName || 'Giáo viên'
-      );
+      let session: PlickersSession | null = null;
+      if (targetSessionId) {
+        session = await getPlickersSessionById(targetSessionId);
+      }
+      if (!session) {
+        session = await createOrGetPlickersSession(
+          exam,
+          cls,
+          user?.uid || 'teacher',
+          profile?.displayName || user?.displayName || 'Giáo viên'
+        );
+      }
+
       setActiveSession(session);
       setCurrentQuestionIndex(session.currentQuestionIndex || 0);
 
@@ -153,8 +179,25 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
     initSession();
   }, [selectedClassId, exam.id]);
 
-  // Listen for realtime response updates from external tabs or devices
+  // Real-time synchronization across devices (PC and Mobile Phone via Firestore)
   useEffect(() => {
+    if (!activeSession?.id) return;
+
+    // 1. Subscribe to Firestore Session state (e.g. PC slides next question)
+    const unsubSession = subscribeToPlickersSession(activeSession.id, (remoteSession) => {
+      if (remoteSession) {
+        if (typeof remoteSession.currentQuestionIndex === 'number') {
+          setCurrentQuestionIndex(remoteSession.currentQuestionIndex);
+        }
+      }
+    });
+
+    // 2. Subscribe to Firestore Responses
+    const unsubResponses = subscribeToPlickersResponses(activeSession.id, (realtimeResponses) => {
+      setResponses(realtimeResponses);
+    });
+
+    // 3. Fallback local window listener for same-device testing
     const handleResponseRecorded = (e: any) => {
       if (e.detail) {
         setResponses(prev => {
@@ -166,9 +209,11 @@ export const PlickersScannerView: React.FC<PlickersScannerViewProps> = ({
 
     window.addEventListener('edutest:plickers_response_recorded', handleResponseRecorded);
     return () => {
+      unsubSession();
+      unsubResponses();
       window.removeEventListener('edutest:plickers_response_recorded', handleResponseRecorded);
     };
-  }, []);
+  }, [activeSession?.id]);
 
   // Camera Management
   const startCamera = async () => {

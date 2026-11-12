@@ -17,7 +17,8 @@ import {
   Sparkles,
   ChevronRight,
   BookOpen,
-  ArrowUpDown
+  ArrowUpDown,
+  Trash2
 } from 'lucide-react';
 import { Exam, ExamResult, SchoolClass, Question, ExamAttempt } from '../../types';
 import { 
@@ -25,7 +26,8 @@ import {
   getAllAttempts, 
   getExamQuestions, 
   getExams,
-  recalculateExamResults
+  recalculateExamResults,
+  deleteExamResult
 } from '../../services/db';
 import { StudentGradingDetailModal } from './StudentGradingDetailModal';
 import { extractResultPartScores } from '../../utils/exportUtils';
@@ -60,6 +62,10 @@ export const StudentSubmissionsManager: React.FC<StudentSubmissionsManagerProps>
   const [modalExam, setModalExam] = useState<Exam | null>(null);
   const [modalQuestions, setModalQuestions] = useState<Question[]>([]);
   const [modalAttempt, setModalAttempt] = useState<ExamAttempt | undefined>(undefined);
+
+  // Deletion modal state
+  const [resultToDelete, setResultToDelete] = useState<ExamResult | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -621,22 +627,36 @@ export const StudentSubmissionsManager: React.FC<StudentSubmissionsManagerProps>
                       </td>
                       {/* Action */}
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenSubmissionDetail(r);
-                          }}
-                          className={`px-3.5 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all ${
-                            r.status === 'pending_essay_grading'
-                              ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
-                              : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                          }`}
-                          title="Mở toàn bộ bài thi của học sinh gồm trắc nghiệm và tự luận"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>{r.status === 'pending_essay_grading' ? 'Chấm tự luận ngay' : 'Xem bài làm đầy đủ'}</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenSubmissionDetail(r);
+                            }}
+                            className={`px-3 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-xs transition-all ${
+                              r.status === 'pending_essay_grading'
+                                ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            }`}
+                            title="Mở toàn bộ bài thi của học sinh gồm trắc nghiệm và tự luận"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>{r.status === 'pending_essay_grading' ? 'Chấm tự luận' : 'Xem chi tiết'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setResultToDelete(r);
+                            }}
+                            className="p-1.5 rounded-xl text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 transition-colors cursor-pointer"
+                            title="Xóa bài nộp này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -653,6 +673,58 @@ export const StudentSubmissionsManager: React.FC<StudentSubmissionsManagerProps>
           </table>
         </div>
       </div>
+
+      {/* Safe Delete Confirmation Modal */}
+      {resultToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 text-slate-900 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-lg font-black text-slate-900">Xác Nhận Xóa Bài Làm</h3>
+              <p className="text-xs text-slate-500">
+                Bạn có chắc chắn muốn xóa bài nộp này không? Hành động này sẽ xóa điểm số và dữ liệu bài thi vĩnh viễn khỏi hệ thống.
+              </p>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1">
+              <div>Học sinh: <strong className="text-slate-800">{resultToDelete.studentName}</strong> ({resultToDelete.studentEmail})</div>
+              <div>Lớp: <strong className="text-slate-800">{resultToDelete.classId || '10A1'}</strong></div>
+              <div>Điểm số: <strong className="text-rose-600">{resultToDelete.score} / {resultToDelete.maxScore || 10}đ</strong></div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setResultToDelete(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    await deleteExamResult(resultToDelete.id);
+                    setResultToDelete(null);
+                    fetchData();
+                  } catch (err) {
+                    console.error('Lỗi xóa bài làm:', err);
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                {isDeleting ? 'Đang xóa...' : 'Xác nhận Xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inspection & Grading Modal */}
       {selectedResult && modalExam && (

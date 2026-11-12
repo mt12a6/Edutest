@@ -73,8 +73,28 @@ function balanceLeftRightBrackets(code: string): string {
 function formatTextDecorations(text: string): string {
   if (!text) return '';
 
-  return text
-    // Normalize newlines to <br/>
+  let formatted = text;
+
+  // Blockquotes: > text
+  formatted = formatted.replace(
+    /(?:^|\n)>\s*([^\n]+)/g,
+    '<blockquote class="border-l-3 border-indigo-400 pl-3 py-1 my-1.5 italic bg-indigo-50/50 dark:bg-indigo-950/30 rounded-r text-slate-700 dark:text-slate-300">$1</blockquote>'
+  );
+
+  // Bullet items: - text or * text at line start
+  formatted = formatted.replace(
+    /(?:^|\n)[-*]\s+([^\n]+)/g,
+    '<div class="flex items-start gap-2 my-1 pl-2"><span class="text-indigo-500 font-bold leading-relaxed">•</span><span class="flex-1">$1</span></div>'
+  );
+
+  // Numbered items: 1. text or 2. text at line start
+  formatted = formatted.replace(
+    /(?:^|\n)(\d+)\.\s+([^\n]+)/g,
+    '<div class="flex items-start gap-2 my-1 pl-2"><span class="font-bold text-slate-700 dark:text-slate-300 min-w-[1.2rem] leading-relaxed">$1.</span><span class="flex-1">$2</span></div>'
+  );
+
+  return formatted
+    // Normalize remaining newlines to <br/>
     .replace(/\n/g, '<br/>')
     // Bold: **text**
     .replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold text-slate-900 dark:text-white">$1</strong>')
@@ -121,9 +141,14 @@ function autoWrapLatexFormulas(text: string): string {
     '$$$$ \\left[ $1 \\right. $$$$'
   );
 
-  // 6. Wrap inline LaTeX math commands like \sin x = \dfrac{\sqrt{3}}{2}, \vec{...}, \mathbb{Z} if outside $
-  // Find sequences starting with \command followed by math symbols and wrap in $
-  const mathCommandRegex = /(?<!\$|\\)(\\(?:sin|cos|tan|cot|arcsin|arccos|arctan|dfrac|tfrac|frac|sqrt|vec|overrightarrow|mathbb|mathcal|lim|int|sum|alpha|beta|gamma|Delta|theta|pi|in|notin|subset|cap|cup|ge|le|ne|pm|infty)(?:\{[^{}]*\}|[a-zA-Z0-9_\^=+\-*/()\[\]\,\.\s\\])*?)(?=(?:[\s.,;:?!]|$|\$|[\u00C0-\u1EF9]))/g;
+  // 6. Explicitly catch all fractions \frac{...}{...}, \dfrac, \tfrac with nested braces in text or lists
+  processed = processed.replace(
+    /(?<!\$|\\)\\(?:d|t|c)?frac\s*\{((?:[^{}]|\{[^{}]*\})*)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}(?!\$)/g,
+    '$\\frac{$1}{$2}$'
+  );
+
+  // 7. Wrap inline LaTeX math commands like \sqrt{...}, \sin, \cos, \alpha, \sum if outside $
+  const mathCommandRegex = /(?<!\$|\\)(\\(?:sin|cos|tan|cot|arcsin|arccos|arctan|sqrt|vec|overrightarrow|mathbb|mathcal|lim|int|sum|alpha|beta|gamma|Delta|theta|pi|in|notin|subset|cap|cup|ge|le|ne|pm|infty)(?:\{[^{}]*\}|[a-zA-Z0-9_\^=+\-*/()\[\]\,\.\s\\])*?)(?=(?:[\s.,;:?!]|$|\$|[\u00C0-\u1EF9]))/g;
   
   // Only process if not inside $...$
   const segments = processed.split(/(\$\$[\s\S]+?\$\$|\$[^\$\n]+?\$)/g);
@@ -132,7 +157,6 @@ function autoWrapLatexFormulas(text: string): string {
     if (i % 2 === 1) return seg;
 
     return seg.replace(mathCommandRegex, (match) => {
-      // Avoid wrapping empty or purely whitespace
       const trimmed = match.trim();
       if (!trimmed || trimmed.length <= 1) return match;
       return `$${trimmed}$`;
@@ -184,12 +208,12 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
           return (
             <span
               key={index}
-              className="my-2.5 block overflow-x-auto py-1 text-center scrollbar-thin select-text"
+              className="my-2.5 block max-w-full overflow-x-auto py-1 text-center scrollbar-thin select-text text-sm sm:text-base [-webkit-overflow-scrolling:touch]"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
         } catch {
-          return <span key={index} className="font-mono text-xs text-rose-600 block py-1">{part}</span>;
+          return <span key={index} className="font-mono text-xs text-rose-600 block py-1 overflow-x-auto">{part}</span>;
         }
       }
 
@@ -208,12 +232,12 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
           return (
             <span
               key={index}
-              className="inline-block px-0.5 align-middle select-text"
+              className="inline-block max-w-full overflow-x-auto align-middle px-0.5 select-text scrollbar-thin [-webkit-overflow-scrolling:touch]"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           );
         } catch {
-          return <span key={index} className="font-mono text-xs text-rose-600">{part}</span>;
+          return <span key={index} className="font-mono text-xs text-rose-600 inline-block overflow-x-auto">{part}</span>;
         }
       }
 
@@ -229,7 +253,7 @@ export const MathRenderer: React.FC<MathRendererProps> = ({
   };
 
   return (
-    <div className={`leading-relaxed break-words ${className}`}>
+    <div className={`leading-relaxed break-words max-w-full overflow-hidden ${className}`}>
       {renderMathContent(content)}
     </div>
   );
