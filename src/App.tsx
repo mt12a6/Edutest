@@ -337,7 +337,7 @@ function MainApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800 overflow-x-hidden">
       
       {/* Navbar */}
       <Navbar

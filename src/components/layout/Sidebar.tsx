@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Music
 } from 'lucide-react';
+import { getCauHinhVanNghe, isVanNgheModuleEnabled } from '../../services/vanngheService';
 
 
 interface SidebarProps {
@@ -31,6 +32,30 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpenWordUpload }) => {
   const { user, profile, activeRole } = useAuth();
+  const [vanNgheEnabled, setVanNgheEnabled] = React.useState<boolean>(() => isVanNgheModuleEnabled());
+
+  React.useEffect(() => {
+    let mounted = true;
+    getCauHinhVanNghe()
+      .then((cfg) => {
+        if (mounted) setVanNgheEnabled(cfg.isEnabled !== false);
+      })
+      .catch(() => {});
+
+    const handleConfigUpdate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && typeof detail.isEnabled === 'boolean') {
+        setVanNgheEnabled(detail.isEnabled !== false);
+      } else {
+        setVanNgheEnabled(isVanNgheModuleEnabled());
+      }
+    };
+    window.addEventListener('edutest:vannghe_config_updated', handleConfigUpdate);
+    return () => {
+      mounted = false;
+      window.removeEventListener('edutest:vannghe_config_updated', handleConfigUpdate);
+    };
+  }, []);
 
   const isTeacher = activeRole === 'teacher' || activeRole === 'admin';
   const isAdmin = activeRole === 'admin';
@@ -176,20 +201,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
         )}
 
         {/* Van Nghe 20/11 Scoring Module */}
-        <div className="space-y-1 pt-2 border-t border-slate-200">
-          <div className="px-3.5 mb-2 text-[11px] font-bold text-rose-600 uppercase tracking-wider flex items-center justify-between">
-            <span>Hội Thi Văn Nghệ</span>
-            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">20/11</span>
-          </div>
+        {vanNgheEnabled && (
+          <div className="space-y-1 pt-2 border-t border-slate-200">
+            <div className="px-3.5 mb-2 text-[11px] font-bold text-rose-600 uppercase tracking-wider flex items-center justify-between">
+              <span>Hội Thi Văn Nghệ</span>
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">20/11</span>
+            </div>
 
-          <button 
-            onClick={() => onTabChange('vannghe-scoring')}
-            className={navItemClass('vannghe-scoring')}
-          >
-            <Music className="w-4 h-4 text-rose-500" />
-            <span>Chấm Thi Văn Nghệ 20/11</span>
-          </button>
-        </div>
+            <button 
+              onClick={() => onTabChange('vannghe-scoring')}
+              className={navItemClass('vannghe-scoring')}
+            >
+              <Music className="w-4 h-4 text-rose-500" />
+              <span>Chấm Thi Văn Nghệ 20/11</span>
+            </button>
+          </div>
+        )}
 
         {/* Student / Candidate Navigation */}
         <div className="space-y-1 pt-2 border-t border-slate-200">
@@ -260,6 +287,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onTabChange, onOpe
               <Shield className="w-4 h-4 text-rose-500" />
               <span>Nhật ký bảo mật</span>
             </button>
+
+            {!vanNgheEnabled && (
+              <button 
+                onClick={() => onTabChange('vannghe-scoring')}
+                className={navItemClass('vannghe-scoring')}
+              >
+                <Music className="w-4 h-4 text-rose-500" />
+                <span className="flex-1 flex items-center justify-between">
+                  <span>Văn Nghệ 20/11</span>
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">ĐANG ẨN</span>
+                </span>
+              </button>
+            )}
           </div>
         )}
 

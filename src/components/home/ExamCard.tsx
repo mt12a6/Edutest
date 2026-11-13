@@ -18,7 +18,8 @@ import {
   Sparkles,
   AlertCircle,
   Copy,
-  Check
+  Check,
+  Share2
 } from 'lucide-react';
 import { Exam, ExamDisplayMode } from '../../types';
 import { getDynamicRouteUrl, copyToClipboard } from '../../utils/slugUtils';

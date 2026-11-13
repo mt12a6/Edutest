@@ -36,6 +36,7 @@ import {
 import { UserRole } from '../../types';
 import { LoginModal } from '../auth/LoginModal';
 import { ShareDeployModal } from '../common/ShareDeployModal';
+import { getCauHinhVanNghe, isVanNgheModuleEnabled } from '../../services/vanngheService';
 
 interface NavbarProps {
   currentTab: string;
@@ -48,12 +49,36 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [vanNgheEnabled, setVanNgheEnabled] = useState<boolean>(() => isVanNgheModuleEnabled());
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return document.documentElement.classList.contains('dark') || 
       localStorage.getItem('edutest_theme') === 'dark';
   });
+
+  useEffect(() => {
+    let mounted = true;
+    getCauHinhVanNghe()
+      .then((cfg) => {
+        if (mounted) setVanNgheEnabled(cfg.isEnabled !== false);
+      })
+      .catch(() => {});
+
+    const handleConfigUpdate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && typeof detail.isEnabled === 'boolean') {
+        setVanNgheEnabled(detail.isEnabled !== false);
+      } else {
+        setVanNgheEnabled(isVanNgheModuleEnabled());
+      }
+    };
+    window.addEventListener('edutest:vannghe_config_updated', handleConfigUpdate);
+    return () => {
+      mounted = false;
+      window.removeEventListener('edutest:vannghe_config_updated', handleConfigUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -627,17 +652,19 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                 <QrCode className="w-4 h-4 text-amber-500" />
                 <span>In Thẻ QR 4 Chiều (1-100)</span>
               </button>
-
-              <button
-                onClick={() => { onTabChange('vannghe-scoring'); setMobileMenuOpen(false); }}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
-                  currentTab === 'vannghe-scoring' ? 'bg-rose-600 text-white' : 'text-rose-700 hover:bg-rose-50'
-                }`}
-              >
-                <Music className="w-4 h-4 text-rose-500" />
-                <span>Chấm Thi Văn Nghệ 20/11</span>
-              </button>
             </>
+          )}
+
+          {vanNgheEnabled && (
+            <button
+              onClick={() => { onTabChange('vannghe-scoring'); setMobileMenuOpen(false); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold ${
+                currentTab === 'vannghe-scoring' ? 'bg-rose-600 text-white' : 'text-rose-700 hover:bg-rose-50'
+              }`}
+            >
+              <Music className="w-4 h-4 text-rose-500" />
+              <span>Chấm Thi Văn Nghệ 20/11</span>
+            </button>
           )}
 
           <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider px-2 pt-2 border-t border-slate-100">
@@ -715,6 +742,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange }) => {
                 <Database className="w-4 h-4 text-rose-500" />
                 <span>Sao lưu & Phục hồi</span>
               </button>
+              {!vanNgheEnabled && (
+                <button
+                  onClick={() => { onTabChange('vannghe-scoring'); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold ${
+                    currentTab === 'vannghe-scoring' ? 'bg-rose-600 text-white' : 'text-rose-700 hover:bg-rose-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Music className="w-4 h-4 text-rose-500" />
+                    <span>Văn Nghệ 20/11</span>
+                  </div>
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">ĐANG ẨN</span>
+                </button>
+              )}
             </>
           )}
         </div>

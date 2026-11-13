@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles, QrCode, FileText, UserPlus, AlertTriangle } from 'lucide-react';
+import { Printer, X, Download, HelpCircle, Users, CheckSquare, Sparkles, QrCode, FileText, UserPlus, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { generateQRCodeDataUrl } from '../../utils/qrEncoder';
 import { SchoolClass, UserProfile, Exam, PlickersStudent } from '../../types';
 import { getPlickersStudents } from '../../services/db';

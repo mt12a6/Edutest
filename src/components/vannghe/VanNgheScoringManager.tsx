@@ -18,8 +18,11 @@ import {
   AlertCircle,
   Clock,
   Mic,
-  Star
+  Star,
+  Upload,
+  FileSpreadsheet
 } from 'lucide-react';
+import { VanNgheImportModal } from './VanNgheImportModal';
 import {
   TietMucVanNghe,
   DiemGiamKhao,
@@ -51,11 +54,14 @@ export const VanNgheScoringManager: React.FC = () => {
   const [selectedGiamKhaoId, setSelectedGiamKhaoId] = useState<string>('gk_1');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [deletingTietMuc, setDeletingTietMuc] = useState<{ id: string; name: string } | null>(null);
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
   const [editingTietMuc, setEditingTietMuc] = useState<TietMucVanNghe | null>(null);
   const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+  const [showImportModal, setShowImportModal] = useState<boolean>(false);
 
   // Form input state for scoring
   const [scoreInputs, setScoreInputs] = useState<Record<string, {
@@ -148,22 +154,27 @@ export const VanNgheScoringManager: React.FC = () => {
     // Validate boundaries
     const max = cauhinh.thangDiem;
     if (input.diemNoiDung > max.maxNoiDung) {
-      alert(`Điểm Nội dung tối đa ${max.maxNoiDung} điểm`);
+      setErrorMsg(`Điểm Nội dung tối đa ${max.maxNoiDung} điểm`);
+      setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
     if (input.diemNgheThuat > max.maxNgheThuat) {
-      alert(`Điểm Nghệ thuật tối đa ${max.maxNgheThuat} điểm`);
+      setErrorMsg(`Điểm Nghệ thuật tối đa ${max.maxNgheThuat} điểm`);
+      setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
     if (input.diemSangTao > max.maxSangTao) {
-      alert(`Điểm Sáng tạo tối đa ${max.maxSangTao} điểm`);
+      setErrorMsg(`Điểm Sáng tạo tối đa ${max.maxSangTao} điểm`);
+      setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
     if (input.diemTacPhong > max.maxTacPhong) {
-      alert(`Điểm Tác phong tối đa ${max.maxTacPhong} điểm`);
+      setErrorMsg(`Điểm Tác phong tối đa ${max.maxTacPhong} điểm`);
+      setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
 
+    setErrorMsg(null);
     await saveDiemGiamKhao({
       tietMucId: tm.id,
       giamKhaoId: currentGk.id,
@@ -188,7 +199,8 @@ export const VanNgheScoringManager: React.FC = () => {
   const handleSaveTietMuc = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTietMuc.tenTietMuc || !formTietMuc.lop) {
-      alert('Vui lòng nhập Tên tiết mục và Lớp');
+      setErrorMsg('Vui lòng nhập Tên tiết mục và Lớp');
+      setTimeout(() => setErrorMsg(null), 4000);
       return;
     }
 
@@ -222,11 +234,15 @@ export const VanNgheScoringManager: React.FC = () => {
     loadData();
   };
 
-  const handleDeleteTietMuc = async (id: string, name: string) => {
-    if (confirm(`Bạn có chắc muốn xóa tiết mục "${name}"?`)) {
-      await deleteTietMuc(id);
-      loadData();
-    }
+  const handleDeleteTietMuc = (id: string, name: string) => {
+    setDeletingTietMuc({ id, name });
+  };
+
+  const confirmDeleteTietMuc = async () => {
+    if (!deletingTietMuc) return;
+    await deleteTietMuc(deletingTietMuc.id);
+    setDeletingTietMuc(null);
+    loadData();
   };
 
   // Export CSV
@@ -329,6 +345,14 @@ export const VanNgheScoringManager: React.FC = () => {
         </div>
       )}
 
+      {/* Validation Error Alert */}
+      {errorMsg && (
+        <div className="bg-rose-50 border border-rose-300 text-rose-800 px-4 py-3 rounded-2xl flex items-center gap-2 text-sm font-semibold shadow-xs">
+          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       {/* Main Tab Controls */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-3">
         <div className="flex flex-wrap gap-2">
@@ -381,10 +405,18 @@ export const VanNgheScoringManager: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="px-3.5 py-2 rounded-2xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Upload className="w-4 h-4" />
+            Nhập từ Excel theo mẫu
+          </button>
+
           <button
             onClick={handleExportCSV}
-            className="px-3.5 py-2 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-all"
+            className="px-3.5 py-2 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Download className="w-4 h-4" />
             Xuất Excel/CSV
@@ -392,7 +424,7 @@ export const VanNgheScoringManager: React.FC = () => {
 
           <button
             onClick={() => setShowConfigModal(true)}
-            className="p-2 rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200"
+            className="p-2 rounded-2xl bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 cursor-pointer"
             title="Cấu hình hội thi"
           >
             <Settings className="w-4 h-4" />
@@ -724,29 +756,38 @@ export const VanNgheScoringManager: React.FC = () => {
       {/* TAB 3: QUẢN LÝ TIẾT MỤC */}
       {activeTab === 'quan-ly-tiet-muc' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-base font-black text-slate-900">
               Danh Sách Tiết Mục Đăng Ký - Cấp {capHocFilter === 'tieuhoc' ? 'Tiểu Học' : 'THCS'}
             </h3>
-            <button
-              onClick={() => {
-                setEditingTietMuc(null);
-                setFormTietMuc({
-                  capHoc: capHocFilter,
-                  lop: '',
-                  tenTietMuc: '',
-                  theLoai: 'Múa',
-                  thoiLuong: '4:00',
-                  nguoiTheHien: '',
-                  ghiChu: ''
-                });
-                setShowAddModal(true);
-              }}
-              className="px-4 py-2.5 rounded-2xl bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              Thêm Tiết Mục Mới
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setShowImportModal(true)}
+                className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Upload Danh Sách Theo Mẫu
+              </button>
+              <button
+                onClick={() => {
+                  setEditingTietMuc(null);
+                  setFormTietMuc({
+                    capHoc: capHocFilter,
+                    lop: '',
+                    tenTietMuc: '',
+                    theLoai: 'Múa',
+                    thoiLuong: '4:00',
+                    nguoiTheHien: '',
+                    ghiChu: ''
+                  });
+                  setShowAddModal(true);
+                }}
+                className="px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Thêm Tiết Mục Mới
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1068,6 +1109,19 @@ export const VanNgheScoringManager: React.FC = () => {
                 />
               </div>
 
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-slate-800 block">Hiển thị trên thanh điều hướng (Menu)</span>
+                  <span className="text-[11px] text-slate-500">Có thể ẩn đi sau khi kết thúc hội thi (dữ liệu vẫn được giữ nguyên)</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={cauhinh.isEnabled !== false}
+                  onChange={(e) => setCauhinh({ ...cauhinh, isEnabled: e.target.checked })}
+                  className="w-5 h-5 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                />
+              </div>
+
               <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <button
                   type="button"
@@ -1092,6 +1146,54 @@ export const VanNgheScoringManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal: Xác nhận xóa tiết mục */}
+      {deletingTietMuc && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">Xác nhận xóa tiết mục</h3>
+                <p className="text-xs text-slate-500">Hành động này sẽ gỡ tiết mục khỏi danh sách chấm thi.</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              Bạn có chắc chắn muốn xóa tiết mục <span className="font-bold text-slate-900">"{deletingTietMuc.name}"</span>?
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingTietMuc(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteTietMuc}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold"
+              >
+                Xóa Tiết Mục
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Nhập danh sách tiết mục từ Excel/CSV theo mẫu */}
+      <VanNgheImportModal
+        isOpen={showImportModal}
+        defaultCapHoc={capHocFilter}
+        onClose={() => setShowImportModal(false)}
+        onSuccess={(addedCount) => {
+          setSaveSuccessMsg(`Đã nhập thành công ${addedCount} tiết mục văn nghệ từ danh sách!`);
+          setTimeout(() => setSaveSuccessMsg(null), 4000);
+          loadData();
+        }}
+      />
     </div>
   );
 };

@@ -485,7 +485,7 @@ export const HomeLanding: React.FC<HomeLandingProps> = ({
   };
 
   return (
-    <div className="space-y-4 sm:space-y-5 pb-12 animate-in fade-in duration-200">
+    <div className="space-y-4 sm:space-y-5 pb-12 animate-in fade-in duration-200 overflow-x-hidden">
 
       {/* ================================================================= */}
       {/* 2. BANNER CHÍNH (Nền xanh than #14243B & Teal #009F91, Tối giản, Chuyên nghiệp) */}

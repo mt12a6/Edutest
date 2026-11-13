@@ -174,6 +174,86 @@
         "updatedBy": { "type": "string", "maxLength": 128 }
       },
       "required": ["id", "pinnedEnabled"]
+    },
+    "PlickersSession": {
+      "title": "PlickersSession",
+      "description": "Live classroom card-scanning session synced across projector and mobile devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "examId": { "type": "string", "maxLength": 128 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "currentQuestionIndex": { "type": "number" },
+        "revealAnswer": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["active", "completed"] }
+      },
+      "required": ["id", "examId", "classId", "status"]
+    },
+    "PlickersResponse": {
+      "title": "PlickersResponse",
+      "description": "Student answer scanned from 4-orientation QR card",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "questionId": { "type": "string", "maxLength": 128 },
+        "cardId": { "type": "number" },
+        "answer": { "type": "string", "enum": ["A", "B", "C", "D"] },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "sessionId", "questionId", "cardId", "answer"]
+    },
+    "PlickersStudent": {
+      "title": "PlickersStudent",
+      "description": "Classroom student assigned to a unique QR card ID",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentCode": { "type": "string", "maxLength": 50 },
+        "displayName": { "type": "string", "maxLength": 255 },
+        "classId": { "type": "string", "maxLength": 128 },
+        "cardId": { "type": "number" }
+      },
+      "required": ["id", "displayName", "classId", "cardId"]
+    },
+    "TietMucVanNghe": {
+      "title": "TietMucVanNghe",
+      "description": "Performance art competition entry for 20/11 Teachers Day festival",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "stt": { "type": "number" },
+        "capHoc": { "type": "string", "enum": ["tieuhoc", "thcs"] },
+        "lop": { "type": "string", "maxLength": 50 },
+        "tenTietMuc": { "type": "string", "maxLength": 255 },
+        "theLoai": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["active", "completed", "deleted"] }
+      },
+      "required": ["id", "stt", "capHoc", "lop", "tenTietMuc"]
+    },
+    "DiemGiamKhao": {
+      "title": "DiemGiamKhao",
+      "description": "Judge score for a performance entry across 4 criteria (total 100 pts)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tietMucId": { "type": "string", "maxLength": 128 },
+        "giamKhaoId": { "type": "string", "maxLength": 128 },
+        "tongDiem": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "tietMucId", "giamKhaoId", "tongDiem"]
+    },
+    "CauHinhVanNghe": {
+      "title": "CauHinhVanNghe",
+      "description": "Configuration for Van Nghe 20/11 competition module",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tenHoiThi": { "type": "string", "maxLength": 255 },
+        "isEnabled": { "type": "boolean" }
+      },
+      "required": ["id", "tenHoiThi", "isEnabled"]
     }
   },
   "firestore": {
@@ -216,6 +296,30 @@
     "/siteSettings/{settingId}": {
       "schema": "SiteSetting",
       "description": "Global and homepage configuration settings"
+    },
+    "/sessions/{sessionId}": {
+      "schema": "PlickersSession",
+      "description": "Live Plickers classroom presentation and scanning sessions"
+    },
+    "/responses/{responseId}": {
+      "schema": "PlickersResponse",
+      "description": "Real-time Plickers card responses scanned by camera"
+    },
+    "/students/{studentId}": {
+      "schema": "PlickersStudent",
+      "description": "Students and assigned QR card numbers"
+    },
+    "/vannghe_tietmuc/{id}": {
+      "schema": "TietMucVanNghe",
+      "description": "Performance entries for 20/11 festival"
+    },
+    "/vannghe_diem/{id}": {
+      "schema": "DiemGiamKhao",
+      "description": "Judge scores for 20/11 performance entries"
+    },
+    "/vannghe_cauhinh/{id}": {
+      "schema": "CauHinhVanNghe",
+      "description": "Settings and visibility for 20/11 festival scoring module"
     }
   }
 }

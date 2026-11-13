@@ -8,9 +8,11 @@ import {
   deleteDoc,
   query,
   where,
-  onSnapshot
+  onSnapshot,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 import {
   TietMucVanNghe,
   DiemGiamKhao,
@@ -238,6 +240,10 @@ export async function getCauHinhVanNghe(): Promise<CauHinhVanNghe> {
   return getLocalCauHinh();
 }
 
+export function isVanNgheModuleEnabled(): boolean {
+  return getLocalCauHinh().isEnabled !== false;
+}
+
 /**
  * Cập nhật cấu hình hội thi
  */
@@ -249,6 +255,9 @@ export async function updateCauHinhVanNghe(config: Partial<CauHinhVanNghe>): Pro
     id: 'cauhinh_chung'
   };
   saveLocalCauHinh(updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('edutest:vannghe_config_updated', { detail: updated }));
+  }
   try {
     await setDoc(doc(db, 'vannghe_cauhinh', 'cauhinh_chung'), sanitizeForFirestore(updated), { merge: true });
   } catch (e) {
@@ -344,6 +353,111 @@ export async function deleteTietMuc(id: string): Promise<void> {
   } catch (e) {
     console.warn('deleteTietMuc note:', e);
   }
+}
+
+export interface ImportTietMucInput {
+  stt?: number;
+  capHoc?: CapHocVanNghe;
+  lop: string;
+  tenTietMuc: string;
+  theLoai: string;
+  thoiLuong?: string;
+  nguoiTheHien?: string;
+  ghiChu?: string;
+}
+
+/**
+ * Nhập hàng loạt danh sách tiết mục từ Excel/CSV (hỗ trợ thêm tiếp hoặc thay thế theo cấp học)
+ */
+export async function batchImportTietMuc(
+  items: ImportTietMucInput[],
+  options: { mode: 'append' | 'replace'; defaultCapHoc: CapHocVanNghe }
+): Promise<{ addedCount: number }> {
+  const existingList = await getDanhSachTietMuc();
+  const baseTime = Date.now();
+  const affectedCapHocs = new Set<CapHocVanNghe>(
+    items.map((item) => item.capHoc || options.defaultCapHoc)
+  );
+  if (affectedCapHocs.size === 0) {
+    affectedCapHocs.add(options.defaultCapHoc);
+  }
+
+  let keptList = existingList.filter((t) => t.status !== 'deleted');
+  const idsToDelete: string[] = [];
+
+  if (options.mode === 'replace') {
+    idsToDelete.push(
+      ...keptList.filter((t) => affectedCapHocs.has(t.capHoc)).map((t) => t.id)
+    );
+    keptList = keptList.filter((t) => !affectedCapHocs.has(t.capHoc));
+  }
+
+  const maxSttByCap: Record<CapHocVanNghe, number> = {
+    tieuhoc: 0,
+    thcs: 0
+  };
+  keptList.forEach((t) => {
+    if (t.stt > maxSttByCap[t.capHoc]) {
+      maxSttByCap[t.capHoc] = t.stt;
+    }
+  });
+
+  const newRecords: TietMucVanNghe[] = items
+    .filter((item) => item.lop.trim() && item.tenTietMuc.trim())
+    .map((item, idx) => {
+      const cap = item.capHoc || options.defaultCapHoc;
+      maxSttByCap[cap] += 1;
+      const stt =
+        options.mode === 'replace' && item.stt && item.stt > 0
+          ? item.stt
+          : maxSttByCap[cap];
+      return {
+        id: `tm_${baseTime}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+        stt,
+        capHoc: cap,
+        lop: item.lop.trim().slice(0, 40),
+        tenTietMuc: item.tenTietMuc.trim().slice(0, 200),
+        theLoai: (item.theLoai || 'Văn nghệ').trim().slice(0, 100),
+        thoiLuong: (item.thoiLuong || '4:00').trim().slice(0, 20),
+        nguoiTheHien: (item.nguoiTheHien || '').trim().slice(0, 150),
+        ghiChu: (item.ghiChu || '').trim().slice(0, 250),
+        status: 'active',
+        createdAt: new Date().toISOString()
+      };
+    });
+
+  const updatedList = [...keptList, ...newRecords];
+  saveLocalTietMuc(updatedList);
+
+  try {
+    const ops: Array<{ type: 'delete' | 'set'; id: string; data?: TietMucVanNghe }> = [
+      ...idsToDelete.map((id) => ({ type: 'delete' as const, id })),
+      ...newRecords.map((rec) => ({ type: 'set' as const, id: rec.id, data: rec }))
+    ];
+
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+      const batch = writeBatch(db);
+      const chunk = ops.slice(i, i + CHUNK_SIZE);
+      chunk.forEach((op) => {
+        const ref = doc(db, 'vannghe_tietmuc', op.id);
+        if (op.type === 'delete') {
+          batch.delete(ref);
+        } else if (op.data) {
+          batch.set(ref, sanitizeForFirestore(op.data));
+        }
+      });
+      await batch.commit();
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('insufficient')) {
+      handleFirestoreError(e, OperationType.WRITE, 'vannghe_tietmuc');
+    }
+    console.warn('batchImportTietMuc note:', e);
+  }
+
+  return { addedCount: newRecords.length };
 }
 
 /**
