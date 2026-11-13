@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 dotenv.config();
 
@@ -439,6 +439,180 @@ Trả về DUY NHẤT một chuỗi JSON theo mẫu:
   } catch (err: any) {
     console.error('Lỗi grade-essay:', err);
     return res.status(500).json({ success: false, error: err.message || 'Lỗi chấm tự luận bằng AI.' });
+  }
+});
+
+/**
+ * AI Endpoint: Extract & Verify Văn Nghệ 20/11 Score Sheets from handwritten scans, screenshots, or PDFs
+ * Trường Tiểu học và THCS Nguyễn Văn Trỗi - Năm học 2026-2027
+ */
+app.post('/api/vannghe/extract-scoresheet', async (req, res) => {
+  try {
+    const {
+      fileBase64,
+      fileName = 'document',
+      mimeType = 'image/png',
+      capHocHint = 'auto',
+      formTypeHint = 'auto'
+    } = req.body || {};
+
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Thiếu dữ liệu ảnh hoặc PDF (fileBase64).'
+      });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chưa cấu hình GEMINI_API_KEY trên máy chủ. Bạn vẫn có thể tải lên file Excel (.xlsx/.xls/.csv) hoặc kiểm tra lại Settings > Secrets.'
+      });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
+
+    const systemInstruction = `Bạn là trợ lý nhập liệu và kiểm tra điểm chính xác tuyệt đối cho Hội thi Văn nghệ 20/11 của Trường Tiểu học và THCS Nguyễn Văn Trỗi (năm học 2026–2027).
+
+NGUYÊN TẮC BẮT BUỘC (TUYỆT ĐỐI KHÔNG VI PHẠM):
+1. CHỈ ĐỌC NHỮNG GÌ THỰC SỰ NHÌN THẤY TRONG ẢNH/PDF. Không tự suy đoán, không tự điền điểm bị thiếu, không tự sửa tên lớp hay tên tiết mục.
+2. NẾU BẤT KỲ KÝ TỰ HOẶC CON SỐ NÀO MỜ, TẨY XÓA, CHỒNG CHÉO, KHÔNG ĐỌC RÕ:
+   - Đặt giá trị trường đó là null.
+   - Đặt needsCheck = true và ghi rõ vào checkNote: "CẦN KIỂM TRA: [mô tả cụ thể ô/cột nào khó đọc hoặc bị tẩy xóa]".
+3. GIỮ NGUYÊN DẤU TIẾNG VIỆT, tên giám khảo, tên lớp (ví dụ 1A, 2B, 6A1...), tên tiết mục, thể loại và nội dung ghi chú.
+4. KHÔNG TỰ COI Ô TRỐNG LÀ 0. Nếu ô trên phiếu bỏ trống hoặc gạch ngang không có số, trả về null (không trả về 0 trừ khi thực sự ghi số 0).
+5. PHÂN BIỆT RÕ 2 LOẠI BIỂU MẪU:
+   - "phieu_cham" (PHIẾU CHẤM TIẾT MỤC CÁ NHÂN CỦA GIÁM KHẢO):
+     + Thông tin chung: capHoc ("tieuhoc" | "thcs" | "unknown"), giamKhao (họ tên giám khảo nếu có, không có thì null), namHoc (nếu có).
+     + Các cột từng dòng: stt, lop, tenTietMuc, theLoaiThoiGian, diemNoiDung (thang 25), diemNgheThuat (thang 35), diemSangTao (thang 20), diemTacPhong (thang 20), tongDiemGhiTrenPhieu (thang 100 - chỉ đọc con số ghi sẵn ở cột Tổng điểm, KHÔNG tự cộng), ghiChu.
+   - "tong_hop" (BẢNG TỔNG HỢP ĐIỂM CÁC GIÁM KHẢO):
+     + Các cột từng dòng: tt (số thứ tự), lop, tenTietMuc (nếu có, không có thì null), diemGK1, diemGK2, diemGK3, tongDiemGhiTrenPhieu (chỉ đọc số ghi sẵn ở cột Tổng điểm), ketQua (giữ nguyên chữ ghi ở cột Kết quả/Giải, nếu trống trả về null).
+6. CHUẨN HÓA SỐ THẬP PHÂN CẨN THẬN:
+   - Nếu phiếu viết "22,5" hoặc "22.5" -> trả về 22.5. Nếu không chắc là "22.5" hay "25", trả về null và ghi chú "CẦN KIỂM TRA".
+7. NẾU TỆP CÓ NHIỀU TRANG (ví dụ PDF nhiều trang):
+   - Trích xuất tất cả các trang, đánh số pageNumber (1, 2, 3...) đúng thứ tự từ trên xuống dưới.
+
+Gợi ý từ người dùng (chỉ tham khảo khi trên phiếu không ghi rõ):
+- Gợi ý cấp học: ${capHocHint}
+- Gợi ý loại biểu mẫu: ${formTypeHint}`;
+
+    const base64Clean = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-4-hydrogen',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType,
+              data: base64Clean
+            }
+          },
+          {
+            text: `Hãy trích xuất chính xác toàn bộ dữ liệu điểm từ tệp "${fileName}" theo đúng schema JSON. Tuyệt đối không tự bịa số hoặc điền thay ô trống.`
+          }
+        ]
+      },
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            formType: {
+              type: Type.STRING,
+              description: '"phieu_cham" | "tong_hop" | "unknown"'
+            },
+            capHoc: {
+              type: Type.STRING,
+              description: '"tieuhoc" | "thcs" | "unknown"'
+            },
+            giamKhao: {
+              type: Type.STRING,
+              nullable: true,
+              description: 'Họ tên giám khảo đọc được trên phiếu (nếu có)'
+            },
+            namHoc: {
+              type: Type.STRING,
+              nullable: true,
+              description: 'Năm học ghi trên phiếu (nếu có)'
+            },
+            detectedIssues: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: 'Ghi chú tổng quan các vùng mờ, cắt góc hoặc khó đọc nếu có'
+            },
+            chamRows: {
+              type: Type.ARRAY,
+              description: 'Danh sách dòng nếu là Phiếu chấm cá nhân (phieu_cham)',
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  pageNumber: { type: Type.INTEGER },
+                  rowNumber: { type: Type.INTEGER },
+                  stt: { type: Type.STRING, nullable: true },
+                  lop: { type: Type.STRING, nullable: true },
+                  tenTietMuc: { type: Type.STRING, nullable: true },
+                  theLoaiThoiGian: { type: Type.STRING, nullable: true },
+                  diemNoiDung: { type: Type.NUMBER, nullable: true },
+                  diemNgheThuat: { type: Type.NUMBER, nullable: true },
+                  diemSangTao: { type: Type.NUMBER, nullable: true },
+                  diemTacPhong: { type: Type.NUMBER, nullable: true },
+                  tongDiemGhiTrenPhieu: { type: Type.NUMBER, nullable: true },
+                  ghiChu: { type: Type.STRING, nullable: true },
+                  needsCheck: { type: Type.BOOLEAN },
+                  checkNote: { type: Type.STRING, nullable: true }
+                }
+              }
+            },
+            tongHopRows: {
+              type: Type.ARRAY,
+              description: 'Danh sách dòng nếu là Bảng tổng hợp (tong_hop)',
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  pageNumber: { type: Type.INTEGER },
+                  rowNumber: { type: Type.INTEGER },
+                  tt: { type: Type.STRING, nullable: true },
+                  lop: { type: Type.STRING, nullable: true },
+                  tenTietMuc: { type: Type.STRING, nullable: true },
+                  diemGK1: { type: Type.NUMBER, nullable: true },
+                  diemGK2: { type: Type.NUMBER, nullable: true },
+                  diemGK3: { type: Type.NUMBER, nullable: true },
+                  tongDiemGhiTrenPhieu: { type: Type.NUMBER, nullable: true },
+                  ketQua: { type: Type.STRING, nullable: true },
+                  needsCheck: { type: Type.BOOLEAN },
+                  checkNote: { type: Type.STRING, nullable: true }
+                }
+              }
+            }
+          },
+          required: ['formType', 'capHoc', 'chamRows', 'tongHopRows']
+        }
+      }
+    });
+
+    const rawText = (response.text || '{}').trim();
+    const parsed = JSON.parse(rawText);
+
+    return res.json({
+      success: true,
+      data: parsed
+    });
+  } catch (err: any) {
+    console.error('Lỗi /api/vannghe/extract-scoresheet:', err);
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Không thể trích xuất dữ liệu từ ảnh/PDF. Vui lòng thử lại hoặc kiểm tra API key.'
+    });
   }
 });
 

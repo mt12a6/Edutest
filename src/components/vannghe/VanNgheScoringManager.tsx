@@ -20,9 +20,11 @@ import {
   Mic,
   Star,
   Upload,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ScanLine
 } from 'lucide-react';
 import { VanNgheImportModal } from './VanNgheImportModal';
+import { VanNgheSheetAuditPanel } from './VanNgheSheetAuditPanel';
 import {
   TietMucVanNghe,
   DiemGiamKhao,
@@ -45,7 +47,7 @@ import {
 } from '../../services/vanngheService';
 
 export const VanNgheScoringManager: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'nhap-diem' | 'bang-tong-hop' | 'quan-ly-tiet-muc' | 'in-bien-ban'>('nhap-diem');
+  const [activeTab, setActiveTab] = useState<'nhap-diem' | 'bang-tong-hop' | 'quan-ly-tiet-muc' | 'in-bien-ban' | 'kiem-tra-phieu'>('nhap-diem');
   const [capHocFilter, setCapHocFilter] = useState<CapHocVanNghe>('tieuhoc');
   const [cauhinh, setCauhinh] = useState<CauHinhVanNghe>(DEFAULT_CAUHINH);
   const [tietMucList, setTietMucList] = useState<TietMucVanNghe[]>([]);
@@ -394,7 +396,7 @@ export const VanNgheScoringManager: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('in-bien-ban')}
-            className={`px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-2 transition-all ${
+            className={`px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
               activeTab === 'in-bien-ban'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
@@ -402,6 +404,18 @@ export const VanNgheScoringManager: React.FC = () => {
           >
             <Printer className="w-4 h-4" />
             Biên bản in A4
+          </button>
+
+          <button
+            onClick={() => setActiveTab('kiem-tra-phieu')}
+            className={`px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-2 transition-all cursor-pointer ${
+              activeTab === 'kiem-tra-phieu'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-100 border border-indigo-200'
+            }`}
+          >
+            <ScanLine className="w-4 h-4" />
+            Quét &amp; Kiểm tra phiếu
           </button>
         </div>
 
@@ -870,7 +884,7 @@ export const VanNgheScoringManager: React.FC = () => {
             <div className="flex justify-between items-start text-center border-b pb-4">
               <div className="text-xs font-semibold uppercase">
                 <div>PHÒNG GIÁO DỤC VÀ ĐÀO TẠO</div>
-                <div className="font-black">TRƯỜNG TIỂU HỌC & THCS</div>
+                <div className="font-black">TRƯỜNG TIỂU HỌC VÀ THCS NGUYỄN VĂN TRỖI</div>
               </div>
               <div className="text-xs font-semibold">
                 <div className="font-black uppercase">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
@@ -946,6 +960,9 @@ export const VanNgheScoringManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* TAB 5: QUÉT & KIỂM TRA PHIẾU CHẤM (ẢNH / SCAN / EXCEL) */}
+      {activeTab === 'kiem-tra-phieu' && <VanNgheSheetAuditPanel />}
 
       {/* Modal: Thêm / Sửa Tiết Mục */}
       {showAddModal && (

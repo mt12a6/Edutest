@@ -30,7 +30,7 @@ const STORAGE_CAUHINH_KEY = 'edutest_vannghe_cauhinh_v1';
 export const DEFAULT_CAUHINH: CauHinhVanNghe = {
   id: 'cauhinh_chung',
   tenHoiThi: 'HỘI THI VĂN NGHỆ CHÀO MỪNG NGÀY NHÀ GIÁO VIỆT NAM 20/11',
-  namHoc: '2024 - 2025',
+  namHoc: '2026 - 2027',
   isEnabled: true,
   truongBan: 'Thầy Hiệu trưởng',
   thuKy: 'Cô Tổng phụ trách Đội',
